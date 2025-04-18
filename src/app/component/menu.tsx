@@ -28,12 +28,31 @@ export default function UserMenu() {
   const [error, setError] = useState("");
   const router = useRouter();
   const inputRef = useRef();
+
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("user"));
-    if (storedUser) {
-      setUser(storedUser);
-      setUpdatedUser(storedUser);
-    }
+    const fetchUserInfo = async () => {
+      try {
+        const response = await fetch("http://localhost:8080/identity/users/myInfo", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          },
+        });
+        const data = await response.json();
+        if (response.ok && data.result) {
+          setUser(data.result);
+          setUpdatedUser(data.result);
+          localStorage.setItem("user", JSON.stringify(data.result));
+        } else {
+          console.error("Lấy thông tin người dùng thất bại:", data.message);
+        }
+      } catch (error) {
+        console.error("Lỗi khi gọi API lấy thông tin người dùng:", error);
+      }
+    };
+
+    fetchUserInfo();
   }, []);
 
   const handleLogout = () => {
@@ -78,16 +97,23 @@ export default function UserMenu() {
   const handleCameraClick = () => {
     inputRef.current.click();
   };
+
+ 
+  
+
   return (
     <>
       <Menu as="div" className="relative inline-block text-left">
-        <MenuButton
-          onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded cursor-pointer"
-        >
-          <FaUserCircle className="text-xl" />
-          <span className="font-medium">{user?.username ?? "Tài khoản"}</span>
-        </MenuButton>
+          <MenuButton
+            onClick={() => setIsOpen(!isOpen)}
+            className="flex flex-col items-start gap-1 px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <FaUserCircle className="text-xl" />
+              <span className="font-medium">{user?.username ?? "Tài khoản"}</span>
+            </div>
+           
+          </MenuButton>
 
         {isOpen && (
           <MenuItems className="absolute right-0 mt-2 w-52  border rounded-lg bg-white shadow-md z-50">
@@ -185,13 +211,14 @@ export default function UserMenu() {
 
             <div className="grid grid-cols-2 gap-6 mb-6">
               {[
-                { label: "Họ và tên", name: "username" },
+                { label: "Mã người dùng", name: "username" },
+                { label: "Tên", name: "firstName" },
+                { label: "Họ", name: "lastName" },
                 { label: "Email", name: "email" },
                 { label: "Ngày sinh", name: "dob" },
                 { label: "Giới tính", name: "gender" },
                 { label: "Số điện thoại", name: "phone" },
-                { label: "Chức vụ", name: "position" },
-                
+                { label: "Chức vụ", name: "description" },
               ].map((field) => (
                 <div key={field.name} className="flex flex-col">
                   <label className="text-sm font-medium text-gray-600 mb-1">
@@ -200,8 +227,19 @@ export default function UserMenu() {
                   {field.name === "gender" ? (
                     <select
                       name="gender"
-                      value={updatedUser?.gender ?? ""}
-                      onChange={handleChange}
+                      value={
+                        updatedUser?.gender === true
+                          ? "Nam"
+                          : updatedUser?.gender === false
+                          ? "Nữ"
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setUpdatedUser((prev) => ({
+                          ...prev,
+                          gender: e.target.value === "Nam" ? true : false,
+                        }))
+                      }
                       disabled={!isEditing}
                       className={`px-4 py-2 rounded-lg text-sm text-black outline-none transition border ${
                         isEditing
@@ -217,7 +255,13 @@ export default function UserMenu() {
                     <input
                       type={field.name === "dob" ? "date" : "text"}
                       name={field.name}
-                      value={updatedUser?.[field.name] ?? ""}
+                      value={
+                        field.name === "description"
+                          ? user?.roles && user.roles.length > 0
+                            ? user.roles[0].description
+                            : ""
+                          : updatedUser?.[field.name] ?? ""
+                      }
                       onChange={handleChange}
                       readOnly={!isEditing}
                       className={`px-4 py-2 rounded-lg text-sm text-black outline-none transition border ${

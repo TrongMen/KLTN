@@ -8,17 +8,17 @@ export default function AdminApprovalPage() {
   const [user, setUser] = useState(null);
   const router = useRouter();
 
-  useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("user"));
-    if (storedUser?.role !== "admin") {
-      router.push("/"); // Nếu không phải admin, điều hướng về trang chủ
-    } else {
-      setUser(storedUser);
-    }
+  // useEffect(() => {
+  //   const storedUser = JSON.parse(localStorage.getItem("user"));
+  //   if (storedUser?.role !== "admin") {
+  //     router.push("/"); // Nếu không phải admin, điều hướng về trang chủ
+  //   } else {
+  //     setUser(storedUser);
+  //   }
 
-    const storedEvents = JSON.parse(localStorage.getItem("events")) || [];
-    setEvents(storedEvents);
-  }, []);
+  //   const storedEvents = JSON.parse(localStorage.getItem("events")) || [];
+  //   setEvents(storedEvents);
+  // }, []);
   // useEffect(() => {
   //   localStorage.setItem("events", JSON.stringify(events));
   // }, [events]);

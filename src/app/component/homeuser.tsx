@@ -1,3 +1,4 @@
+ // trang localhost:3000/user
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -8,34 +9,40 @@ import ModalAttendees from "./ModalAttende";
 import ModalMember from "./ModalMember";
 import ModalEventRegister from "./ModalEventRegister";
 import ModalOrganizer from "./ModalOrganizer";
+import ModalChat from "./ModalChat";
+import { useRefreshToken } from "../../hooks/useRefreshToken";
+
 const events = [
-  // {
-  //   id: 1,
-  //   title: "Hội thảo Công nghệ AI",
-  //   date: "2025-03-30",
-  //   location: "Hội trường A",
-  //   description: "Hội thảo về công nghệ AI và ứng dụng trong thực tế.",
-  //   speaker: "TS. Nguyễn Văn A",
-  // },
-  // {
-  //   id: 2,
-  //   title: "Giao lưu CLB Lập trình",
-  //   date: "2025-03-25",
-  //   location: "Phòng 202",
-  //   description: "Buổi giao lưu, chia sẻ kinh nghiệm lập trình.",
-  //   speaker: "CLB Lập trình",
-  // },
-  // {
-  //   id: 3,
-  //   title: "Workshop React Native",
-  //   date: "2025-03-26",
-  //   location: "Online",
-  //   description: "Hướng dẫn lập trình ứng dụng di động với React Native.",
-  //   speaker: "Chuyên gia React Native",
-  // },
+  {
+    id: 1,
+    title: "Hội thảo Công nghệ AI",
+    date: "2025-05-30",
+    location: "Hội trường A",
+    description: "Hội thảo về công nghệ AI và ứng dụng trong thực tế.",
+    speaker: "TS. Nguyễn Văn A",
+    image:"/image/1.png",
+  },
+  {
+    id: 2,
+    title: "Giao lưu CLB Lập trình",
+    date: "2025-06-25",
+    location: "Phòng 202",
+    description: "Buổi giao lưu, chia sẻ kinh nghiệm lập trình.",
+    speaker: "CLB Lập trình",
+    image:"./image/2.jpg", 
+  },
+  {
+    id: 3,
+    title: "Workshop React Native",
+    date: "2025-07-26",
+    location: "Online",
+    description: "Hướng dẫn lập trình ứng dụng di động với React Native.",
+    speaker: "Chuyên gia React Native",
+    image:"/image/3.jpg",
+  },
 ];
 
-export default function Home() {
+export default function UserHome() {
   const [search, setSearch] = useState("");
   const [registeredEvents, setRegisteredEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -47,16 +54,24 @@ export default function Home() {
   const [showModalAttendees, setShowModalAttendees] = useState(false);
   const [showModalMember, setShowModalMember] = useState(false);
   const [showModalEventRegister, setShowModalEventRegister] = useState(false);
-  const [showModalOrganizer, setShowModalOrganizer] = useState(false);
+   const [showModalChat, setShowModalChat] = useState(false);
+ 
 
-  useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("user"));
-    if (storedUser) setUser(storedUser);
-  }, []);
+ const { refreshToken, refreshing } = useRefreshToken();
+ 
+     useEffect(() => {
+       const storedUser = JSON.parse(localStorage.getItem("user"));
+       if (storedUser) setUser(storedUser);
+ 
+       // Example: refresh token on component mount
+       refreshToken();
+     }, []);
 
-  const handleLogin = () => router.push("/login");
+  
 
   const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
     localStorage.removeItem("user");
     setUser(null);
     router.push("/login");
@@ -76,7 +91,7 @@ export default function Home() {
   );
 
   const upEvents = filteredEvents.filter((event) => event.date >= today);
-
+  
   return (
     <div className="min-h-screen bg-gray-100 p-6">
       <nav className="bg-gray-900 text-white px-4 py-4 shadow-md">
@@ -95,56 +110,17 @@ export default function Home() {
             >
               Liên hệ
             </span>
-
+            <UserMenu user={user} onLogout={handleLogout} />
             {/* Tài khoản - Đặt tại đây */}
-            {user ? (
-              <UserMenu user={user} onLogout={handleLogout} />
-            ) : (
-              <div className="flex gap-2">
-                <Link href="/login">
-                  <button className="px-3 py-1 bg-blue-500 hover:bg-blue-700 text-white rounded-md text-sm">
-                    Đăng nhập
-                  </button>
-                </Link>
-                <Link href="/register">
-                  <button className="px-3 py-1 bg-green-500 hover:bg-green-700 text-white rounded-md text-sm">
-                    Đăng ký
-                  </button>
-                </Link>
-              </div>
-            )}
+           
           </div>
         </div>
       </nav>
 
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mt-4 flex justify-center gap-8 border border-gray-200">
-        {user?.role === "admin" && (
-          <div className="flex flex-wrap gap-4 justify-center mt-6">
-            <Link href="/admin/events">
-              <button className="px-4 cursor-pointer py-2 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 font-semibold rounded-full shadow-sm transition">
-                📅 Quản lý sự kiện
-              </button>
-            </Link>
-            <button
-            onClick={() => setShowModalMember(true)} className="px-4 cursor-pointer py-2 bg-pink-100 text-pink-800 hover:bg-pink-200 font-semibold rounded-full shadow-sm transition">
-                👥 Thành viên CLB
-              </button>
-            
-            <Link href="/admin/roles">
-              <button className="px-4 cursor-pointer py-2 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 font-semibold rounded-full shadow-sm transition">
-                📌 Quản lý chức vụ
-              </button>
-            </Link>
-            
-              <button
-              onClick={() => setShowModalOrganizer(true)} className="cursor-pointer px-4 py-2 bg-purple-100 text-purple-800 hover:bg-purple-200 font-semibold rounded-full shadow-sm transition">
-                📖 Thành viên Ban tổ chức
-              </button>
-            
-          </div>
-        )}
+        
 
-        {user?.role === "organizer" && (
+        {/* {user?.role === "organizer" && ( */}
           <div className="flex flex-wrap gap-4 justify-center mt-6">
             <button
               onClick={() => setShowModalEvent(true)}
@@ -166,15 +142,14 @@ export default function Home() {
                 👥 Thành viên CLB
               </button>
               <button
-              
-              className="px-4 cursor-pointer py-2 bg-purple-100 text-purple-800 hover:bg-purple-200 font-semibold rounded-full shadow-sm transition">
-                📖 Thành viên Ban tổ chức
+              onClick={() => setShowModalChat(true)} className="cursor-pointer px-4 py-2 bg-purple-100 text-purple-800 hover:bg-purple-200 font-semibold rounded-full shadow-sm transition">
+                💬 Danh sách chat
               </button>
             
           </div>
-        )}
+        {/* )} */}
 
-        {user?.role === "student" && (
+        {/* {user?.role === "student" && (
           <div className="flex flex-wrap gap-4 justify-center mt-6">
             
             
@@ -194,7 +169,7 @@ export default function Home() {
               </button>
             
           </div>
-        )}
+        )} */}
       </div>
 
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 mt-4">
@@ -259,6 +234,13 @@ export default function Home() {
                   className="p-6 bg-white shadow-lg rounded-xl cursor-pointer transform transition hover:scale-105 hover:shadow-xl"
                   onClick={() => handleEvent(event)}
                 >
+                   {event.image && (
+                        <img
+                          src={event.image}
+                          alt={event.title}
+                          className="w-full h-48 object-cover rounded-lg mb-4"
+                        />
+                      )}
                   <h2 className="text-lg font-semibold text-gray-800">
                     {event.title}
                   </h2>
@@ -313,10 +295,11 @@ export default function Home() {
       {showModalEventRegister && (
         <ModalEventRegister onClose={() => setShowModalEventRegister(false)} />
       )}
+      {showModalChat && (
+                    <ModalChat onClose={() => setShowModalChat(false)} />
+                  )}
 
-    {showModalOrganizer && (
-        <ModalOrganizer onClose={() => setShowModalOrganizer(false)} />
-      )}
+    
     </div>
   );
 }

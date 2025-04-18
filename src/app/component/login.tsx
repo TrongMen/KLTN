@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "react-toastify"; // Thêm thư viện Toastify để thông báo
+import { toast } from "react-toastify";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [captcha, setCaptcha] = useState("");
   const [captchaInput, setCaptchaInput] = useState("");
   const [error, setError] = useState("");
+  const [passwordError, setPasswordError] = useState(""); // Thêm state để hiển thị lỗi mật khẩu
   const [showPassword, setShowPassword] = useState(false); // Thêm state để hiển thị mật khẩu
   const router = useRouter();
 
@@ -17,7 +18,9 @@ export default function LoginPage() {
     const characters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let result = "";
     for (let i = 0; i < 5; i++) {
-      result += characters.charAt(Math.floor(Math.random() * characters.length));
+      result += characters.charAt(
+        Math.floor(Math.random() * characters.length)
+      );
     }
     return result;
   };
@@ -42,29 +45,45 @@ export default function LoginPage() {
     };
 
     try {
-      const response = await fetch("http://localhost:8080/identity/auth/token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(loginData),
-      });
+      const response = await fetch(
+        "http://localhost:8080/identity/auth/token",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(loginData),
+        }
+      );
 
-      const result = await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || "Đăng nhập thất bại");
+        // Nếu đăng nhập thất bại, kiểm tra mã lỗi trả về
+        if (data.message && data.message.includes("Invalid password")) {
+          setPasswordError("Mật khẩu không đúng. Vui lòng thử lại.");
+        } else {
+          setPasswordError(""); // Nếu không có lỗi mật khẩu, reset lại
+        }
+        throw new Error(data.message || "Đăng nhập thất bại");
       }
 
+      if (data.result?.token) {
+        localStorage.setItem("authToken", data.result.token);
+      }
+      if (data.result?.authenticated !== undefined) {
+        localStorage.setItem("authenticated", data.result.authenticated);
       
-      localStorage.setItem("authToken", result.token);
+      
 
-     
       toast.success("Đăng nhập thành công!");
 
- 
-      router.push("/"); 
-    } catch (error) {
+      if (data.role === "admin" || username === "99999999") {
+        router.push("/admin"); // Trang dành cho admin
+      } else {
+        router.push("/user"); // Trang home mặc định
+      }
+    }} catch (error) {
       console.error("Đăng nhập thất bại:", error);
       toast.error("Đăng nhập thất bại: " + error.message);
     }
@@ -82,6 +101,40 @@ export default function LoginPage() {
       setUsername(value);
     }
   };
+
+  // const refreshAccessToken = async () => {
+  //   const refreshToken = localStorage.getItem("refreshToken"); // Refresh token lưu trữ ở đâu đó
+
+  //   if (refreshToken) {
+  //     try {
+  //       const response = await fetch(
+  //         "http://localhost:8080/identity/auth/refresh",
+  //         {
+  //           // Gọi API refresh token
+  //           method: "POST",
+  //           headers: {
+  //             "Content-Type": "application/json",
+  //           },
+  //           body: JSON.stringify({ refreshToken }),
+  //         }
+  //       );
+
+  //       const result = await response.json();
+
+  //       if (!response.ok) {
+  //         throw new Error(result.message || "Làm mới token thất bại");
+  //       }
+
+  //       // Lưu lại access token mới
+  //       localStorage.setItem("authToken", result.accessToken);
+  //       return result.accessToken;
+  //     } catch (error) {
+  //       console.error("Lỗi làm mới token:", error);
+  //       return null;
+  //     }
+  //   }
+  //   return null;
+  // };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 p-4">
@@ -101,11 +154,11 @@ export default function LoginPage() {
             onChange={handleUsernameChange}
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
-          
+
           {/* Thêm nút ẩn/hiện mật khẩu */}
           <div className="relative">
             <input
-              type={showPassword ? "text" : "password"} 
+              type={showPassword ? "text" : "password"}
               placeholder="Mật khẩu"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -113,7 +166,7 @@ export default function LoginPage() {
             />
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)} 
+              onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-3 text-gray-500"
             >
               {showPassword ? "🙈" : "👁️"}

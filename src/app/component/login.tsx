@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "react-toastify";
+import { toast, Toaster } from "react-hot-toast";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -10,8 +10,8 @@ export default function LoginPage() {
   const [captcha, setCaptcha] = useState("");
   const [captchaInput, setCaptchaInput] = useState("");
   const [error, setError] = useState("");
-  const [passwordError, setPasswordError] = useState(""); // Thêm state để hiển thị lỗi mật khẩu
-  const [showPassword, setShowPassword] = useState(false); // Thêm state để hiển thị mật khẩu
+  const [passwordError, setPasswordError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
   const generateCaptcha = () => {
@@ -45,45 +45,63 @@ export default function LoginPage() {
     };
 
     try {
-      const response = await fetch(
+      // 1. Gọi API đăng nhập để lấy token
+      const authResponse = await fetch(
         "http://localhost:8080/identity/auth/token",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(loginData),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
         }
       );
 
-      const data = await response.json();
+      const authData = await authResponse.json();
+      if (!authResponse.ok) {
+        throw new Error(authData.message || "Đăng nhập thất bại");
+      }
 
-      if (!response.ok) {
-        // Nếu đăng nhập thất bại, kiểm tra mã lỗi trả về
-        if (data.message && data.message.includes("Invalid password")) {
-          setPasswordError("Mật khẩu không đúng. Vui lòng thử lại.");
-        } else {
-          setPasswordError(""); // Nếu không có lỗi mật khẩu, reset lại
+      // 2. Lưu token vào localStorage
+      const token = authData.result?.token;
+      if (!token) throw new Error("Không nhận được token");
+      localStorage.setItem("authToken", token);
+
+      // 3. Gọi API lấy thông tin user
+      const userInfoResponse = await fetch(
+        "http://localhost:8080/identity/users/myInfo",
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
-        throw new Error(data.message || "Đăng nhập thất bại");
+      );
+
+      const userInfo = await userInfoResponse.json();
+      if (!userInfoResponse.ok) {
+        throw new Error(userInfo.message || "Lỗi khi lấy thông tin user");
       }
 
-      if (data.result?.token) {
-        localStorage.setItem("authToken", data.result.token);
+      console.log(localStorage.getItem("authToken"));
+      console.log(userInfo.result?.roles?.[0]?.name); // sửa chỗ này
+
+      const roleName = userInfo.result?.roles?.[0]?.name?.toUpperCase();
+      console.log("User role:", roleName);
+
+      switch (roleName) {
+        case "ADMIN":
+          router.push("/admin");
+          break;
+        case "GUEST":
+          router.push("/guest");
+          break;
+        case "USER":
+          router.push("/user");
+          break;
+        default:
+          router.push("/");
+          toast.error(`Role "${roleName}" không được hỗ trợ`);
       }
-      if (data.result?.authenticated !== undefined) {
-        localStorage.setItem("authenticated", data.result.authenticated);
-      
       
 
       toast.success("Đăng nhập thành công!");
-
-      if (data.role === "admin" || username === "99999999") {
-        router.push("/admin"); // Trang dành cho admin
-      } else {
-        router.push("/user"); // Trang home mặc định
-      }
-    }} catch (error) {
+    } catch (error) {
       console.error("Đăng nhập thất bại:", error);
       toast.error("Đăng nhập thất bại: " + error.message);
     }
@@ -102,42 +120,9 @@ export default function LoginPage() {
     }
   };
 
-  // const refreshAccessToken = async () => {
-  //   const refreshToken = localStorage.getItem("refreshToken"); // Refresh token lưu trữ ở đâu đó
-
-  //   if (refreshToken) {
-  //     try {
-  //       const response = await fetch(
-  //         "http://localhost:8080/identity/auth/refresh",
-  //         {
-  //           // Gọi API refresh token
-  //           method: "POST",
-  //           headers: {
-  //             "Content-Type": "application/json",
-  //           },
-  //           body: JSON.stringify({ refreshToken }),
-  //         }
-  //       );
-
-  //       const result = await response.json();
-
-  //       if (!response.ok) {
-  //         throw new Error(result.message || "Làm mới token thất bại");
-  //       }
-
-  //       // Lưu lại access token mới
-  //       localStorage.setItem("authToken", result.accessToken);
-  //       return result.accessToken;
-  //     } catch (error) {
-  //       console.error("Lỗi làm mới token:", error);
-  //       return null;
-  //     }
-  //   }
-  //   return null;
-  // };
-
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 p-4">
+      <Toaster toastOptions={{ duration: 3500 }} />
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
         <h1
           className="text-3xl font-extrabold text-gray-800 text-center mb-6"
@@ -155,7 +140,6 @@ export default function LoginPage() {
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
 
-          {/* Thêm nút ẩn/hiện mật khẩu */}
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
@@ -173,7 +157,6 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* Captcha input */}
           <div className="flex items-center space-x-3">
             <input
               type="text"

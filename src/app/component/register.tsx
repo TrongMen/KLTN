@@ -2,7 +2,8 @@
 
 import React, { useState } from "react"
 import { useRouter } from "next/navigation"
-import { toast, ToastContainer } from "react-toastify"
+import { toast, Toaster } from 'react-hot-toast'
+
 import "react-toastify/dist/ReactToastify.css"
 
 
@@ -86,6 +87,8 @@ export default function Register() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-400 to-blue-600 p-4">
+      <Toaster toastOptions={{ duration: 3500 }} />
+      
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
         <h1
           className="text-3xl font-extrabold text-gray-800 text-center mb-6"

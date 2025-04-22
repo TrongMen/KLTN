@@ -1,134 +1,356 @@
 "use client";
 
-import React, { useState } from "react";
-import { toast } from "react-toastify";
+import React, { useState, useEffect } from "react";
+import { Toaster, toast } from "react-hot-toast";
 
-export default function ModalRole({ onClose, roles = [], onUpdateRoles }) {
-  const [selectedMenu, setSelectedMenu] = useState(null);
+interface Item {
+  id: number;
+  name: string;
+}
 
-  const handleRoleChange = async (targetUser, newRole) => {
-    const updatedRoles = [...roles];
-    const targetIndex = updatedRoles.findIndex(
-      (r) => r.email === targetUser.email
-    );
+type EditMode = {
+  type: "position" | "role";
+  action: "add" | "edit";
+  id?: number;
+  oldName?: string;
+};
 
-    if (targetIndex === -1) return;
+export default function ModalRole({ onClose }: { onClose: () => void }) {
+  const [positions, setPositions] = useState<Item[]>([]);
+  const [roles, setRoles] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editMode, setEditMode] = useState<EditMode | null>(null);
+  const [inputName, setInputName] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<{ type: "position" | "role"; id: number } | null>(null);
 
-    // Call backend API to update user roles
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+
+        const [positionsRes, rolesRes] = await Promise.all([
+          fetch("http://localhost:8080/identity/api/positions", {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+          fetch("http://localhost:8080/identity/api/organizerrole", {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+        ]);
+
+        if (!positionsRes.ok || !rolesRes.ok) {
+          throw new Error("Failed to fetch data");
+        }
+
+        const positionsData = await positionsRes.json();
+        const rolesData = await rolesRes.json();
+
+        setPositions(positionsData.result || []);
+        setRoles(rolesData.result || []);
+      } catch (err) {
+        setError("Không thể tải dữ liệu vị trí và vai trò");
+        console.error("Fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const openEditModal = (mode: EditMode) => {
+    setEditMode(mode);
+    setInputName(mode.oldName || "");
+  };
+
+  const handleSave = async () => {
+    if (!inputName.trim()) return toast.error("Tên không được để trống");
+
+    const token = localStorage.getItem("authToken");
+    const { type, action, id } = editMode!;
+    const urlBase =
+      type === "position"
+        ? "http://localhost:8080/identity/api/positions"
+        : "http://localhost:8080/identity/api/organizerrole";
+
     try {
-      const response = await fetch(`http://localhost:8080/identity/users/${targetUser.id}`, {
-        method: "PUT",
+      const response = await fetch(
+        action === "add" ? urlBase : `${urlBase}/${id}`,
+        {
+          method: action === "add" ? "POST" : "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ name: inputName }),
+        }
+      );
+
+      if (!response.ok) throw new Error("Request failed");
+
+      const newItem = await response.json();
+      if (type === "position") {
+        setPositions((prev) =>
+          action === "add"
+            ? [...prev, newItem.result]
+            : prev.map((i) => (i.id === id ? { ...i, name: inputName } : i))
+        );
+      } else {
+        setRoles((prev) =>
+          action === "add"
+            ? [...prev, newItem.result]
+            : prev.map((i) => (i.id === id ? { ...i, name: inputName } : i))
+        );
+      }
+
+      toast.success(`${action === "add" ? "Đã thêm" : "Đã cập nhật"} ${type === "position" ? "vị trí" : "vai trò"}`);
+    } catch (err) {
+      toast.error(`${action === "add" ? "Không thể thêm" : "Không thể cập nhật"} ${type === "position" ? "vị trí" : "vai trò"}`);
+      console.error(err);
+    } finally {
+      setEditMode(null);
+      setInputName("");
+    }
+  };
+
+  const handleDelete = async () => {
+    const { type, id } = confirmDelete!;
+    const token = localStorage.getItem("authToken");
+    const url =
+      type === "position"
+        ? `http://localhost:8080/identity/api/positions/${id}`
+        : `http://localhost:8080/identity/api/organizerrole/${id}`;
+
+    try {
+      const res = await fetch(url, {
+        method: "DELETE",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          ...targetUser,
-          roles: [newRole], // assuming roles is an array of role names
-        }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        toast.error(`Lỗi khi cập nhật quyền: ${errorData.message || response.statusText}`);
-        return;
+      if (!res.ok) throw new Error("Delete failed");
+
+      if (type === "position") {
+        setPositions((prev) => prev.filter((i) => i.id !== id));
+      } else {
+        setRoles((prev) => prev.filter((i) => i.id !== id));
       }
 
-      // Update local state on success
-      updatedRoles[targetIndex].rolez = newRole;
-      toast.success(`${targetUser.name} được phân quyền thành "${newRole}"`);
-
-      if (onUpdateRoles) {
-        onUpdateRoles(updatedRoles);
-      }
-
-      setSelectedMenu(null); // close menu after selection
-    } catch (error) {
-      toast.error(`Lỗi khi gọi API: ${error.message}`);
+      toast.success(`Đã xóa ${type === "position" ? "vị trí" : "vai trò"} thành công`);
+    } catch (err) {
+      toast.error(`Không thể xóa ${type === "position" ? "vị trí" : "vai trò"}`);
+      console.error(err);
+    } finally {
+      setConfirmDelete(null);
     }
   };
 
-  const getMenuOptions = (rolez) => {
-    switch (rolez) {
-      case "Thành viên nòng cốt":
-        return ["Thành viên vãng lai"];
-      case "Thành viên vãng lai":
-        return ["Thành viên nòng cốt"];
-      default:
-        return ["Thành viên nòng cốt", "Thành viên vãng lai"];
-    }
-  };
+  if (loading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <p>Đang tải danh sách vị trí...</p>
+        </div>
+      </div>
+    );
+  }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 bg-opacity-40">
-      <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-2xl relative">
-        <h2 className="text-2xl font-bold text-blue-600 mb-4">
-          🎭 Quản lý chức vụ
-        </h2>
-
-        <ul className="space-y-4 max-h-96 overflow-y-auto pr-2">
-          {roles.map((role, index) => (
-            <li
-              key={index}
-              className="relative flex items-center justify-between border border-gray-200 p-4 rounded-lg shadow-sm bg-gray-50"
-            >
-              <div className="flex items-center gap-4">
-                <img
-                  src={role.avatar || "/default-avatar.png"}
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-800">
-                    {role.name}
-                  </h2>
-                  <p className="text-gray-600">{role.rolez}</p>
-                </div>
-              </div>
-
-              <div className="relative overflow-visible">
-                <button
-                  onClick={() =>
-                    setSelectedMenu(selectedMenu === index ? null : index)
-                  }
-                  className="cursor-pointer text-xl px-2 text-gray-600 hover:text-gray-900"
-                >
-                  ⋮
-                </button>
-
-                {selectedMenu === index && (
-                  <div className="absolute right-2 mt-0 w-48 bg-white border rounded-lg shadow-lg z-9">
-                    {getMenuOptions(role.rolez).map((option, optIndex) => (
-                      <button
-                        key={optIndex}
-                        onClick={() => handleRoleChange(role, option)}
-                        className="block w-full cursor-pointer text-left px-4 py-2 text-gray-700 hover:bg-gray-100"
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-4 flex justify-end gap-4">
+  if (error) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <p className="text-red-500">{error}</p>
           <button
             onClick={onClose}
-            className="px-4 cursor-pointer py-2 bg-gray-200 text-gray-800 hover:bg-gray-300 font-semibold rounded-full"
+            className="mt-4 px-4 py-2 bg-gray-200 text-gray-800 rounded-full hover:bg-gray-300"
+          >
+            Đóng
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <Toaster toastOptions={{ duration: 3000 }} />
+      <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-3xl relative max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold text-blue-600 mb-6">
+          🎯 Quản lý vị trí và vai trò
+        </h2>
+
+        {/* Danh sách Vị trí */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-xl font-semibold text-gray-800">📌 Vị trí</h3>
+            <button
+              onClick={() => openEditModal({ type: "position", action: "add" })}
+              className="bg-blue-500 cursor-pointer text-white px-3 py-1 rounded-full hover:bg-blue-600"
+            >
+              + Thêm
+            </button>
+          </div>
+          <ul className="space-y-2">
+            {positions.map((pos) => (
+              <li
+                key={pos.id}
+                className="flex justify-between items-center bg-gray-100 p-3 rounded-lg"
+              >
+                <span>{pos.name}</span>
+                <div className="space-x-2">
+                  <button
+                    onClick={() =>
+                      openEditModal({
+                        type: "position",
+                        action: "edit",
+                        id: pos.id,
+                        oldName: pos.name,
+                      })
+                    }
+                    className="text-yellow-600 hover:text-yellow-800 cursor-pointer"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete({ type: "position", id: pos.id })}
+                    className="text-red-600 hover:text-red-800 cursor-pointer"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Danh sách Vai trò */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-xl font-semibold text-gray-800">🧩 Vai trò</h3>
+            <button
+              onClick={() => openEditModal({ type: "role", action: "add" })}
+              className="bg-blue-500 text-white px-3 py-1 rounded-full hover:bg-blue-600 cursor-pointer"
+            >
+              + Thêm
+            </button>
+          </div>
+          <ul className="space-y-2">
+            {roles.map((role) => (
+              <li
+                key={role.id}
+                className="flex justify-between items-center bg-gray-100 p-3 rounded-lg"
+              >
+                <span>{role.name}</span>
+                <div className="space-x-2">
+                  <button
+                    onClick={() =>
+                      openEditModal({
+                        type: "role",
+                        action: "edit",
+                        id: role.id,
+                        oldName: role.name,
+                      })
+                    }
+                    className="text-yellow-600 hover:text-yellow-800 cursor-pointer"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete({ type: "role", id: role.id })}
+                    className="text-red-600 hover:text-red-800 cursor-pointer"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Đóng modal */}
+        <div className="flex justify-end mt-4">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-full hover:bg-gray-300 cursor-pointer"
           >
             Đóng
           </button>
         </div>
 
+        {/* Icon đóng góc phải */}
         <button
           onClick={onClose}
-          className="absolute cursor-pointer top-3 right-3 text-red-500 hover:text-red-700 text-xl"
+          className="absolute top-3 right-3 text-red-500 hover:text-red-700 text-xl cursor-pointer"
         >
           ✖
         </button>
       </div>
+
+      {/* Modal nhập tên */}
+      {editMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-[90%] max-w-md">
+            <h3 className="text-lg font-semibold mb-4">
+              {editMode.action === "add" ? "Thêm mới" : "Chỉnh sửa"}{" "}
+              {editMode.type === "position" ? "vị trí" : "vai trò"}
+            </h3>
+            <input
+              type="text"
+              className="w-full border p-2 rounded mb-4"
+              placeholder="Nhập tên..."
+              value={inputName}
+              onChange={(e) => setInputName(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditMode(null)}
+                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleSave}
+                className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600 cursor-pointer"
+              >
+                Lưu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal xác nhận xóa */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-[90%] max-w-sm">
+            <p className="text-lg mb-4">
+              Bạn có chắc muốn xóa{" "}
+              {confirmDelete.type === "position" ? "vị trí" : "vai trò"} này?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 rounded bg-red-500 text-white hover:bg-red-600 cursor-pointer"
+              >
+                Xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

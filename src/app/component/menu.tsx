@@ -28,6 +28,7 @@ export default function UserMenu() {
   const [error, setError] = useState("");
   const router = useRouter();
   const inputRef = useRef();
+  
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -55,10 +56,40 @@ export default function UserMenu() {
     fetchUserInfo();
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    setUser(null);
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      
+      // Gọi API logout
+      const response = await fetch("http://localhost:8080/identity/auth/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          token: token
+        }),
+      });
+  
+      if (!response.ok) {
+        throw new Error("Đăng xuất không thành công");
+      }
+  
+      // Xóa dữ liệu local storage
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("user");
+      localStorage.removeItem("role");
+      
+      // Chuyển hướng về trang login
+      router.push("/login");
+    } catch (error) {
+      console.error("Lỗi khi đăng xuất:", error);
+      // Vẫn xóa dữ liệu local storage ngay cả khi gọi API thất bại
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("user");
+      localStorage.removeItem("role");
+      router.push("/login");
+    }
   };
 
   const handleChange = (e) => {

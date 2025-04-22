@@ -1,3 +1,4 @@
+"use client";
 import { useState, useEffect } from "react";
 
 const REFRESH_URL = "http://localhost:8080/identity/auth/refresh";

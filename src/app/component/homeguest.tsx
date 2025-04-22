@@ -1,19 +1,18 @@
-  // trang localhost:3000/admin
-
+  // trang localhost:3000/guest
   "use client";
   import React, { useState, useEffect } from "react";
   import { useRouter } from "next/navigation";
   import Link from "next/link";
   import UserMenu from "./menu";
-  import ModalMember from "./ModalMember";
-  import ModalOrganizer from "./ModalOrganizer";
-  import ModalRole from "./ModalRole";
   import ContactModal from "./contact";
+  import ModalEvent from "./ModalEvent";
+  import ModalAttendees from "./ModalAttende";
+  import ModalMember from "./ModalMember";
+  import ModalEventRegister from "./ModalEventRegister";
+  import ModalOrganizer from "./ModalOrganizer";
   import ModalChat from "./ModalChat";
-  import MiniChatBox from "./MiniChat";
-  import ModalApproval from "./ModalApproval";
   import { useRefreshToken } from "../../hooks/useRefreshToken";
-
+  
   const events = [
     {
       id: 1,
@@ -22,7 +21,7 @@
       location: "Hội trường A",
       description: "Hội thảo về công nghệ AI và ứng dụng trong thực tế.",
       speaker: "TS. Nguyễn Văn A",
-      image: "/image/1.png",
+      image:"",
     },
     {
       id: 2,
@@ -31,7 +30,7 @@
       location: "Phòng 202",
       description: "Buổi giao lưu, chia sẻ kinh nghiệm lập trình.",
       speaker: "CLB Lập trình",
-      image: "./image/2.jpg",
+      image:"", 
     },
     {
       id: 3,
@@ -40,29 +39,11 @@
       location: "Online",
       description: "Hướng dẫn lập trình ứng dụng di động với React Native.",
       speaker: "Chuyên gia React Native",
-      image: "/image/3.jpg",
-    },
-    {
-      id: 4,
-      title: "Workshop React Native",
-      date: "2025-07-26",
-      location: "Online",
-      description: "Hướng dẫn lập trình ứng dụng di động với React Native.",
-      speaker: "Chuyên gia React Native",
-      image: "/image/3.jpg",
-    },
-    {
-      id: 5,
-      title: "Workshop React Native",
-      date: "2025-07-26",
-      location: "Online",
-      description: "Hướng dẫn lập trình ứng dụng di động với React Native.",
-      speaker: "Chuyên gia React Native",
-      image: "/image/3.jpg",
+      image:"",
     },
   ];
-
-  export default function HomeAdmin() {
+  
+  export default function HomeGuest() {
     const [search, setSearch] = useState("");
     const [registeredEvents, setRegisteredEvents] = useState([]);
     const [selectedEvent, setSelectedEvent] = useState(null);
@@ -70,72 +51,74 @@
     const router = useRouter();
     const today = new Date().toISOString().split("T")[0];
     const [showContactModal, setShowContactModal] = useState(false);
+    const [showModalEvent, setShowModalEvent] = useState(false);
+    const [showModalAttendees, setShowModalAttendees] = useState(false);
     const [showModalMember, setShowModalMember] = useState(false);
-    const [showModalChat, setShowModalChat] = useState(false);
-    const [showModalRole, setShowModalRole] = useState(false);
-    const [selectedConversation, setSelectedConversation] = useState(null);
-    const [showModalApproval, setShowModalApproval] = useState(false);
-
+    const [showModalEventRegister, setShowModalEventRegister] = useState(false);
+      const [showModalChat, setShowModalChat] = useState(false);
+    
+  
     const { refreshToken, refreshing } = useRefreshToken();
-
-    useEffect(() => {
-      const storedUser = JSON.parse(localStorage.getItem("user"));
-      if (storedUser) setUser(storedUser);
-
-      // Example: refresh token on component mount
-      refreshToken();
-    }, []);
-
-
-
-
-    const handleLogout = async () => {
-      try {
-        const token = localStorage.getItem("authToken");
+    
+        useEffect(() => {
+          const storedUser = JSON.parse(localStorage.getItem("user"));
+          if (storedUser) setUser(storedUser);
+    
+          // Example: refresh token on component mount
+          refreshToken();
+        }, []);
+  
+    
+  
+        const handleLogout = async () => {
+          try {
+            const token = localStorage.getItem("authToken");
+            
+            // Gọi API logout
+            const response = await fetch("http://localhost:8080/identity/auth/logout", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                token: token
+              }),
+            });
         
-        // Gọi API logout
-        const response = await fetch("http://localhost:8080/identity/auth/logout", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            token: token
-          }),
-        });
-    
-        // Xóa dữ liệu local storage dù API có thành công hay không
-        localStorage.removeItem("authToken");
-        localStorage.removeItem("role");
-        localStorage.removeItem("user");
-    
-        setUser(null);
-        router.push("/login");
-      } catch (error) {
-        console.error("Lỗi khi đăng xuất:", error);
-        router.push("/login");
+            // Xóa dữ liệu local storage dù API có thành công hay không
+            localStorage.removeItem("authToken");
+            localStorage.removeItem("role");
+            localStorage.removeItem("user");
+        
+            setUser(null);
+            router.push("/login");
+          } catch (error) {
+            console.error("Lỗi khi đăng xuất:", error);
+            router.push("/login");
+          }
+        };
+  
+    const handleRegister = (eventId) => {
+      if (!registeredEvents.includes(eventId)) {
+        setRegisteredEvents([...registeredEvents, eventId]);
+        alert("Đăng ký thành công!");
       }
     };
-
-    const handleSelectConversation = (conversation) => {
-      setSelectedConversation(conversation);
-      setShowModalChat(false); // nếu muốn ẩn danh sách khi chọn xong
-    };
-
+  
     const handleEvent = (event) => setSelectedEvent(event);
-
+  
     const filteredEvents = events.filter((event) =>
       event.title.toLowerCase().includes(search.toLowerCase())
     );
-
+  
     const upEvents = filteredEvents.filter((event) => event.date >= today);
-
+    
     return (
       <div className="min-h-screen bg-gray-100 p-6">
         <nav className="bg-gray-900 text-white px-4 py-4 shadow-md">
           <div className="max-w-7xl mx-auto flex justify-between items-center">
             <div className="text-xl font-bold">Quản lý sự kiện</div>
-
+  
             <div className="flex items-center gap-6">
               <Link href="/about">
                 <span className="cursor-pointer hover:text-gray-300">
@@ -149,42 +132,36 @@
                 Liên hệ
               </span>
               <UserMenu user={user} onLogout={handleLogout} />
+              {/* Tài khoản - Đặt tại đây */}
+              
             </div>
           </div>
         </nav>
-
+  
         <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mt-4 flex justify-center gap-8 border border-gray-200">
-          <div className="flex flex-wrap gap-4 justify-center mt-6">
-            <button
-              onClick={() => setShowModalApproval(true)}
-              className="px-4 cursor-pointer py-2 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 font-semibold rounded-full shadow-sm transition"
-            >
-              📅 Phê duyệt sự kiện
-            </button>
-
-            <button
-              onClick={() => setShowModalMember(true)}
-              className="px-4 cursor-pointer py-2 bg-pink-100 text-pink-800 hover:bg-pink-200 font-semibold rounded-full shadow-sm transition"
-            >
-              👥 Thành viên CLB
-            </button>
-
-            <button
-              onClick={() => setShowModalRole(true)}
-              className="px-4 cursor-pointer py-2 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 font-semibold rounded-full shadow-sm transition"
-            >
-              📌 Quản lý chức vụ
-            </button>
-
-            <button
-              onClick={() => setShowModalChat(true)}
-              className="cursor-pointer px-4 py-2 bg-purple-100 text-purple-800 hover:bg-purple-200 font-semibold rounded-full shadow-sm transition"
-            >
-              💬 Danh sách chat
-            </button>
-          </div>
+          
+  
+            <div className="flex flex-wrap gap-4 justify-center mt-6">
+              
+              
+                <button
+                onClick={() => setShowModalEventRegister(true)}
+                className="px-4 cursor-pointer py-2 bg-green-100 text-green-800 hover:bg-green-200 font-semibold rounded-full shadow-sm transition">
+                  📋 Sự kiện đã đăng ký
+                </button>
+                <button
+                onClick={() => setShowModalMember(true)}
+                className="px-4 cursor-pointer py-2 bg-pink-100 text-pink-800 hover:bg-pink-200 font-semibold rounded-full shadow-sm transition">
+                  👥 Thành viên CLB
+                </button>
+              <button
+                  className="px-4 cursor-pointer py-2 bg-purple-100 text-purple-800 hover:bg-purple-200 font-semibold rounded-full shadow-sm transition">
+                  📖 Thành viên Ban tổ chức
+                </button>
+              
+            </div>
         </div>
-
+  
         <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 mt-4">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold text-blue-600">🎉 Trang chủ</h1>
@@ -201,7 +178,21 @@
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-
+          {/* <input
+            type="text"
+            placeholder="🔍 Tìm kiếm sự kiện..."
+            className="w-full p-3 border rounded-lg mb-6 shadow-sm"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          /> */}
+          {user?.role === "organizer" && (
+            <Link href="/event">
+              <button className="cursor-pointer mb-4 px-5 py-2 bg-gradient-to-r from-green-400 to-green-600 hover:to-green-700 text-white rounded-lg transition shadow-md">
+                + Tạo sự kiện
+              </button>
+            </Link>
+          )}
+  
           {selectedEvent ? (
             <div className="p-6 border rounded-lg shadow-lg bg-white">
               <h2 className="text-xl font-semibold text-gray-800">
@@ -219,7 +210,7 @@
               </p>
               <button
                 onClick={() => setSelectedEvent(null)}
-                className="cursor-pointer mt-4 px-4 py-2 bg-red-500 hover:bg-red-700 text-white rounded-lg transition"
+                className="mt-4 px-4 py-2 bg-red-500 hover:bg-red-700 text-white rounded-lg transition"
               >
                 Đóng
               </button>
@@ -233,18 +224,36 @@
                     className="p-6 bg-white shadow-lg rounded-xl cursor-pointer transform transition hover:scale-105 hover:shadow-xl"
                     onClick={() => handleEvent(event)}
                   >
-                    {event.image && (
-                      <img
-                        src={event.image}
-                        alt={event.title}
-                        className="w-full h-48 object-cover rounded-lg mb-4"
-                      />
-                    )}
+                      {event.image && (
+                          <img
+                            src={event.image}
+                            alt={event.title}
+                            className="w-full h-48 object-cover rounded-lg mb-4"
+                          />
+                        )}
                     <h2 className="text-lg font-semibold text-gray-800">
                       {event.title}
                     </h2>
                     <p className="text-gray-600">📅 {event.date}</p>
                     <p className="text-gray-600">📍 {event.location}</p>
+                    {user?.role === "student" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRegister(event.id);
+                        }}
+                        className={`mt-3 px-4 py-2 rounded-lg text-white shadow-md transition ${
+                          registeredEvents.includes(event.id)
+                            ? "bg-gray-400"
+                            : "bg-blue-500 hover:bg-blue-700"
+                        }`}
+                        disabled={registeredEvents.includes(event.id)}
+                      >
+                        {registeredEvents.includes(event.id)
+                          ? "✅ Đã đăng ký"
+                          : "📝 Đăng ký"}
+                      </button>
+                    )}
                   </div>
                 ))
               ) : (
@@ -258,28 +267,29 @@
         {showContactModal && (
           <ContactModal onClose={() => setShowContactModal(false)} />
         )}
+        {showModalEvent && (
+          <ModalEvent onClose={() => setShowModalEvent(false)} />
+        )}
+        {showModalAttendees && (
+          <ModalAttendees
+            onClose={() => setShowModalAttendees(false)}
+            attendees={[
+              { name: "Nguyễn Văn A", role: "Sinh viên" },
+              { name: "Trần Thị B", role: "Giảng viên" },
+            ]}
+          />
+        )}
         {showModalMember && (
           <ModalMember onClose={() => setShowModalMember(false)} />
         )}
+        {showModalEventRegister && (
+          <ModalEventRegister onClose={() => setShowModalEventRegister(false)} />
+        )}
         {showModalChat && (
-          <ModalChat
-            onClose={() => setShowModalChat(false)}
-            onSelectConversation={handleSelectConversation}
-          />
-        )}
-        {showModalRole && (
-          //roles={roles}
-          <ModalRole onClose={() => setShowModalRole(false)}  />
-        )}
-        {selectedConversation && (
-          <MiniChatBox
-            conversation={selectedConversation}
-            onClose={() => setSelectedConversation(null)}
-          />
-        )}
-        {showModalApproval && (
-          <ModalApproval onClose={() => setShowModalApproval(false)} />
-        )}
+                      <ModalChat onClose={() => setShowModalChat(false)} />
+                    )}
+  
+      
       </div>
     );
   }

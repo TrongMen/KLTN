@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import UserMenu from "./menu";
-import ContactModal from "./contact";
-import ModalEvent from "./ModalEvent";
-import ModalAttendees from "./ModalAttende";
-import ModalMember from "./ModalMember";
-import ModalEventRegister from "./ModalEventRegister";
-import ModalOrganizer from "./ModalOrganizer";
+
 
 const events = [
   {
@@ -47,11 +41,7 @@ export default function Dashboard() {
   const router = useRouter();
   const today = new Date().toISOString().split("T")[0];
   const [showContactModal, setShowContactModal] = useState(false);
-  const [showModalEvent, setShowModalEvent] = useState(false);
-  const [showModalAttendees, setShowModalAttendees] = useState(false);
-  const [showModalMember, setShowModalMember] = useState(false);
-  const [showModalEventRegister, setShowModalEventRegister] = useState(false);
-  const [showModalOrganizer, setShowModalOrganizer] = useState(false);
+
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("user"));

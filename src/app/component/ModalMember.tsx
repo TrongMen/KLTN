@@ -1,10 +1,12 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface Member {
+  id: string;
   name: string;
-  role: "Thành viên vãng lai" | "Thành viên nòng cốt";
+  role: "Thành viên vãng lai" | "Thành viên nòng cốt" | string;
   email: string;
+  avatar?: string;
 }
 
 interface ModalMemberProps {
@@ -13,6 +15,14 @@ interface ModalMemberProps {
   currentUserEmail: string;
 }
 
+const roleDisplayMap: Record<string, string> = {
+  ADMIN: "Admin",
+  GUEST: "Thành viên vãng lai",
+  USER: "Thành viên nòng cốt",
+  "Thành viên vãng lai": "Thành viên vãng lai",
+  "Thành viên nòng cốt": "Thành viên nòng cốt",
+};
+
 export default function ModalMember({
   onClose,
   userRole,
@@ -20,23 +30,52 @@ export default function ModalMember({
 }: ModalMemberProps) {
   const [tab, setTab] = useState<"all" | "casual" | "core">("all");
   const [isMember, setIsMember] = useState<boolean>(false);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const members: Member[] = [
-    { name: "Nguyễn Văn A", role: "Thành viên vãng lai", email: "a@club.vn" },
-    { name: "Lê Văn C", role: "Thành viên nòng cốt", email: "c@club.vn" },
-    { name: "Ngô Văn D", role: "Thành viên vãng lai", email: "d@club.vn" },
-  ];
+  useEffect(() => {
+    fetchMembers();
+  }, []);
+
+  const fetchMembers = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("http://localhost:8080/users", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch users");
+      }
+      const data = await response.json();
+      // Map backend users to Member interface, assuming roles array with first role as string
+      const users: Member[] = (data.result || []).map((user: any) => ({
+        id: user.id,
+        name: user.firstName + " " + user.lastName,
+        email: user.email,
+        role: user.roles && user.roles.length > 0 ? user.roles[0] : "Chưa phân quyền",
+        avatar: user.avatar,
+      }));
+      setMembers(users);
+    } catch (error) {
+      console.error("Error fetching members:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredMembers = members.filter((member) => {
     if (tab === "all") return true;
-    if (tab === "casual") return member.role === "Thành viên vãng lai";
-    if (tab === "core") return member.role === "Thành viên nòng cốt";
+    if (tab === "casual") return member.role === "GUEST" || member.role === "Thành viên vãng lai";
+    if (tab === "core") return member.role === "USER" || member.role === "Thành viên nòng cốt";
     return false;
   });
 
   const handleRemoveMember = (email: string) => {
     if (confirm("Bạn có chắc chắn muốn xóa thành viên này không?")) {
-      // setMembers((prev) => prev.filter((m) => m.email !== email));
+      setMembers((prev) => prev.filter((m) => m.email !== email));
+      // TODO: Call backend API to remove member
     }
   };
 
@@ -106,7 +145,9 @@ export default function ModalMember({
         )}
 
         <div className="space-y-2 overflow-y-auto flex-1 mb-6">
-          {filteredMembers.length > 0 ? (
+          {loading ? (
+            <p>Đang tải danh sách thành viên...</p>
+          ) : filteredMembers.length > 0 ? (
             filteredMembers.map((member, idx) => (
               <div
                 key={idx}
@@ -115,7 +156,7 @@ export default function ModalMember({
                 <div>
                   <h3 className="font-semibold text-lg">{member.name}</h3>
                   <p className="text-gray-600">📧 {member.email}</p>
-                  <p className="text-sm text-gray-500">🔖 {member.role}</p>
+                  <p className="text-sm text-gray-500">🔖 {roleDisplayMap[member.role] || member.role}</p>
                 </div>
 
                 <div className="flex gap-2">

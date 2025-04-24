@@ -1,8 +1,13 @@
-import { useState, useEffect } from "react";
-import { toast } from "react-hot-toast"; // Sử dụng react-hot-toast giống parent
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
+import { toast } from "react-hot-toast";
 
-// --- Types ---
-// Định nghĩa cấu trúc dữ liệu cho API responses (điều chỉnh nếu cần)
 type ApiRole = { id: string; name: string; description?: string };
 type ApiPosition = { id: string; name: string; description?: string };
 type ApiUser = {
@@ -12,240 +17,199 @@ type ApiUser = {
   username: string;
   email?: string;
 };
+type OrganizerData = { userId: string; roleId: string; positionId: string };
 
-// Định nghĩa cấu trúc dữ liệu gửi lên component cha
-type OrganizerData = {
-  userId: string;
-  roleId: string;
-  positionId: string;
-};
-
-// Định nghĩa props mà component nhận vào
 type BTCSectionProps = {
-  onAddOrganizer: (organizer: OrganizerData) => void; // Callback để thêm BTC vào state cha
-  // Có thể truyền thêm initialOrganizers nếu cần cho chế độ edit
+  allUsers: ApiUser[]; // Chỉ cần allUsers để hiển thị tên nếu cần (không cần nữa vì list bị bỏ) và disable dropdown
+  // Props `existingOrganizers` không cần thiết nữa vì không hiển thị list ở đây
 };
 
+// Định nghĩa handle để lộ ra ngoài cho ref
+export type BTCSectionHandle = {
+  getMembersData: () => OrganizerData[];
+  resetForms: () => void;
+};
 
 type OrganizerFormRow = {
-  id: number; // Unique ID for React key
+  id: number;
   userId: string;
   positionId: string;
   roleId: string;
 };
 
-export default function BTCSection({ onAddOrganizer }: BTCSectionProps) {
-  // State cho các dòng form động
-  const [organizerForms, setOrganizerForms] = useState<OrganizerFormRow[]>([]);
-
-  // State cho dữ liệu từ API
-  const [roles, setRoles] = useState<ApiRole[]>([]);
-  const [positions, setPositions] = useState<ApiPosition[]>([]);
-  const [users, setUsers] = useState<ApiUser[]>([]);
-
-  // State quản lý trạng thái tải và lỗi
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Fetch dữ liệu khi component được mount
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null); // Reset lỗi trước khi fetch
-      try {
-        const token = localStorage.getItem("authToken");
-        if (!token) {
-          throw new Error("Không tìm thấy token xác thực.");
-        }
-        const headers = { Authorization: `Bearer ${token}` };
-
-        // Gọi đồng thời các API
-        const [positionsRes, rolesRes, usersRes] = await Promise.all([
-          fetch("http://localhost:8080/identity/api/positions", { headers }),
-          fetch("http://localhost:8080/identity/api/organizerrole", { headers }),
-          fetch("http://localhost:8080/identity/users", { headers }),
-        ]);
-
-        // Kiểm tra từng response
-        if (!positionsRes.ok) throw new Error(`Lỗi tải vị trí: ${positionsRes.statusText}`);
-        if (!rolesRes.ok) throw new Error(`Lỗi tải vai trò: ${rolesRes.statusText}`);
-        if (!usersRes.ok) throw new Error(`Lỗi tải người dùng: ${usersRes.statusText}`);
-
-        // Xử lý JSON
-        const positionsData = await positionsRes.json();
-        const rolesData = await rolesRes.json();
-        const usersData = await usersRes.json();
-
-        // Cập nhật state (giả sử API trả về { result: [...] })
-        // Kiểm tra null/undefined trước khi set
-        setPositions(positionsData?.result || []);
-        setRoles(rolesData?.result || []);
-        setUsers(usersData?.result || []);
-
-      } catch (err: any) {
-        const errorMessage = `Không thể tải dữ liệu: ${err.message}`;
-        setError(errorMessage);
-        toast.error(errorMessage); // Thông báo lỗi cho người dùng
-        console.error("Fetch error in BTCSection:", err);
-      } finally {
-        setLoading(false); // Kết thúc trạng thái tải
-      }
-    };
-
-    fetchData();
-  }, []); // Chạy một lần khi mount
-
-  // Hàm thêm một dòng form trống mới
-  const addOrganizerFormRow = () => {
-    setOrganizerForms((prev) => [
-      ...prev,
-      {
-        id: Date.now(), // ID duy nhất dựa trên timestamp
-        userId: "",     // Giá trị khởi tạo rỗng
-        positionId: "",
-        roleId: "",
-      },
-    ]);
-  };
-
-  // Hàm xóa một dòng form dựa vào ID của nó
-  const removeOrganizerFormRow = (idToRemove: number) => {
-    setOrganizerForms((prev) => prev.filter((form) => form.id !== idToRemove));
-  };
-
-  // Hàm xử lý thay đổi giá trị trong các dropdown của một dòng form cụ thể
-  const handleOrganizerChange = (
-    idToUpdate: number,
-    field: keyof Omit<OrganizerFormRow, 'id'>, // Chỉ cho phép 'userId', 'positionId', 'roleId'
-    value: string
-  ) => {
-    setOrganizerForms((prev) =>
-      prev.map((form) =>
-        form.id === idToUpdate ? { ...form, [field]: value } : form
-      )
+// Sử dụng forwardRef
+const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
+  ({ allUsers }, ref) => {
+    const [organizerForms, setOrganizerForms] = useState<OrganizerFormRow[]>(
+      []
     );
-  };
+    const [roles, setRoles] = useState<ApiRole[]>([]);
+    const [positions, setPositions] = useState<ApiPosition[]>([]);
+    const [users, setUsers] = useState<ApiUser[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-  // Hàm xử lý khi nhấn nút "Thêm BTC" trên một dòng
-  const handleAddOrganizerClick = (formRow: OrganizerFormRow) => {
-    // Kiểm tra xem đã chọn đủ thông tin chưa
-    if (!formRow.userId || !formRow.positionId || !formRow.roleId) {
-      toast.error("Vui lòng chọn Người dùng, Vị trí và Vai trò.");
-      return;
-    }
+    // Không cần existingOrganizerIds nữa vì không có nút Thêm trên dòng
+    // const existingOrganizerIds = useMemo(() => new Set(existingOrganizers?.map(o => o.userId) ?? []), [existingOrganizers]);
 
-    // Gọi callback prop để gửi dữ liệu lên component cha
-    onAddOrganizer({
-      userId: formRow.userId,
-      positionId: formRow.positionId,
-      roleId: formRow.roleId,
-    });
+    useEffect(() => {
+      const fetchData = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const token = localStorage.getItem("authToken");
+          if (!token) throw new Error("Token không tồn tại.");
+          const headers = { Authorization: `Bearer ${token}` };
+          const [pRes, rRes, uRes] = await Promise.all([
+            fetch("http://localhost:8080/identity/api/positions", { headers }),
+            fetch("http://localhost:8080/identity/api/organizerrole", {
+              headers,
+            }),
+            fetch("http://localhost:8080/identity/users", { headers }),
+          ]);
+          if (!pRes.ok) throw new Error(`Lỗi tải vị trí`);
+          if (!rRes.ok) throw new Error(`Lỗi tải vai trò`);
+          if (!uRes.ok) throw new Error(`Lỗi tải người dùng`);
+          const pData = await pRes.json();
+          const rData = await rRes.json();
+          const uData = await uRes.json();
+          setPositions(pData?.result || []);
+          setRoles(rData?.result || []);
+          setUsers(uData?.result || []);
+        } catch (err: any) {
+          const msg = `Lỗi tải lựa chọn BTC: ${err.message}`;
+          setError(msg);
+          toast.error(msg);
+          console.error("Fetch error BTCSection:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchData();
+    }, []);
 
-    toast.success("Đã thêm Ban tổ chức vào danh sách.");
+    const addOrganizerFormRow = () =>
+      setOrganizerForms((prev) => [
+        ...prev,
+        { id: Date.now(), userId: "", positionId: "", roleId: "" },
+      ]);
+    const removeOrganizerFormRow = (id: number) =>
+      setOrganizerForms((prev) => prev.filter((f) => f.id !== id));
+    const handleOrganizerChange = (
+      id: number,
+      field: keyof Omit<OrganizerFormRow, "id">,
+      value: string
+    ) =>
+      setOrganizerForms((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, [field]: value } : f))
+      );
 
-    // Xóa dòng form này khỏi giao diện sau khi thêm thành công
-    removeOrganizerFormRow(formRow.id);
-  };
+    // Lộ ra hàm để component cha gọi qua ref
+    useImperativeHandle(ref, () => ({
+      getMembersData: () => {
+        // Lọc và trả về dữ liệu hợp lệ từ các dòng form
+        return organizerForms
+          .filter((form) => form.userId && form.positionId && form.roleId) // Chỉ lấy dòng đã điền đủ
+          .map((form) => ({
+            userId: form.userId,
+            positionId: form.positionId,
+            roleId: form.roleId,
+          }));
+      },
+      resetForms: () => {
+        setOrganizerForms([]); // Reset lại state nội bộ
+      },
+    }));
 
-  // --- Render ---
-  return (
-    <div className="mt-6 border-t pt-4">
-      <h3 className="text-md font-semibold mb-1">Ban tổ chức</h3>
-
-      {/* Hiển thị trạng thái tải hoặc lỗi */}
-      {loading && <p className="text-gray-500">Đang tải dữ liệu...</p>}
-      {error && <p className="text-red-600 bg-red-100 p-2 rounded">{error}</p>}
-
-      {/* Nút thêm dòng form mới */}
-      <button
-        type="button"
-        onClick={addOrganizerFormRow}
-        className="mt-4 mb-2 w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center text-2xl hover:bg-blue-700 transition cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
-        title="Thêm Ban tổ chức"
-        disabled={loading || !!error} // Không cho thêm nếu đang tải hoặc có lỗi
-      >
-        +
-      </button>
-
-      {/* Danh sách các dòng form động */}
-      <div className="space-y-3   ">
-        {organizerForms.map((form) => (
-          <div
-            key={form.id}
-            className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center p-2 border rounded bg-gray-50"
-          >
-            {/* Select User */}
-            <select
-              value={form.userId} // Không cần || "" vì giá trị khởi tạo đã là ""
-              onChange={(e) => handleOrganizerChange(form.id, "userId", e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 cursor-pointer w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required // Có thể thêm required nếu form cha cần validation
+    return (
+      <div className="mt-6 border-t pt-4">
+        {/* Bỏ phần hiển thị danh sách BTC hiện có */}
+        <h3 className="text-md font-semibold mb-1 text-gray-600">
+          Thêm Ban tổ chức
+        </h3>
+        {loading && <p className="text-sm text-gray-500">Đang tải...</p>}{" "}
+        {error && (
+          <p className="text-sm text-red-600 bg-red-100 p-2 rounded">{error}</p>
+        )}
+        <button
+          type="button"
+          onClick={addOrganizerFormRow}
+          className="mt-1 mb-2 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xl hover:bg-blue-600 transition cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+          title="Thêm dòng nhập BTC"
+          disabled={loading || !!error}
+        >
+          +
+        </button>
+        <div className="space-y-2">
+          {organizerForms.map((form) => (
+            <div
+              key={form.id}
+              className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-center p-2 border rounded bg-gray-50"
             >
-              <option value="">-- Chọn người dùng --</option>
-              {users.map((user) => {
-                const fullName = `${user.lastName || ""} ${user.firstName || ""}`.trim();
-                const displayName = fullName || user.username || "Không rõ";
-                return (
-                  <option key={user.id} value={user.id}>
-                    {displayName} ({user.username})
+              {" "}
+              {/* Giảm cột vì bỏ nút Thêm */}
+              <select
+                value={form.userId}
+                onChange={(e) =>
+                  handleOrganizerChange(form.id, "userId", e.target.value)
+                }
+                className="border border-gray-300 rounded px-2 py-1 cursor-pointer w-full focus:ring-1 focus:ring-blue-500 text-sm"
+              >
+                {" "}
+                <option value="">-- Chọn user --</option>{" "}
+                {users?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {" "}
+                    {`${u.lastName || ""} ${u.firstName || ""}`.trim() ||
+                      u.username}{" "}
                   </option>
-                );
-              })}
-            </select>
-
-            {/* Select Position */}
-            <select
-              value={form.positionId}
-              onChange={(e) => handleOrganizerChange(form.id, "positionId", e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 cursor-pointer w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            >
-              <option value="">-- Chọn vị trí --</option>
-              {positions.map((position) => (
-                <option key={position.id} value={position.id}>
-                  {position.name}
-                </option>
-              ))}
-            </select>
-
-            {/* Select Role */}
-            <select
-              value={form.roleId}
-              onChange={(e) => handleOrganizerChange(form.id, "roleId", e.target.value)}
-              className="border border-gray-300 rounded px-3 py-2 cursor-pointer w-full focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            >
-              <option value="">-- Chọn vai trò --</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
-
-            
-            <button
-              type="button"
-              onClick={() => removeOrganizerFormRow(form.id)}
-              className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200 w-full md:w-auto cursor-pointer text-sm"
-            >
-              Xóa
-            </button>
-
-            
-            <button
-              type="button"
-              onClick={() => handleAddOrganizerClick(form)}
-              className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200 w-full md:w-auto cursor-pointer text-sm"
-            >
-              Thêm BTC
-            </button>
-            
-          </div>
-        ))}
+                ))}{" "}
+              </select>
+              <select
+                value={form.positionId}
+                onChange={(e) =>
+                  handleOrganizerChange(form.id, "positionId", e.target.value)
+                }
+                className="border border-gray-300 rounded px-2 py-1 cursor-pointer w-full focus:ring-1 focus:ring-blue-500 text-sm"
+              >
+                {" "}
+                <option value="">-- Chọn vị trí --</option>{" "}
+                {positions?.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}{" "}
+              </select>
+              <select
+                value={form.roleId}
+                onChange={(e) =>
+                  handleOrganizerChange(form.id, "roleId", e.target.value)
+                }
+                className="border border-gray-300 rounded px-2 py-1 cursor-pointer w-full focus:ring-1 focus:ring-blue-500 text-sm"
+              >
+                {" "}
+                <option value="">-- Chọn vai trò --</option>{" "}
+                {roles?.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}{" "}
+              </select>
+              {/* Bỏ nút Thêm trên dòng */}
+              <button
+                type="button"
+                onClick={() => removeOrganizerFormRow(form.id)}
+                className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 w-full sm:w-auto cursor-pointer text-sm"
+              >
+                Xóa
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
+    );
+  }
+);
 
-      
-    </div>
-  );
-}
+BTCSection.displayName = "BTCSection"; // Thêm displayName cho forwardRef
+export default BTCSection;

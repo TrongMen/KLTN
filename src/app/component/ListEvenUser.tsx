@@ -140,7 +140,7 @@ export default function EventList({
     );
   };
 
-  // Hàm xử lý duyệt/từ chối sự kiện
+  
   const handleApproveEvent = async (eventId: string, approved: boolean) => {
     const status = approved ? "APPROVED" : "REJECTED";
     const actionText = approved ? "duyệt" : "từ chối";

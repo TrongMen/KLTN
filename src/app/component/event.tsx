@@ -1,16 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react"; // Thêm useRef
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast, Toaster } from "react-hot-toast";
-import BTCSection, { BTCSectionHandle } from "./BTCSection"; // Import thêm Handle type
-import ParticipantSection, {
-  ParticipantSectionHandle,
-} from "./ParticipantSection"; // Import thêm Handle type
-import EventList from "./ListEvenUser";
+// *** Sử dụng named import ***
+import { BTCSection, type BTCSectionHandle } from "./BTCSection";
+import {
+  ParticipantSection,
+  type ParticipantSectionHandle,
+} from "./ParticipantSection";
+import EventList from "./ListEvenUser"; // File này chứa cả ConfirmDialog
 
-// --- Các Types giữ nguyên như trước ---
-type ApiUser = {
+// --- START: Định nghĩa Types chung ---
+// (Nên tách ra file types.ts riêng nếu dự án lớn)
+export type ApiUser = {
   id: string;
   firstName: string;
   lastName: string;
@@ -18,8 +21,20 @@ type ApiUser = {
   email?: string;
   role?: string;
 };
-type EventMemberInput = { userId: string; roleId: string; positionId: string };
-type EventData = {
+export type ApiRole = { id: string; name: string };
+export type ApiPosition = { id: string; name: string };
+
+// Kiểu EventMember phản ánh API GET trả về (có thể có name) và dùng trong EventList
+export type EventMember = {
+  userId: string;
+  roleId?: string;
+  positionId?: string;
+  roleName?: string;
+  positionName?: string;
+};
+
+// Kiểu Event chính, dùng cho state `events` và props của `EventList`
+export type Event = {
   id?: string;
   name: string;
   purpose: string;
@@ -27,14 +42,27 @@ type EventData = {
   location: string;
   content: string;
   createdBy?: string;
-  organizers: EventMemberInput[];
-  participants: EventMemberInput[];
+  organizers: EventMember[];
+  participants: EventMember[];
   permissions: string[];
   status?: "PENDING" | "APPROVED" | "REJECTED";
   image?: string;
+  attendees?: any[]; // Giữ lại nếu API GET trả về
+  rejectionReason?: string | null;
+  createdAt?: string;
 };
 
-const INITIAL_EVENT_STATE: EventData = {
+// Kiểu EventMemberInput chỉ dùng khi GỬI dữ liệu (cần ID)
+export type EventMemberInput = {
+  userId: string;
+  roleId: string;
+  positionId: string;
+};
+
+// --- END: Định nghĩa Types chung ---
+
+// State khởi tạo dùng Type Event
+const INITIAL_EVENT_STATE: Event = {
   name: "",
   purpose: "",
   time: "",
@@ -46,9 +74,9 @@ const INITIAL_EVENT_STATE: EventData = {
 };
 
 export default function EventManagementPage() {
-  const [events, setEvents] = useState<EventData[]>([]);
+  const [events, setEvents] = useState<Event[]>([]); // State dùng Type Event
   const [currentEventData, setCurrentEventData] =
-    useState<EventData>(INITIAL_EVENT_STATE);
+    useState<Event>(INITIAL_EVENT_STATE); // State dùng Type Event
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null);
   const [allUsers, setAllUsers] = useState<ApiUser[]>([]);
@@ -62,7 +90,6 @@ export default function EventManagementPage() {
   ]);
   const router = useRouter();
 
-  // --- Tạo Refs ---
   const btcSectionRef = useRef<BTCSectionHandle>(null);
   const participantSectionRef = useRef<ParticipantSectionHandle>(null);
 
@@ -123,6 +150,7 @@ export default function EventManagementPage() {
     }
   }, [currentUser, editingEventId, currentEventData.createdBy]);
 
+  // fetchEvents sẽ set state `events` với kiểu dữ liệu Event (có thể chứa name)
   const fetchEvents = useCallback(async () => {
     if (!currentUser?.id) {
       setEvents([]);
@@ -150,8 +178,8 @@ export default function EventManagementPage() {
         console.log(
           "Fetched events data:",
           JSON.stringify(data.result, null, 2)
-        );
-        setEvents(Array.isArray(data.result) ? data.result : []);
+        ); // Kiểm tra cấu trúc trả về ở đây
+        setEvents(Array.isArray(data.result) ? data.result : []); // setEvents với dữ liệu API trả về
       } else {
         console.error("API events data error:", data);
         setEvents([]);
@@ -164,7 +192,7 @@ export default function EventManagementPage() {
     } finally {
       setIsFetchingEvents(false);
     }
-  }, []);
+  }, [currentUser]); // Bỏ fetchEvents khỏi dependency của chính nó
 
   useEffect(() => {
     if (currentUser?.id && !isFetchingInitialData) {
@@ -192,35 +220,39 @@ export default function EventManagementPage() {
     });
   };
 
-  const handleSetEditingEvent = useCallback((eventToEdit: EventData | null) => {
-    if (eventToEdit) {
-      const timeForInput = eventToEdit.time
-        ? eventToEdit.time.slice(0, 16)
-        : "";
-      const eventDataForForm: EventData = {
-        ...INITIAL_EVENT_STATE,
-        ...eventToEdit,
-        time: timeForInput,
-        organizers: eventToEdit.organizers || [],
-        participants: eventToEdit.participants || [],
-        permissions: eventToEdit.permissions || [],
-      };
-      setCurrentEventData(eventDataForForm);
-      setEditingEventId(eventToEdit.id || null);
-      // Reset child forms when editing starts
-      btcSectionRef.current?.resetForms();
-      participantSectionRef.current?.resetForms();
-    } else {
-      setCurrentEventData({
-        ...INITIAL_EVENT_STATE,
-        createdBy: currentUser?.id || "",
-      });
-      setEditingEventId(null);
-      // Reset child forms when cancelling edit / starting new
-      btcSectionRef.current?.resetForms();
-      participantSectionRef.current?.resetForms();
-    }
-  }, []);
+  // handleSetEditingEvent làm việc với Type Event
+  const handleSetEditingEvent = useCallback(
+    (eventToEdit: Event | null) => {
+      // Sửa thành Type Event
+      if (eventToEdit) {
+        const timeForInput = eventToEdit.time
+          ? eventToEdit.time.slice(0, 16)
+          : "";
+        const eventDataForForm: Event = {
+          // Dùng Type Event
+          ...INITIAL_EVENT_STATE,
+          ...eventToEdit,
+          time: timeForInput,
+          organizers: eventToEdit.organizers || [],
+          participants: eventToEdit.participants || [],
+          permissions: eventToEdit.permissions || [],
+        };
+        setCurrentEventData(eventDataForForm);
+        setEditingEventId(eventToEdit.id || null);
+        btcSectionRef.current?.resetForms();
+        participantSectionRef.current?.resetForms();
+      } else {
+        setCurrentEventData({
+          ...INITIAL_EVENT_STATE,
+          createdBy: currentUser?.id || "",
+        });
+        setEditingEventId(null);
+        btcSectionRef.current?.resetForms();
+        participantSectionRef.current?.resetForms();
+      }
+    },
+    [currentUser]
+  ); // Phụ thuộc currentUser
 
   const cancelEdit = () => handleSetEditingEvent(null);
 
@@ -234,17 +266,27 @@ export default function EventManagementPage() {
       return;
     }
 
-    // --- Thu thập dữ liệu từ các Section con ---
     const organizersFromSection = btcSectionRef.current?.getMembersData() ?? [];
     const participantsFromSection =
       participantSectionRef.current?.getMembersData() ?? [];
-    console.log("Data from BTC Section:", organizersFromSection);
-    console.log("Data from Participant Section:", participantsFromSection);
+    console.log("Data from BTC Section for submit:", organizersFromSection);
+    console.log(
+      "Data from Participant Section for submit:",
+      participantsFromSection
+    );
 
-    // --- Validate dữ liệu chính ---
+    // Validate fields cơ bản của currentEventData
     const requiredFields: (keyof Omit<
-      EventData,
-      "id" | "createdBy" | "status" | "image" | "organizers" | "participants"
+      Event,
+      | "id"
+      | "createdBy"
+      | "status"
+      | "image"
+      | "organizers"
+      | "participants"
+      | "attendees"
+      | "rejectionReason"
+      | "createdAt"
     >)[] = ["name", "purpose", "time", "location", "content", "permissions"];
     const missingFields = requiredFields.filter((field) => {
       if (field === "permissions")
@@ -274,21 +316,28 @@ export default function EventManagementPage() {
       : "http://localhost:8080/identity/api/events";
     const method = isEditing ? "PUT" : "POST";
 
-    // --- Tạo Request Body ---
-    const requestBody: EventData = {
+    // Tạo request body cuối cùng để gửi đi, đảm bảo dùng đúng Type EventMemberInput (chứa ID)
+    const finalRequestBody = {
+      // Lấy các trường từ currentEventData (ngoại trừ organizers/participants cũ nếu đang edit)
       ...currentEventData,
-      organizers: organizersFromSection,
-      participants: participantsFromSection,
+      id: isEditing ? editingEventId : undefined, // ID chỉ khi edit
+      createdBy: isEditing ? currentEventData.createdBy : currentUser?.id, // Giữ lại creator nếu edit, nếu không thì là user hiện tại
+      // Gộp thành viên cũ (nếu edit và không bị trùng) với thành viên mới từ section
+      organizers: organizersFromSection, // Chỉ gửi những gì lấy từ ref (đã là EventMemberInput)
+      participants: participantsFromSection, // Chỉ gửi những gì lấy từ ref (đã là EventMemberInput)
     };
-    if (!isEditing) {
-      delete requestBody.id;
-      requestBody.createdBy = currentUser?.id;
-    } else {
-      requestBody.id = editingEventId;
-    }
+
+    // Xóa các trường không cần thiết hoặc không có trong API POST/PUT endpoint
+    delete finalRequestBody.attendees;
+    delete finalRequestBody.rejectionReason;
+    delete finalRequestBody.createdAt;
+    if (!isEditing) delete finalRequestBody.id; // Đảm bảo không có id khi tạo mới
 
     console.log(`[${method}] Request to ${url}`);
-    console.log("Request Body SENDING:", JSON.stringify(requestBody, null, 2)); // <<< KIỂM TRA LOG NÀY
+    console.log(
+      "Request Body SENDING:",
+      JSON.stringify(finalRequestBody, null, 2)
+    ); // <<< KIỂM TRA LOG NÀY
 
     try {
       const response = await fetch(url, {
@@ -297,7 +346,7 @@ export default function EventManagementPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(finalRequestBody),
       });
       if (!response.ok) {
         let msg = `${isEditing ? "Cập nhật" : "Thêm"} lỗi (${response.status})`;
@@ -316,8 +365,8 @@ export default function EventManagementPage() {
         throw new Error(msg);
       }
       toast.success(`${isEditing ? "Cập nhật" : "Thêm"} thành công!`);
-      handleSetEditingEvent(null); // Reset form và child forms
-      await fetchEvents(); // Fetch lại list
+      handleSetEditingEvent(null);
+      await fetchEvents();
     } catch (error: any) {
       console.error("Submit error:", error);
       toast.error(
@@ -331,6 +380,7 @@ export default function EventManagementPage() {
   const isPageLoading = isFetchingInitialData;
 
   return (
+    // --- Phần JSX Render giữ nguyên ---
     <div className="container mx-auto p-4 max-w-6xl">
       <Toaster toastOptions={{ duration: 3500 }} />
       <div className="flex items-center justify-between mb-6">
@@ -339,7 +389,7 @@ export default function EventManagementPage() {
         </h1>
         <button
           onClick={() => router.back()}
-          className="px-4 py-2 bg-gray-100 rounded-md hover:bg-gray-200 text-sm text-gray-700 flex items-center"
+          className="px-4 py-3 bg-gray-100 rounded-md hover:bg-gray-200 text-sm text-gray-700 flex items-center cursor-pointer"
           aria-label="Quay lại"
           title="Quay lại"
         >
@@ -375,7 +425,7 @@ export default function EventManagementPage() {
                     htmlFor="name"
                     className="block text-sm font-medium text-gray-700 mb-1"
                   >
-                    Tên sự kiện *
+                    Tên *
                   </label>
                   <input
                     id="name"
@@ -475,7 +525,7 @@ export default function EventManagementPage() {
               </div>
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Quyền truy cập *
+                  Quyền *
                 </label>
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
                   {availablePermissions.map((p) => (
@@ -501,11 +551,16 @@ export default function EventManagementPage() {
                 )}
               </div>
 
-              {/* Truyền ref và dữ liệu cần thiết (allUsers) */}
-              <BTCSection ref={btcSectionRef} allUsers={allUsers} />
+              {/* Truyền ref và props cần thiết */}
+              <BTCSection
+                ref={btcSectionRef}
+                allUsers={allUsers}
+                existingOrganizers={currentEventData.organizers}
+              />
               <ParticipantSection
                 ref={participantSectionRef}
                 allUsers={allUsers}
+                existingParticipants={currentEventData.participants}
               />
 
               <div className="flex justify-end gap-3 mt-6">
@@ -513,7 +568,7 @@ export default function EventManagementPage() {
                   <button
                     type="button"
                     onClick={cancelEdit}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 cursor-pointer"
                   >
                     Hủy bỏ
                   </button>
@@ -521,7 +576,7 @@ export default function EventManagementPage() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className={`px-6 py-2 text-white rounded ${
+                  className={`px-6 py-2 text-white rounded cursor-pointer ${
                     isLoading
                       ? "bg-gray-400 cursor-not-allowed"
                       : "bg-blue-600 hover:bg-blue-700"

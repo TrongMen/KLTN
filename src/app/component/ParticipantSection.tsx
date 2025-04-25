@@ -193,7 +193,3 @@ export const ParticipantSection = forwardRef<ParticipantSectionHandle, Participa
     );
 });
 ParticipantSection.displayName = 'ParticipantSection';
-// --- END: Component ParticipantSection ---
-
-// *** Không export default, đảm bảo EventManagementPage dùng named import ***
-// export default ParticipantSection;

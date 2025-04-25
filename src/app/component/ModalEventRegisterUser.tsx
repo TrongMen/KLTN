@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast, Toaster } from "react-hot-toast";
 
+// --- Types ---
 interface EventInfo {
   id: string;
   name: string;
@@ -34,6 +35,7 @@ interface ConfirmationDialogProps {
   confirmVariant?: "primary" | "danger";
 }
 
+// --- Component ConfirmationDialog ---
 function ConfirmationDialog({
   isOpen,
   title,
@@ -45,66 +47,73 @@ function ConfirmationDialog({
   confirmVariant = "primary",
 }: ConfirmationDialogProps) {
   if (!isOpen) return null;
-  const confirmButtonClasses = useMemo(() => {
-    let base =
+  const confirmBtnClasses = useMemo(() => {
+    let b =
       "flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ";
     if (confirmVariant === "danger") {
-      base +=
+      b +=
         "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 cursor-pointer";
     } else {
-      base +=
+      b +=
         "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 cursor-pointer";
     }
-    return base;
+    return b;
   }, [confirmVariant]);
-  const cancelButtonClasses =
+  const cancelBtnClasses =
     "flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2";
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-      {" "}
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-        {" "}
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3
           className={`text-lg font-bold mb-3 ${
             confirmVariant === "danger" ? "text-red-700" : "text-gray-800"
           }`}
         >
           {title}
-        </h3>{" "}
-        <div className="text-sm text-gray-600 mb-5">{message}</div>{" "}
+        </h3>
+        <div className="text-sm text-gray-600 mb-5">{message}</div>
         <div className="flex gap-3">
-          {" "}
-          <button onClick={onCancel} className={cancelButtonClasses}>
-            {" "}
-            {cancelText}{" "}
-          </button>{" "}
-          <button onClick={onConfirm} className={confirmButtonClasses}>
-            {" "}
-            {confirmText}{" "}
-          </button>{" "}
-        </div>{" "}
-      </div>{" "}
+          <button onClick={onCancel} className={cancelBtnClasses}>
+            {cancelText}
+          </button>
+          <button onClick={onConfirm} className={confirmBtnClasses}>
+            {confirmText}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
+// --- Component ModalEventRegister ---
 interface ModalEventRegisterProps {
   onClose: () => void;
   onDataChanged: (eventId: string, registered: boolean) => void;
+  currentUserId: string | null;
+  isLoadingUserId: boolean;
+  registeredEventIds: Set<string>;
+  createdEventIds: Set<string>;
 }
 
-export default function ModalEventRegister({
+export default function ModalEventRegisterUser({
   onClose,
   onDataChanged,
+  currentUserId,
+  isLoadingUserId,
+  registeredEventIds,
+  createdEventIds,
 }: ModalEventRegisterProps) {
   const [tab, setTab] = useState<"available" | "registered">("available");
   const [searchTerm, setSearchTerm] = useState("");
   const [availableEvents, setAvailableEvents] = useState<EventInfo[]>([]);
   const [isLoadingAvailable, setIsLoadingAvailable] = useState<boolean>(true);
   const [errorAvailable, setErrorAvailable] = useState<string | null>(null);
-  const [registeredEvents, setRegisteredEvents] = useState<EventInfo[]>([]);
-  const [isLoadingRegistered, setIsLoadingRegistered] = useState<boolean>(true);
-  const [errorRegistered, setErrorRegistered] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<
     string | "batch_unregister" | null
   >(null);
@@ -113,9 +122,6 @@ export default function ModalEventRegister({
   const [selectedToUnregister, setSelectedToUnregister] = useState<Set<string>>(
     new Set()
   );
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [isLoadingUserId, setIsLoadingUserId] = useState<boolean>(true);
-  const [errorUserId, setErrorUserId] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<{
     isOpen: boolean;
     title: string;
@@ -157,74 +163,23 @@ export default function ModalEventRegister({
       setIsLoadingAvailable(false);
     }
   }, []);
-  const fetchCurrentUserInfoAndRegisteredEvents = useCallback(async () => {
-    setIsLoadingUserId(true);
-    setIsLoadingRegistered(true);
-    setErrorUserId(null);
-    setErrorRegistered(null);
-    let fId: string | null = null;
-    try {
-      const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("Vui lòng đăng nhập lại.");
-      const headers: HeadersInit = { Authorization: `Bearer ${token}` };
-      const userUrl = `http://localhost:8080/identity/users/myInfo`;
-      const userRes = await fetch(userUrl, { headers });
-      if (!userRes.ok) {
-        let m = `Lỗi tải thông tin user`;
-        try {
-          const d = await userRes.json();
-          m = d.message || m;
-        } catch (_) {}
-        throw new Error(m);
-      }
-      const userData = await userRes.json();
-      if (userData.code === 1000 && userData.result?.id) {
-        fId = userData.result.id;
-        setCurrentUserId(fId);
-      } else {
-        throw new Error(userData.message || "Không tìm thấy User ID");
-      }
-      setIsLoadingUserId(false);
-      if (fId) {
-        const regUrl = `http://localhost:8080/identity/api/events/attendee/${fId}`;
-        const regRes = await fetch(regUrl, { headers });
-        if (!regRes.ok) {
-          let m = `Lỗi tải sự kiện đã đk`;
-          try {
-            const d = await regRes.json();
-            m = d.message || m;
-          } catch (_) {}
-          throw new Error(m);
-        }
-        const regData = await regRes.json();
-        if (regData.code === 1000 && Array.isArray(regData.result)) {
-          setRegisteredEvents(regData.result);
-        } else {
-          console.warn("API /attendee lỗi:", regData);
-          setRegisteredEvents([]);
-        }
-      } else {
-        throw new Error("Chưa có User ID.");
-      }
-    } catch (err: any) {
-      console.error("Lỗi tải user/sự kiện đk:", err);
-      if (!fId) setErrorUserId(err.message);
-      setErrorRegistered(err.message);
-    } finally {
-      setIsLoadingUserId(false);
-      setIsLoadingRegistered(false);
-    }
-  }, []);
+
   useEffect(() => {
     fetchAvailableEvents();
-    fetchCurrentUserInfoAndRegisteredEvents();
-  }, [fetchAvailableEvents, fetchCurrentUserInfoAndRegisteredEvents]);
+  }, [fetchAvailableEvents]);
 
   const isRegistered = useCallback(
     (eventId: string): boolean => {
-      return registeredEvents.some((event) => event.id === eventId);
+      return registeredEventIds.has(eventId);
     },
-    [registeredEvents]
+    [registeredEventIds]
+  );
+
+  const isCreatedByUser = useCallback(
+    (eventId: string): boolean => {
+      return createdEventIds.has(eventId);
+    },
+    [createdEventIds]
   );
 
   const executeRegistration = async (eventToRegister: EventInfo) => {
@@ -232,7 +187,8 @@ export default function ModalEventRegister({
       isSubmitting ||
       isRegistered(eventToRegister.id) ||
       !currentUserId ||
-      isLoadingUserId
+      isLoadingUserId ||
+      isCreatedByUser(eventToRegister.id)
     ) {
       if (!currentUserId || isLoadingUserId) toast.error("Chưa thể đăng ký.");
       return;
@@ -260,23 +216,21 @@ export default function ModalEventRegister({
       }
       await res.json();
       toast.success("Đăng ký thành công!");
-      setRegisteredEvents((prev) => {
-        if (prev.some((e) => e.id === eventToRegister.id)) return prev;
-        return [...prev, eventToRegister];
-      });
-      onDataChanged(eventToRegister.id, true);
+      onDataChanged(eventToRegister.id, true); // Thông báo cho cha
     } catch (err: any) {
       toast.error(`Đăng ký thất bại: ${err.message}`);
     } finally {
       setIsSubmitting(null);
     }
   };
+
   const handleRegisterClick = (eventToRegister: EventInfo) => {
     if (
       isSubmitting ||
       isRegistered(eventToRegister.id) ||
       !currentUserId ||
-      isLoadingUserId
+      isLoadingUserId ||
+      isCreatedByUser(eventToRegister.id)
     ) {
       if (!currentUserId || isLoadingUserId) toast.error("Chưa thể đăng ký.");
       return;
@@ -296,6 +250,7 @@ export default function ModalEventRegister({
       cancelText: "Hủy",
     });
   };
+
   const executeUnregistration = async (eventToUnregister: EventInfo) => {
     if (isSubmitting || !currentUserId || isLoadingUserId) {
       if (!currentUserId || isLoadingUserId)
@@ -324,16 +279,14 @@ export default function ModalEventRegister({
         throw new Error(m);
       }
       toast.success("Hủy đăng ký thành công!");
-      setRegisteredEvents((prev) =>
-        prev.filter((ev) => ev.id !== eventToUnregister.id)
-      );
-      onDataChanged(eventToUnregister.id, false);
+      onDataChanged(eventToUnregister.id, false); // Thông báo cho cha
     } catch (err: any) {
       toast.error(`Hủy đăng ký thất bại: ${err.message}`);
     } finally {
       setIsSubmitting(null);
     }
   };
+
   const handleUnregisterClick = (eventToUnregister: EventInfo) => {
     if (isSubmitting || !currentUserId || isLoadingUserId) {
       if (!currentUserId || isLoadingUserId)
@@ -358,6 +311,7 @@ export default function ModalEventRegister({
       cancelText: "Không",
     });
   };
+
   const handleSelectToUnregister = (eventId: string) => {
     setSelectedToUnregister((prev) => {
       const n = new Set(prev);
@@ -369,6 +323,7 @@ export default function ModalEventRegister({
       return n;
     });
   };
+
   const executeBatchUnregistration = async (ids: string[]) => {
     if (isSubmitting || !currentUserId || isLoadingUserId) {
       if (!currentUserId || isLoadingUserId)
@@ -390,7 +345,7 @@ export default function ModalEventRegister({
       })
         .then(async (res) => {
           if (!res.ok) {
-            let m = `Hủy ${id} lỗi`;
+            let m = `Hủy đk ${id} lỗi`;
             try {
               const d = await res.json();
               m = d.message || m;
@@ -422,16 +377,15 @@ export default function ModalEventRegister({
     });
     if (okCount > 0) {
       toast.success(`Đã hủy ${okCount} sự kiện.`);
-      const keep = registeredEvents.filter((ev) => !okIds.includes(ev.id));
-      setRegisteredEvents(keep);
       setSelectedToUnregister(new Set());
       okIds.forEach((id) => onDataChanged(id, false));
-    }
+    } // Thông báo cho cha
     if (failIds.length > 0) {
       toast.error(`Lỗi hủy ${failIds.length} sự kiện.`);
     }
     setIsSubmitting(null);
   };
+
   const handleBatchUnregister = () => {
     const ids = Array.from(selectedToUnregister);
     if (ids.length === 0) {
@@ -458,37 +412,42 @@ export default function ModalEventRegister({
       cancelText: "Không",
     });
   };
-  const filterEvents = (events: EventInfo[]) => {
-    if (!searchTerm) return events;
-    const lower = searchTerm.toLowerCase();
-    return events.filter(
-      (e) =>
-        e.name.toLowerCase().includes(lower) ||
-        e.location?.toLowerCase().includes(lower)
+
+  const filterEvents = useCallback(
+    (events: EventInfo[]) => {
+      if (!searchTerm) return events;
+      const lower = searchTerm.toLowerCase();
+      return events.filter(
+        (e) =>
+          e.name.toLowerCase().includes(lower) ||
+          e.location?.toLowerCase().includes(lower)
+      );
+    },
+    [searchTerm]
+  );
+
+  const filteredAvailableEvents = useMemo(
+    () => filterEvents(availableEvents),
+    [availableEvents, filterEvents]
+  );
+  const filteredRegisteredEvents = useMemo(() => {
+    const registered = availableEvents.filter((event) =>
+      registeredEventIds.has(event.id)
     );
-  };
-  const displayedAvailableEvents = filterEvents(availableEvents);
-  const displayedRegisteredEvents = filterEvents(registeredEvents);
+    return filterEvents(registered);
+  }, [availableEvents, registeredEventIds, filterEvents]);
 
   const renderEventList = (
     list: EventInfo[],
     type: "available" | "registered"
   ) => {
-    const isLoading =
-      isLoadingUserId ||
-      (type === "available" ? isLoadingAvailable : isLoadingRegistered);
-    const error =
-      errorUserId || (type === "available" ? errorAvailable : errorRegistered);
+    const isLoading = isLoadingUserId || isLoadingAvailable;
+    const error = errorAvailable; // Chỉ hiển thị lỗi fetch available trong modal
     if (isLoading)
       return (
         <p className="text-center text-gray-500 italic py-5">Đang tải...</p>
       );
-    if (errorUserId)
-      return (
-        <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-          {errorUserId}
-        </p>
-      );
+    // Không cần hiển thị lỗi user ở đây nữa vì nó thuộc về component cha
     if (error)
       return (
         <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
@@ -506,15 +465,17 @@ export default function ModalEventRegister({
             : "Chưa đăng ký sự kiện."}{" "}
         </p>
       );
+
     return (
       <ul className="space-y-3">
-        {" "}
         {list.map((event) => {
           const processing =
             isSubmitting === event.id || isSubmitting === "batch_unregister";
           const alreadyRegistered = isRegistered(event.id);
+          const isCreated = isCreatedByUser(event.id);
           const isSelected = selectedToUnregister.has(event.id);
           const canAct = !!currentUserId && !isLoadingUserId;
+
           return (
             <li
               key={event.id}
@@ -529,16 +490,12 @@ export default function ModalEventRegister({
                   : undefined
               }
             >
-              {" "}
               <div className="flex flex-col sm:flex-row justify-between items-start w-full gap-2">
-                {" "}
                 <div className="flex-grow">
-                  {" "}
                   <h3 className="text-md md:text-lg font-semibold text-gray-800 mb-1">
                     {event.name}
-                  </h3>{" "}
+                  </h3>
                   <div className="flex flex-col sm:flex-row sm:gap-4 text-sm text-gray-600">
-                    {" "}
                     {event.time && (
                       <span className="flex items-center">
                         <span className="mr-1.5 opacity-70">📅</span>
@@ -547,15 +504,15 @@ export default function ModalEventRegister({
                           timeStyle: "short",
                         })}
                       </span>
-                    )}{" "}
+                    )}
                     {event.location && (
                       <span className="flex items-center mt-1 sm:mt-0">
                         <span className="mr-1.5 opacity-70">📍</span>
                         {event.location}
                       </span>
-                    )}{" "}
-                  </div>{" "}
-                </div>{" "}
+                    )}
+                  </div>
+                </div>
                 {type === "registered" && (
                   <div className="flex-shrink-0 pt-1 sm:pt-0">
                     <input
@@ -569,8 +526,8 @@ export default function ModalEventRegister({
                       aria-label={`Chọn hủy ${event.name}`}
                     />
                   </div>
-                )}{" "}
-              </div>{" "}
+                )}
+              </div>
               {type === "available" && (
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto self-start sm:items-center border-t border-gray-100 pt-3">
                   <button
@@ -583,28 +540,37 @@ export default function ModalEventRegister({
                   >
                     Xem chi tiết
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRegisterClick(event);
-                    }}
-                    disabled={alreadyRegistered || processing || !canAct}
-                    className={`w-full cursor-pointer sm:w-auto px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium ${
-                      alreadyRegistered
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : processing || !canAct
-                        ? "bg-blue-300 cursor-wait"
-                        : "bg-blue-500 hover:bg-blue-600"
-                    }`}
-                  >
-                    {alreadyRegistered
-                      ? "✅ Đã đăng ký"
-                      : processing
-                      ? "..."
-                      : "📝 Đăng ký"}
-                  </button>
+                  {isCreated ? (
+                    <button
+                      className="w-full cursor-pointer sm:w-auto px-3 py-1.5 rounded-md text-gray-600 bg-gray-300 text-xs font-medium"
+                      disabled
+                    >
+                      ✨ Sự kiện của bạn
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRegisterClick(event);
+                      }}
+                      disabled={alreadyRegistered || processing || !canAct}
+                      className={`w-full cursor-pointer sm:w-auto px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium ${
+                        alreadyRegistered
+                          ? "bg-gray-400 cursor-not-allowed"
+                          : processing || !canAct
+                          ? "bg-blue-300 cursor-wait"
+                          : "bg-blue-500 hover:bg-blue-600"
+                      }`}
+                    >
+                      {alreadyRegistered
+                        ? "✅ Đã đăng ký"
+                        : processing
+                        ? "..."
+                        : "📝 Đăng ký"}
+                    </button>
+                  )}
                 </div>
-              )}{" "}
+              )}
               {type === "registered" && (
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto self-start sm:items-center border-t border-gray-100 pt-3">
                   <button
@@ -618,10 +584,10 @@ export default function ModalEventRegister({
                     Xem chi tiết
                   </button>
                 </div>
-              )}{" "}
+              )}
             </li>
           );
-        })}{" "}
+        })}
       </ul>
     );
   };
@@ -629,12 +595,12 @@ export default function ModalEventRegister({
   const renderEventDetails = (event: EventInfo) => {
     const processing = isSubmitting === event.id;
     const alreadyRegistered = isRegistered(event.id);
+    const isCreated = isCreatedByUser(event.id);
     const canPerformAction = !!currentUserId && !isLoadingUserId;
     const descriptionToShow =
       event.description || event.content || event.purpose;
     return (
       <div className="p-1">
-        {" "}
         <button
           onClick={() => setViewingEventDetails(null)}
           className="mb-4 text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer"
@@ -654,10 +620,9 @@ export default function ModalEventRegister({
             />
           </svg>
           Quay lại
-        </button>{" "}
-        <h3 className="text-xl font-bold text-gray-800 mb-3">{event.name}</h3>{" "}
+        </button>
+        <h3 className="text-xl font-bold text-gray-800 mb-3">{event.name}</h3>
         <div className="space-y-2 text-sm text-gray-700">
-          {" "}
           {event.time && (
             <p>
               <strong className="font-medium text-gray-900 w-24 inline-block">
@@ -668,7 +633,7 @@ export default function ModalEventRegister({
                 timeStyle: "short",
               })}
             </p>
-          )}{" "}
+          )}
           {event.location && (
             <p>
               <strong className="font-medium text-gray-900 w-24 inline-block">
@@ -676,7 +641,7 @@ export default function ModalEventRegister({
               </strong>{" "}
               {event.location}
             </p>
-          )}{" "}
+          )}
           {descriptionToShow && (
             <p>
               <strong className="font-medium text-gray-900 w-24 inline-block align-top">
@@ -686,11 +651,17 @@ export default function ModalEventRegister({
                 {descriptionToShow}
               </span>
             </p>
-          )}{" "}
-        </div>{" "}
+          )}
+        </div>
         <div className="mt-4 pt-4 border-t flex justify-end gap-3">
-          {" "}
-          {alreadyRegistered ? (
+          {isCreated ? (
+            <button
+              className={`px-4 py-2 rounded-md text-gray-600 bg-gray-300 text-sm font-medium cursor-not-allowed`}
+              disabled
+            >
+              ✨ Sự kiện của bạn
+            </button>
+          ) : alreadyRegistered ? (
             <button
               onClick={() => handleUnregisterClick(event)}
               disabled={processing || !canPerformAction}
@@ -700,8 +671,7 @@ export default function ModalEventRegister({
                   : "bg-red-500 hover:bg-red-600"
               }`}
             >
-              {" "}
-              {processing ? "..." : " Hủy đăng ký"}{" "}
+              {processing ? "..." : " Hủy đăng ký"}
             </button>
           ) : (
             <button
@@ -713,34 +683,31 @@ export default function ModalEventRegister({
                   : "bg-blue-500 hover:bg-blue-600"
               }`}
             >
-              {" "}
-              {processing ? "..." : "📝 Đăng ký"}{" "}
+              {processing ? "..." : "📝 Đăng ký"}
             </button>
-          )}{" "}
+          )}
           <button
             onClick={() => setViewingEventDetails(null)}
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm font-medium cursor-pointer"
           >
             Quay lại
-          </button>{" "}
-        </div>{" "}
+          </button>
+        </div>
       </div>
     );
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      {" "}
-      <Toaster toastOptions={{ duration: 3000 }} />{" "}
+      <Toaster toastOptions={{ duration: 3000 }} />
       <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl p-0 flex flex-col max-h-[90vh]">
         <div className="flex justify-between items-center p-4 md:p-5 flex-shrink-0">
-          {" "}
           <h2 className="text-xl md:text-2xl font-bold text-blue-700">
             {" "}
             {viewingEventDetails
               ? "Chi tiết sự kiện"
               : "Danh sách sự kiện"}{" "}
-          </h2>{" "}
+          </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-red-600 text-2xl font-semibold cursor-pointer p-1"
@@ -748,7 +715,7 @@ export default function ModalEventRegister({
           >
             {" "}
             &times;{" "}
-          </button>{" "}
+          </button>
         </div>
         {!viewingEventDetails && (
           <>
@@ -797,12 +764,11 @@ export default function ModalEventRegister({
           </>
         )}
         <div className="overflow-y-auto flex-grow p-4 md:p-5">
-          {" "}
           {viewingEventDetails
             ? renderEventDetails(viewingEventDetails)
             : tab === "available"
-            ? renderEventList(displayedAvailableEvents, "available")
-            : renderEventList(displayedRegisteredEvents, "registered")}{" "}
+            ? renderEventList(filteredAvailableEvents, "available")
+            : renderEventList(filteredRegisteredEvents, "registered")}
         </div>
         <div
           className={`flex ${
@@ -813,7 +779,6 @@ export default function ModalEventRegister({
               : "justify-end"
           } p-4 md:p-5 border-t flex-shrink-0 items-center`}
         >
-          {" "}
           {tab === "registered" &&
             selectedToUnregister.size > 0 &&
             !viewingEventDetails && (
@@ -835,18 +800,18 @@ export default function ModalEventRegister({
                 {" "}
                 {isSubmitting === "batch_unregister"
                   ? "..."
-                  : `Hủy đăng ký (${selectedToUnregister.size}) sự kiện`}{" "}
+                  : `Hủy đăng ký(${selectedToUnregister.size}) sự kiện`}{" "}
               </button>
-            )}{" "}
+            )}
           <button
             onClick={onClose}
             className="px-5 cursor-pointer py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg shadow-sm transition text-sm font-medium"
           >
             {" "}
             Đóng{" "}
-          </button>{" "}
+          </button>
         </div>
-      </div>{" "}
+      </div>
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
         title={confirmationState.title}
@@ -871,7 +836,7 @@ export default function ModalEventRegister({
             onConfirm: null,
           })
         }
-      />{" "}
+      />
     </div>
   );
 }

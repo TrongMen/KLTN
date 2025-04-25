@@ -522,7 +522,7 @@ export default function ModalEventRegisterUser({
                         e.stopPropagation();
                         handleSelectToUnregister(event.id);
                       }}
-                      className="h-5 w-5 text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer"
+                      className="h-5 disabled:opacity-50 w-5 text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer"
                       aria-label={`Chọn hủy ${event.name}`}
                     />
                   </div>
@@ -574,6 +574,7 @@ export default function ModalEventRegisterUser({
               {type === "registered" && (
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto self-start sm:items-center border-t border-gray-100 pt-3">
                   <button
+                    
                     onClick={(e) => {
                       e.stopPropagation();
                       setViewingEventDetails(event);

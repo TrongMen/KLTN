@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast, Toaster } from "react-hot-toast";
 
-// --- Types ---
+
 interface EventInfo {
   id: string;
   name: string;
@@ -35,7 +35,7 @@ interface ConfirmationDialogProps {
   confirmVariant?: "primary" | "danger";
 }
 
-// --- Component ConfirmationDialog ---
+
 function ConfirmationDialog({
   isOpen,
   title,
@@ -216,7 +216,7 @@ export default function ModalEventRegisterUser({
       }
       await res.json();
       toast.success("Đăng ký thành công!");
-      onDataChanged(eventToRegister.id, true); // Thông báo cho cha
+      onDataChanged(eventToRegister.id, true); 
     } catch (err: any) {
       toast.error(`Đăng ký thất bại: ${err.message}`);
     } finally {
@@ -379,7 +379,7 @@ export default function ModalEventRegisterUser({
       toast.success(`Đã hủy ${okCount} sự kiện.`);
       setSelectedToUnregister(new Set());
       okIds.forEach((id) => onDataChanged(id, false));
-    } // Thông báo cho cha
+    }
     if (failIds.length > 0) {
       toast.error(`Lỗi hủy ${failIds.length} sự kiện.`);
     }
@@ -442,12 +442,12 @@ export default function ModalEventRegisterUser({
     type: "available" | "registered"
   ) => {
     const isLoading = isLoadingUserId || isLoadingAvailable;
-    const error = errorAvailable; // Chỉ hiển thị lỗi fetch available trong modal
+    const error = errorAvailable; 
     if (isLoading)
       return (
         <p className="text-center text-gray-500 italic py-5">Đang tải...</p>
       );
-    // Không cần hiển thị lỗi user ở đây nữa vì nó thuộc về component cha
+    
     if (error)
       return (
         <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">

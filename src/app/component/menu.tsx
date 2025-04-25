@@ -15,7 +15,6 @@ import { CiCamera } from "react-icons/ci";
 import { toast, Toaster } from "react-hot-toast";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 
-// --- ConfirmationDialog Component Definition ---
 interface ConfirmationDialogProps {
   isOpen: boolean;
   title: string;
@@ -81,7 +80,6 @@ function ConfirmationDialog({
   );
 }
 
-// --- Interfaces ---
 interface Role {
   name: string;
   description?: string;
@@ -110,6 +108,20 @@ interface PasswordChangeData {
   passwordOld: string;
   password?: string;
 }
+type ProfileErrors = {
+  firstName?: string;
+  lastName?: string;
+  dob?: string;
+  email?: string;
+};
+
+const capitalizeEachWord = (str: string = ""): string => {
+  if (!str) return "";
+  return str
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+};
 
 export default function UserMenu() {
   const [isOpen, setIsOpen] = useState(false);
@@ -120,6 +132,7 @@ export default function UserMenu() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false); // State loading upload avatar
   const [passwordFormData, setPasswordFormData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -131,6 +144,7 @@ export default function UserMenu() {
     confirmPassword: false,
   });
   const [changePasswordError, setChangePasswordError] = useState("");
+  const [profileErrors, setProfileErrors] = useState<ProfileErrors>({});
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const { refreshToken } = useRefreshToken();
@@ -194,18 +208,17 @@ export default function UserMenu() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
+    let pValue: any = value;
     if (name === "gender") {
-      setUpdatedUser((prev) => ({
-        ...prev!,
-        [name]: value === "Nam" ? true : value === "Nữ" ? false : undefined,
-      }));
+      pValue = value === "Nam" ? true : value === "Nữ" ? false : undefined;
     } else if (name === "dob") {
-      const dateValue = value
-        ? new Date(value).toISOString().split("T")[0]
-        : "";
-      setUpdatedUser((prev) => ({ ...prev!, [name]: dateValue }));
-    } else {
-      setUpdatedUser((prev) => ({ ...prev!, [name]: value }));
+      pValue = value ? new Date(value).toISOString().split("T")[0] : "";
+    } else if (name === "firstName" || name === "lastName") {
+      pValue = capitalizeEachWord(value);
+    }
+    setUpdatedUser((prev) => ({ ...prev!, [name]: pValue }));
+    if (profileErrors[name as keyof ProfileErrors]) {
+      setProfileErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
   const handlePasswordInputChange = (
@@ -217,9 +230,47 @@ export default function UserMenu() {
     });
     if (changePasswordError) setChangePasswordError("");
   };
+  const validateProfile = (data: User | null): ProfileErrors => {
+    const errors: ProfileErrors = {};
+    if (!data) return errors;
+    if (data.dob) {
+      try {
+        const birthDate = new Date(data.dob);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const mDiff = today.getMonth() - birthDate.getMonth();
+        if (
+          mDiff < 0 ||
+          (mDiff === 0 && today.getDate() < birthDate.getDate())
+        ) {
+          age--;
+        }
+        if (isNaN(age) || age < 17) {
+          errors.dob = "Bạn phải đủ 17 tuổi.";
+        }
+      } catch (e) {
+        errors.dob = "Ngày sinh không hợp lệ.";
+      }
+    } else {
+      errors.dob = "Nhập ngày sinh.";
+    }
+    const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    if (data.email && !gmailRegex.test(data.email)) {
+      errors.email = "Email phải đúng định dạng @gmail.com.";
+    } else if (!data.email) {
+      errors.email = "Nhập email.";
+    }
+    return errors;
+  };
 
   const handleSaveProfile = async () => {
     if (!user?.id || !updatedUser) return;
+    const validationErrors = validateProfile(updatedUser);
+    setProfileErrors(validationErrors);
+    if (Object.keys(validationErrors).length > 0) {
+      toast.error("Kiểm tra lại thông tin.");
+      return;
+    }
     setIsSavingProfile(true);
     const token = localStorage.getItem("authToken");
     if (!token) {
@@ -227,20 +278,20 @@ export default function UserMenu() {
       setIsSavingProfile(false);
       return;
     }
-    const body: UserUpdateFormData = {
+    const bodyToSend: UserUpdateFormData = {
       firstName: updatedUser.firstName,
       lastName: updatedUser.lastName,
       dob: updatedUser.dob,
       gender: updatedUser.gender,
       email: updatedUser.email,
     };
-    Object.keys(body).forEach(
+    Object.keys(bodyToSend).forEach(
       (key) =>
-        (body[key as keyof UserUpdateFormData] === undefined ||
-          body[key as keyof UserUpdateFormData] === null) &&
-        delete body[key as keyof UserUpdateFormData]
+        (bodyToSend[key as keyof UserUpdateFormData] === undefined ||
+          bodyToSend[key as keyof UserUpdateFormData] === null) &&
+        delete bodyToSend[key as keyof UserUpdateFormData]
     );
-    console.log("Sending profile update:", body);
+    console.log("Sending profile update:", bodyToSend);
     try {
       const res = await fetch(
         `http://localhost:8080/identity/users/byuser/${user.id}`,
@@ -250,12 +301,12 @@ export default function UserMenu() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify(bodyToSend),
         }
       );
       const data = await res.json();
       if (res.ok && data.code === 1000) {
-        toast.success("Cập nhật thành công!");
+        toast.success("Cập nhật thông tin thành công!");
         setUser(data.result);
         setUpdatedUser(data.result);
         localStorage.setItem("user", JSON.stringify(data.result));
@@ -289,7 +340,7 @@ export default function UserMenu() {
       setIsChangingPassword(false);
       return;
     }
-    const body: PasswordChangeData = {
+    const bodyToSend: PasswordChangeData = {
       passwordOld: passwordFormData.currentPassword,
       password: passwordFormData.newPassword,
     };
@@ -303,7 +354,7 @@ export default function UserMenu() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify(bodyToSend),
         }
       );
       const data = await res.json();
@@ -316,7 +367,7 @@ export default function UserMenu() {
         });
         setShowChangePassword(false);
       } else {
-        throw new Error(data.message || "Đổi mật khẩu thất bại");
+        throw new Error(data.message || "Đổi mật khẩu thất bại (MK cũ sai?)");
       }
     } catch (error: any) {
       console.error("Lỗi đổi mật khẩu:", error);
@@ -329,9 +380,68 @@ export default function UserMenu() {
   const handleCameraClick = () => {
     inputRef.current?.click();
   };
+
+  // *** HÀM UPLOAD AVATAR MỚI ***
+  const uploadAvatar = async (file: File) => {
+    if (!user?.id) return;
+    setIsUploadingAvatar(true);
+    const uploadToastId = toast.loading("Đang tải lên ảnh đại diện...");
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast.error("Vui lòng đăng nhập lại.");
+      setIsUploadingAvatar(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file); // Key 'file' phải khớp với backend
+
+    try {
+      const response = await fetch(
+        `http://localhost:8080/identity/users/${user.id}/avatar`,
+        {
+          method: "PATCH", // Hoặc POST tùy theo API của bạn
+          headers: {
+            // KHÔNG set 'Content-Type': 'multipart/form-data', trình duyệt sẽ tự làm
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok && data.code === 1000) {
+        toast.success("Cập nhật ảnh đại diện thành công!", {
+          id: uploadToastId,
+        });
+        const newAvatarUrl = data.result?.avatar; // Giả sử API trả về user object mới có avatar URL
+        if (newAvatarUrl) {
+          // Cập nhật state và localStorage
+          const updatedUserData = { ...user, avatar: newAvatarUrl };
+          setUser(updatedUserData);
+          setUpdatedUser(updatedUserData); // Cập nhật cả state trong modal
+          localStorage.setItem("user", JSON.stringify(updatedUserData));
+        } else {
+          // Nếu API không trả về URL mới, fetch lại thông tin user
+          fetchUserInfo();
+        }
+      } else {
+        throw new Error(data.message || "Upload ảnh đại diện thất bại");
+      }
+    } catch (error: any) {
+      console.error("Lỗi upload avatar:", error);
+      toast.error(`Lỗi upload: ${error.message}`, { id: uploadToastId });
+      // Có thể hoàn tác preview nếu muốn: setUpdatedUser(user);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && user?.id) {
+      // Hiển thị preview ngay lập tức
       const reader = new FileReader();
       reader.onloadend = () => {
         setUpdatedUser((prev) => ({
@@ -340,14 +450,16 @@ export default function UserMenu() {
         }));
       };
       reader.readAsDataURL(file);
-      toast.info("Upload Avatar đang phát triển.");
+
+      // Gọi hàm upload lên server
+      uploadAvatar(file);
+
       if (inputRef.current) {
         inputRef.current.value = "";
       }
     }
   };
 
-  // Class chung cho các menu item, sử dụng data attribute từ Headless UI
   const menuItemClassName =
     "block w-full text-left px-4 py-2 text-sm text-gray-700 cursor-pointer ui-active:bg-gray-100 ui-not-active:bg-white hover:bg-gray-200";
   const logoutItemClassName =
@@ -359,7 +471,7 @@ export default function UserMenu() {
       <Menu as="div" className="relative inline-block text-left">
         <MenuButton
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2  hover:bg-blue-700 text-white rounded cursor-pointer"
         >
           <img
             src={user?.avatar || "/default-avatar.png"}
@@ -368,13 +480,10 @@ export default function UserMenu() {
             onError={(e) => (e.currentTarget.src = "/default-avatar.png")}
           />
           <span className="font-medium text-sm">
-            {user?.username ?? "Tài khoản"}
+            {user ? `${user.lastName} ${user.firstName}` : "Tài khoản"}
           </span>
         </MenuButton>
-
-        {/* Sử dụng <Transition> của Headless UI cho hiệu ứng (optional) */}
         <Menu.Items className="absolute right-0 mt-2 w-52 border rounded-lg bg-white shadow-lg z-50 overflow-hidden focus:outline-none">
-          {/* *** SỬA LẠI MenuItem DÙNG as="button" *** */}
           <Menu.Item
             as="button"
             onClick={() => {
@@ -382,10 +491,12 @@ export default function UserMenu() {
               setIsEditing(false);
               setIsOpen(false);
               setUpdatedUser(user);
+              setProfileErrors({});
             }}
             className={menuItemClassName}
           >
-            Thông tin cá nhân
+            {" "}
+            Thông tin cá nhân{" "}
           </Menu.Item>
           <Menu.Item
             as="button"
@@ -401,14 +512,16 @@ export default function UserMenu() {
             }}
             className={menuItemClassName}
           >
-            Đổi mật khẩu
+            {" "}
+            Đổi mật khẩu{" "}
           </Menu.Item>
           <Menu.Item
             as="button"
             onClick={handleLogout}
             className={logoutItemClassName}
           >
-            Đăng xuất
+            {" "}
+            Đăng xuất{" "}
           </Menu.Item>
         </Menu.Items>
       </Menu>
@@ -417,7 +530,10 @@ export default function UserMenu() {
         <div
           className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50"
           onClick={() => {
-            if (!isEditing) setShowProfile(false);
+            if (!isEditing && !isUploadingAvatar) {
+              setShowProfile(false);
+              setProfileErrors({});
+            }
           }}
         >
           <div
@@ -428,21 +544,52 @@ export default function UserMenu() {
               Thông tin cá nhân
             </h2>
             <div className="flex flex-col items-center mb-6 gap-2">
-              <img
-                src={updatedUser.avatar || "/default-avatar.png"}
-                alt="Avatar"
-                className="w-28 h-28 rounded-full border-4 border-blue-200 object-cover shadow-md"
-                onError={(e) => (e.currentTarget.src = "/default-avatar.png")}
-              />
+              <div className="relative">
+                <img
+                  src={updatedUser.avatar || "/default-avatar.png"}
+                  alt="Avatar"
+                  className="w-28 h-28 rounded-full border-4 border-blue-200 object-cover shadow-md"
+                  onError={(e) => (e.currentTarget.src = "/default-avatar.png")}
+                />
+                {isUploadingAvatar && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full">
+                    <svg
+                      className="animate-spin h-8 w-8 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        className="opacity-25"
+                      ></circle>
+                      <path
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        className="opacity-75"
+                      ></path>
+                    </svg>
+                  </div>
+                )}
+              </div>
               {isEditing && (
                 <>
                   {" "}
                   <button
-                    className="cursor-pointer rounded-full bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-3 shadow text-xs flex items-center gap-1"
+                    className={`mt-2 cursor-pointer rounded-full bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-3 shadow text-xs flex items-center gap-1 ${
+                      isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
                     onClick={handleCameraClick}
+                    disabled={isUploadingAvatar}
                   >
                     {" "}
-                    <CiCamera /> Đổi ảnh{" "}
+                    <CiCamera /> {isUploadingAvatar
+                      ? "Đang tải..."
+                      : "Đổi ảnh"}{" "}
                   </button>{" "}
                   <input
                     type="file"
@@ -456,8 +603,8 @@ export default function UserMenu() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               {[
-                { label: "Tên", name: "firstName" },
                 { label: "Họ", name: "lastName" },
+                { label: "Tên", name: "firstName" },
                 { label: "Email", name: "email" },
                 { label: "Ngày sinh", name: "dob", type: "date" },
                 { label: "Giới tính", name: "gender", type: "select" },
@@ -466,6 +613,12 @@ export default function UserMenu() {
                 <div key={field.name} className="flex flex-col">
                   <label className="text-sm font-medium text-gray-600 mb-1">
                     {field.label}
+                    {isEditing &&
+                      !field.readOnly &&
+                      field.name !== "gender" &&
+                      field.name !== "username" && (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
                   </label>
                   {field.type === "select" ? (
                     <select
@@ -478,10 +631,10 @@ export default function UserMenu() {
                           : ""
                       }
                       onChange={handleProfileChange}
-                      disabled={!isEditing}
+                      disabled={!isEditing || isUploadingAvatar}
                       className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${
                         isEditing
-                          ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-black"
+                          ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900"
                           : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
                       }`}
                     >
@@ -497,13 +650,20 @@ export default function UserMenu() {
                       value={updatedUser[field.name as keyof User] || ""}
                       onChange={handleProfileChange}
                       readOnly={!isEditing || field.readOnly}
+                      disabled={isUploadingAvatar}
                       className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${
                         isEditing && !field.readOnly
-                          ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-black"
+                          ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900"
                           : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
                       }`}
                     />
                   )}
+                  {profileErrors[field.name as keyof ProfileErrors] &&
+                    isEditing && (
+                      <p className="text-red-500 text-xs mt-1">
+                        {profileErrors[field.name as keyof ProfileErrors]}
+                      </p>
+                    )}
                 </div>
               ))}
             </div>
@@ -513,9 +673,9 @@ export default function UserMenu() {
                   {" "}
                   <button
                     onClick={handleSaveProfile}
-                    disabled={isSavingProfile}
+                    disabled={isSavingProfile || isUploadingAvatar}
                     className={`px-5 py-2 rounded-lg font-semibold shadow transition flex items-center justify-center ${
-                      isSavingProfile
+                      isSavingProfile || isUploadingAvatar
                         ? "bg-green-300 cursor-not-allowed"
                         : "bg-green-500 hover:bg-green-600 text-white"
                     }`}
@@ -553,8 +713,9 @@ export default function UserMenu() {
                     onClick={() => {
                       setIsEditing(false);
                       setUpdatedUser(user);
+                      setProfileErrors({});
                     }}
-                    disabled={isSavingProfile}
+                    disabled={isSavingProfile || isUploadingAvatar}
                     className="px-5 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg font-semibold shadow transition"
                   >
                     {" "}
@@ -566,14 +727,23 @@ export default function UserMenu() {
                   {" "}
                   <button
                     onClick={() => setIsEditing(true)}
-                    className="px-5 py-2 bg-blue-500 cursor-pointer hover:bg-blue-600 text-white rounded-lg font-semibold shadow transition"
+                    disabled={isUploadingAvatar}
+                    className={`px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold shadow transition cursor-pointer ${
+                      isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
                   >
-                    
-                    Cập nhật
-                  </button>
+                    {" "}
+                    Cập nhật{" "}
+                  </button>{" "}
                   <button
-                    onClick={() => setShowProfile(false)}
-                    className="px-5 py-2 bg-gray-300 hover:bg-gray-400 cursor-pointer text-gray-800 rounded-lg font-semibold shadow transition"
+                    onClick={() => {
+                      setShowProfile(false);
+                      setProfileErrors({});
+                    }}
+                    disabled={isUploadingAvatar}
+                    className={`px-5 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg font-semibold shadow transition cursor-pointer ${
+                      isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
                   >
                     {" "}
                     Đóng{" "}
@@ -609,7 +779,7 @@ export default function UserMenu() {
               <div key={field.name} className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {" "}
-                  {field.label}{" "}
+                  {field.label} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type={
@@ -624,6 +794,7 @@ export default function UserMenu() {
                     ]
                   }
                   onChange={handlePasswordInputChange}
+                  required
                   className="w-full px-4 py-2 text-black pr-10 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-400"
                 />
                 <button
@@ -653,8 +824,8 @@ export default function UserMenu() {
               <button
                 onClick={handlePasswordChangeSubmit}
                 disabled={isChangingPassword}
-                className={`bg-gradient-to-r from-pink-400 to-pink-600 text-white px-4 py-2  cursor-pointer rounded hover:opacity-90 shadow flex items-center justify-center ${
-                  isChangingPassword ? "cursor-wait" : ""
+                className={`bg-gradient-to-r from-pink-500 to-pink-600 text-white px-4 py-2 rounded hover:opacity-90 shadow flex items-center justify-center ${
+                  isChangingPassword ? "cursor-wait" : "cursor-pointer"
                 }`}
               >
                 {" "}
@@ -684,7 +855,7 @@ export default function UserMenu() {
                   </>
                 ) : (
                   "Xác nhận"
-                )}
+                )}{" "}
               </button>
               <button
                 onClick={() => {
@@ -696,10 +867,10 @@ export default function UserMenu() {
                     confirmPassword: "",
                   });
                 }}
-                className="px-4 py-2 cursor-pointer bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 cursor-pointer"
               >
-                
-                Đóng
+                {" "}
+                Đóng{" "}
               </button>
             </div>
           </div>

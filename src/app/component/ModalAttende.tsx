@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast, Toaster } from "react-hot-toast";
+import {
+  ArrowLeftIcon,
+  CheckIcon,
+  Cross2Icon,
+  TrashIcon,
+} from "@radix-ui/react-icons";
 
+// Interfaces
 interface ApprovedEvent {
   id: string;
   name: string;
@@ -20,7 +27,7 @@ interface Attendee {
   roleName?: string;
   positionName?: string;
   attending?: boolean;
-  studentCode?: string; // Thêm studentCode vào type
+  studentCode?: string;
 }
 
 interface ModalAttendeesProps {
@@ -38,6 +45,7 @@ interface ConfirmationDialogProps {
   confirmVariant?: "primary" | "danger";
 }
 
+// Confirmation Dialog Component
 function ConfirmationDialog({
   isOpen,
   title,
@@ -97,11 +105,13 @@ function ConfirmationDialog({
   );
 }
 
+// Helper Function
 const getAttendeeName = (attendee: Attendee): string => {
   const fn = `${attendee.lastName || ""} ${attendee.firstName || ""}`.trim();
   return fn || attendee.username || `ID: ${attendee.userId.substring(0, 8)}`;
 };
 
+// Main Component
 export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
   const [userApprovedEvents, setUserApprovedEvents] = useState<ApprovedEvent[]>(
     []
@@ -133,6 +143,7 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
     cancelText?: string;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
 
+  // Fetch Functions
   const fetchUserApprovedEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     setEventError(null);
@@ -183,6 +194,7 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
     setAttendees([]);
     setOriginalAttendance({});
     setAttendanceChanges({});
+    setSelectedForDelete(new Set());
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Chưa đăng nhập.");
@@ -205,9 +217,6 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
         const uMap = new Map<string, Attendee>();
         fetched.forEach((a) => {
           if (a.userId && !uMap.has(a.userId)) uMap.set(a.userId, a);
-          else if (a.userId && uMap.has(a.userId)) {
-            console.warn(`Duplicate attendee: ${a.userId}`);
-          }
         });
         const unique = Array.from(uMap.values());
         setAttendees(unique);
@@ -228,6 +237,7 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
     }
   }, [selectedEventId]);
 
+  // useEffects
   useEffect(() => {
     fetchUserApprovedEvents();
   }, [fetchUserApprovedEvents]);
@@ -238,9 +248,11 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
       setAttendees([]);
       setOriginalAttendance({});
       setAttendanceChanges({});
+      setSelectedForDelete(new Set());
     }
   }, [selectedEventId, fetchAttendees]);
 
+  // Handlers
   const handleSelectEvent = (eventId: string) => {
     setSelectedEventId(eventId);
     setMode("view");
@@ -277,7 +289,16 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
       return next;
     });
   };
-
+  const handleSelectAllForDelete = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const isChecked = event.target.checked;
+    if (isChecked) {
+      setSelectedForDelete(new Set(attendees.map((att) => att.userId)));
+    } else {
+      setSelectedForDelete(new Set());
+    }
+  };
   const handleSaveChanges = async () => {
     if (!selectedEventId || isProcessing) return;
     const changes: { userId: string; status: boolean }[] = [];
@@ -296,10 +317,11 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
     if (!token) {
       toast.error("Token không lệ.");
       setIsProcessing(false);
+      toast.dismiss(loadId);
       return;
     }
     const promises = changes.map(({ userId, status }) => {
-      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}?isAttending=${status}`;
+      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}?isAttending=${status}`;
       return fetch(url, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
@@ -342,7 +364,6 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
       toast.error(`Lỗi ${fail} thay đổi.`, {
         id: ok === 0 ? loadId : undefined,
       });
-      setAttendanceChanges(originalAttendance);
     } else if (ok === 0 && fail === 0) {
       toast.dismiss(loadId);
     }
@@ -358,10 +379,11 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
     if (!token) {
       toast.error("Token không lệ.");
       setIsProcessing(false);
+      toast.dismiss(loadId);
       return;
     }
     const promises = ids.map((userId) => {
-      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}`;
+      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}`;
       return fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -438,45 +460,42 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
       cancelText: "Hủy",
     });
   };
-
   const selectedEventName = useMemo(
     () =>
       userApprovedEvents.find((event) => event.id === selectedEventId)?.name,
     [userApprovedEvents, selectedEventId]
   );
 
+  // --- Render Logic ---
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <Toaster position="top-center" reverseOrder={false} />
       <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl p-5 md:p-6 flex flex-col max-h-[90vh]">
+        {/* Header */}
         <div className="flex justify-between items-center mb-4 pb-3 border-b flex-shrink-0">
           <h2 className="text-xl md:text-2xl font-bold text-blue-700 truncate pr-2">
-            {" "}
             {selectedEventId
               ? `👥 Người tham gia: ${selectedEventName || "..."}`
-              : "📅 Danh sách sự kiện"}{" "}
+              : "📅 Danh sách sự kiện"}
           </h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-red-600 text-2xl font-bold cursor-pointer flex-shrink-0"
             title="Đóng"
           >
-            {" "}
-            &times;{" "}
+            &times;
           </button>
         </div>
 
+        {/* Content Area */}
         <div className="overflow-y-auto flex-grow mb-4 pr-2">
           {!selectedEventId && (
             <>
-            
               <h3 className="text-lg font-semibold mb-3 text-gray-700">
-               
                 Vui lòng chọn sự kiện
               </h3>
               {isLoadingEvents ? (
                 <p className="text-center text-gray-500 italic py-5">
-                  {" "}
                   Đang tải...
                 </p>
               ) : eventError ? (
@@ -485,7 +504,6 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
                 </p>
               ) : userApprovedEvents.length === 0 ? (
                 <p className="text-center text-gray-500 italic py-5">
-                  {" "}
                   Bạn không có sự kiện nào đã được duyệt.
                 </p>
               ) : (
@@ -500,7 +518,7 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
                         {event.name}
                       </p>
                       {event.time && (
-                        <p className="text-base text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 mt-1">
                           📅{" "}
                           {new Date(event.time).toLocaleString("vi-VN", {
                             dateStyle: "short",
@@ -509,54 +527,30 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
                         </p>
                       )}
                       {event.location && (
-                        <p className="text-base text-gray-500">
+                        <p className="text-sm text-gray-500">
                           📍 {event.location}
                         </p>
                       )}
                     </button>
                   ))}
                 </div>
-              )}{" "}
+              )}
             </>
           )}
+
           {selectedEventId && (
             <>
-              {" "}
-              <div className="flex justify-between items-center mb-3">
-                {" "}
+              <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
                 <button
                   onClick={handleBackToEventList}
                   className="text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer "
                 >
-                  {" "}
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4 mr-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 19l-7-7 7-7"
-                    />
-                  </svg>{" "}
-                  Quay lại{" "}
-                </button>{" "}
-                {mode !== "view" && (
-                  <button
-                    onClick={handleCancelMode}
-                    className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md cursor-pointer"
-                  >
-                    Hủy
-                  </button>
-                )}{" "}
-              </div>{" "}
+                  <ArrowLeftIcon className="h-4 w-4 mr-1" /> Quay lại
+                </button>
+                
+              </div>
               {isLoadingAttendees ? (
                 <p className="text-center text-gray-500 italic py-5">
-                  {" "}
                   Đang tải...
                 </p>
               ) : attendeeError ? (
@@ -565,12 +559,35 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
                 </p>
               ) : attendees.length === 0 ? (
                 <p className="text-center text-gray-500 italic py-5">
-                  {" "}
                   Chưa có người tham dự.
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {" "}
+                  {mode === "delete" && (
+                    <div className="flex items-center justify-start border-b pb-2 mb-2 sticky top-0 bg-white py-1 z-10">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`select-all-delete`}
+                          className="mr-2 cursor-pointer h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                          checked={
+                            attendees.length > 0 &&
+                            selectedForDelete.size === attendees.length
+                          }
+                          onChange={handleSelectAllForDelete}
+                          disabled={attendees.length === 0 || isProcessing}
+                        />
+                        <label
+                          htmlFor={`select-all-delete`}
+                          className="text-sm text-gray-600 cursor-pointer"
+                        >
+                          Chọn tất cả ({selectedForDelete.size})
+                        </label>
+                      </div>
+                      {/* Nút xóa hàng loạt đã bị xóa khỏi đây */}
+                    </div>
+                  )}
+
                   {attendees.map((attendee) => {
                     const isSelectedForDelete = selectedForDelete.has(
                       attendee.userId
@@ -587,23 +604,7 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
                             : "border-gray-200"
                         }`}
                       >
-                        {" "}
-                        <div className="flex items-center gap-3 flex-grow mr-2">
-                          {" "}
-                          {mode === "attendance" && (
-                            <input
-                              type="checkbox"
-                              checked={isCheckedForAttendance}
-                              onChange={(e) =>
-                                handleAttendanceCheckboxChange(
-                                  attendee.userId,
-                                  e.target.checked
-                                )
-                              }
-                              disabled={isRowProcessing}
-                              className="w-5 h-5 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer flex-shrink-0 disabled:opacity-50"
-                            />
-                          )}{" "}
+                        <div className="flex items-center gap-3 flex-grow mr-2 overflow-hidden">
                           {mode === "delete" && (
                             <input
                               type="checkbox"
@@ -615,47 +616,62 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
                                 )
                               }
                               disabled={isRowProcessing}
-                              className="w-5 h-5 text-red-600 focus:ring-red-500 border-gray-300 rounded cursor-pointer flex-shrink-0 disabled:opacity-50"
+                              className="w-4 h-4 text-red-600 focus:ring-red-500 border-gray-300 rounded cursor-pointer flex-shrink-0 disabled:opacity-50"
+                              aria-labelledby={`attendee-name-${attendee.userId}`}
                             />
-                          )}{" "}
-                          <div>
-                            {" "}
+                          )}
+                          {mode === "attendance" && (
+                            <input
+                              type="checkbox"
+                              checked={isCheckedForAttendance}
+                              onChange={(e) =>
+                                handleAttendanceCheckboxChange(
+                                  attendee.userId,
+                                  e.target.checked
+                                )
+                              }
+                              disabled={isRowProcessing}
+                              className="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer flex-shrink-0 disabled:opacity-50"
+                              aria-labelledby={`attendee-name-${attendee.userId}`}
+                            />
+                          )}
+                          <div className="flex-grow overflow-hidden">
                             <p
-                              className={`font-semibold ${
+                              id={`attendee-name-${attendee.userId}`}
+                              className={`font-semibold text-sm truncate ${
                                 mode === "delete" && isSelectedForDelete
                                   ? "text-red-800"
                                   : "text-gray-800"
                               }`}
                             >
-                              {getAttendeeName(attendee)}
-                            </p>{" "}
-                            <div className="flex flex-wrap gap-x-3 text-base text-gray-500 mt-0.5">
                               {" "}
+                              {getAttendeeName(attendee)}{" "}
+                            </p>
+                            <div className="flex flex-wrap gap-x-3 text-xs text-gray-500 mt-0.5">
                               {attendee.studentCode && (
-                                <span className="text-blue-600 ">
+                                <span className="text-blue-600">
                                   MSSV: {attendee.studentCode}
                                 </span>
-                              )}{" "}
+                              )}
                               {attendee.username && (
                                 <span>@{attendee.username}</span>
-                              )}{" "}
+                              )}
                               {attendee.roleName && (
                                 <span className="italic">
                                   ({attendee.roleName})
                                 </span>
-                              )}{" "}
+                              )}
                               {attendee.positionName && (
                                 <span className="font-medium">
-                                  
                                   [{attendee.positionName}]
                                 </span>
-                              )}{" "}
-                            </div>{" "}
-                          </div>{" "}
-                        </div>{" "}
+                              )}
+                            </div>
+                          </div>
+                        </div>
                         {mode === "view" && (
                           <span
-                            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                            className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
                               originalAttendance[attendee.userId] ?? false
                                 ? "bg-green-100 text-green-700"
                                 : "bg-gray-200 text-gray-600"
@@ -666,84 +682,105 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
                               ? "Có mặt"
                               : "Vắng"}{" "}
                           </span>
-                        )}{" "}
+                        )}
+                        {mode === "attendance" && (
+                          <span
+                            className={`flex-shrink-0 p-1 rounded-full ${
+                              isCheckedForAttendance
+                                ? "bg-green-100 text-green-600"
+                                : "bg-red-100 text-red-600"
+                            }`}
+                          >
+                            {" "}
+                            {isCheckedForAttendance ? (
+                              <CheckIcon className="w-4 h-4" />
+                            ) : (
+                              <Cross2Icon className="w-4 h-4" />
+                            )}{" "}
+                          </span>
+                        )}
                       </div>
                     );
-                  })}{" "}
+                  })}
                 </div>
-              )}{" "}
+              )}
             </>
           )}
         </div>
 
+        {/* Footer Buttons */}
         <div className="flex justify-between items-center border-t pt-4 flex-shrink-0">
-          {" "}
+          {/* Left Aligned Buttons */}
           <div>
-            {" "}
-            {selectedEventId && !isLoadingAttendees && attendees.length > 0 && (
-              <>
-                {" "}
-                {mode === "view" && (
-                  <div className="flex gap-2">
-                    {" "}
-                    <button
-                      onClick={() => handleSetMode("attendance")}
-                      disabled={isProcessing}
-                      className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-800 rounded-md text-sm font-medium cursor-pointer disabled:opacity-50"
-                    >
-                      Điểm danh
-                    </button>{" "}
-                    <button
-                      onClick={() => handleSetMode("delete")}
-                      disabled={isProcessing}
-                      className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded-md text-sm font-medium cursor-pointer disabled:opacity-50"
-                    >
-                      Xóa người
-                    </button>{" "}
-                  </div>
-                )}{" "}
-                {mode === "attendance" && (
+            {selectedEventId &&
+              !isLoadingAttendees &&
+              attendees.length > 0 &&
+              mode === "view" && (
+                <div className="flex gap-2">
                   <button
-                    onClick={handleSaveChanges}
+                    onClick={() => handleSetMode("attendance")}
                     disabled={isProcessing}
-                    className={`px-4 py-2 rounded-md text-white shadow-sm transition text-sm font-medium cursor-pointer ${
-                      isProcessing
-                        ? "bg-blue-300 cursor-wait"
-                        : "bg-blue-600 hover:bg-blue-700"
-                    }`}
+                    className="px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
                   >
                     {" "}
-                    {isProcessing ? "Đang lưu..." : "Lưu điểm danh"}{" "}
+                    <CheckIcon /> Điểm danh{" "}
                   </button>
-                )}{" "}
-                {mode === "delete" && (
                   <button
-                    onClick={handleConfirmBatchDelete}
-                    disabled={isProcessing || selectedForDelete.size === 0}
-                    className={`px-4 py-2 rounded-md text-white shadow-sm transition text-sm font-medium cursor-pointer ${
-                      isProcessing || selectedForDelete.size === 0
-                        ? "bg-red-300 cursor-not-allowed"
-                        : "bg-red-600 hover:bg-red-700"
-                    }`}
+                    onClick={() => handleSetMode("delete")}
+                    disabled={isProcessing}
+                    className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
                   >
                     {" "}
-                    {isProcessing
-                      ? "Đang xóa..."
-                      : `Xóa (${selectedForDelete.size})`}{" "}
+                    <TrashIcon /> Xóa người{" "}
                   </button>
-                )}{" "}
-              </>
-            )}{" "}
-          </div>{" "}
+                </div>
+              )}
+            {selectedEventId &&
+              !isLoadingAttendees &&
+              attendees.length > 0 &&
+              mode === "attendance" && (
+                <button
+                  onClick={handleSaveChanges}
+                  disabled={isProcessing}
+                  className={`px-4 py-2 rounded-md text-white shadow-sm transition text-sm font-medium cursor-pointer ${
+                    isProcessing
+                      ? "bg-blue-300 cursor-wait"
+                      : "bg-blue-600 hover:bg-blue-700"
+                  }`}
+                >
+                  {" "}
+                  {isProcessing ? "Đang lưu..." : "Lưu điểm danh"}{" "}
+                </button>
+              )}
+            {/* === NÚT XÓA HÀNG LOẠT Ở ĐÂY === */}
+            {selectedEventId &&
+              !isLoadingAttendees &&
+              attendees.length > 0 &&
+              mode === "delete" && (
+                <button
+                  onClick={handleConfirmBatchDelete}
+                  disabled={isProcessing || selectedForDelete.size === 0}
+                  className={`px-4 py-2 rounded-md text-white shadow-sm transition text-sm font-medium cursor-pointer inline-flex items-center gap-1 ${
+                    isProcessing || selectedForDelete.size === 0
+                      ? "bg-red-300 cursor-not-allowed"
+                      : "bg-red-600 hover:bg-red-700"
+                  }`}
+                >
+                  <TrashIcon /> Xóa ({selectedForDelete.size}) đã chọn
+                </button>
+              )}
+          </div>
+          {/* Right Aligned Close Button */}
           <button
             onClick={onClose}
             className="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg shadow transition text-sm font-medium cursor-pointer"
           >
             {" "}
             Đóng{" "}
-          </button>{" "}
+          </button>
         </div>
       </div>
+      {/* Confirmation Dialog */}
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
         title={confirmationState.title}

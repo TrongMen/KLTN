@@ -198,17 +198,17 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="flex justify-end mt-2">
+        {/* <div className="flex justify-end mt-2">
           <button
             onClick={() => router.push("/forgot-password")}
             className="text-sm text-blue-500 hover:underline hover:text-blue-700 font-medium transition-all cursor-pointer"
           >
             Quên mật khẩu?
           </button>
-        </div>
+        </div> */}
 
         <div className="flex justify-center mt-4 items-center space-x-2">
-          <label className="transition-all">Chưa có tài khoản?</label>
+          <label className="transition-all">Bạn chưa có tài khoản?</label>
           <button
             onClick={() => router.push("/register")}
             className="text-blue-500 hover:underline hover:text-blue-700 transition-all cursor-pointer font-semibold"

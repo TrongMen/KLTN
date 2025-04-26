@@ -263,7 +263,7 @@ export default function ModalMember({
 
                 <div className="flex gap-2 items-center flex-shrink-0">
                   {/* Nút xóa (Admin thấy, không xóa chính mình) */}
-                  {userRole === "ADMIN" && member.email !== currentUserEmail && (
+                  {/* {userRole === "ADMIN" && member.email !== currentUserEmail && (
                     <button
                       onClick={() => handleRemoveMember(member.id, member.email)}
                       className="text-red-500 hover:text-red-700 text-sm font-medium p-1 rounded hover:bg-red-100 transition-colors duration-150"
@@ -271,12 +271,9 @@ export default function ModalMember({
                     >
                       ❌ Xóa
                     </button>
-                  )}
+                  )} */}
 
-                  {/* --- Tạm ẩn nút Join/Leave ---
-                  {userRole === "GUEST" && !isMember && ( ... )}
-                  {userRole === "GUEST" && isMember && ( ... )}
-                  */}
+                  
                 </div>
               </div>
             ))

@@ -10,10 +10,25 @@ import ModalAttendees from "./ModalAttende";
 import ModalMember from "./ModalMember";
 import ModalEventRegister from "./ModalEventRegisterUser";
 import ModalChat from "./ModalChat";
+import ModalChatDetail from "./ModalChatDetail";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 
-// --- ConfirmationDialog Component Definition ---
+interface Participant {
+  id: string | number;
+  name: string;
+  avatar?: string;
+}
+interface Conversation {
+  id: number | string;
+  name: string;
+  isGroup: boolean;
+  participants?: Participant[];
+  message: string;
+  avatar?: string;
+}
+
+
 interface ConfirmationDialogProps {
   isOpen: boolean;
   title: string;
@@ -24,6 +39,7 @@ interface ConfirmationDialogProps {
   cancelText?: string;
   confirmVariant?: "primary" | "danger";
 }
+
 function ConfirmationDialog({
   isOpen,
   title,
@@ -35,6 +51,7 @@ function ConfirmationDialog({
   confirmVariant = "primary",
 }: ConfirmationDialogProps) {
   if (!isOpen) return null;
+
   const confirmBtnClasses = useMemo(() => {
     let base =
       "flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ";
@@ -47,8 +64,10 @@ function ConfirmationDialog({
     }
     return base;
   }, [confirmVariant]);
+
   const cancelBtnClasses =
     "flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2";
+
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
@@ -79,7 +98,6 @@ function ConfirmationDialog({
   );
 }
 
-// --- Interfaces ---
 interface EventDisplayInfo {
   id: string;
   title: string;
@@ -92,11 +110,13 @@ interface EventDisplayInfo {
   status?: string;
   purpose?: string;
 }
+
 interface Role {
   name: string;
   description?: string;
   permissions?: any[];
 }
+
 interface User {
   id: string;
   roles?: Role[];
@@ -107,10 +127,8 @@ interface User {
   avatar?: string;
   email?: string;
   gender?: boolean;
-  role?: string;
 }
 
-// --- Helper Functions ---
 const getWeekRange = (
   refDate: Date
 ): { startOfWeek: Date; endOfWeek: Date } => {
@@ -124,6 +142,7 @@ const getWeekRange = (
   end.setHours(23, 59, 59, 999);
   return { startOfWeek: start, endOfWeek: end };
 };
+
 const getMonthRange = (
   refDate: Date
 ): { startOfMonth: Date; endOfMonth: Date } => {
@@ -135,9 +154,7 @@ const getMonthRange = (
   return { startOfMonth: start, endOfMonth: end };
 };
 
-// --- Main Component ---
 export default function UserHome() {
-  // Đổi tên component nếu cần
   const [search, setSearch] = useState("");
   const [allEvents, setAllEvents] = useState<EventDisplayInfo[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
@@ -164,6 +181,9 @@ export default function UserHome() {
   const [showModalMember, setShowModalMember] = useState(false);
   const [showModalEventRegister, setShowModalEventRegister] = useState(false);
   const [showModalChat, setShowModalChat] = useState(false);
+  const [showModalChatDetail, setShowModalChatDetail] = useState(false);
+  const [selectedConversationDetail, setSelectedConversationDetail] =
+    useState<Conversation | null>(null);
   const [isRegistering, setIsRegistering] = useState<string | null>(null);
   const [showModalEvent, setShowModalEvent] = useState(false);
   const [showModalAttendees, setShowModalAttendees] = useState(false);
@@ -179,7 +199,6 @@ export default function UserHome() {
 
   const { refreshToken } = useRefreshToken();
 
-  // --- Fetch Functions ---
   const fetchAllEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     setErrorEvents(null);
@@ -215,7 +234,6 @@ export default function UserHome() {
     }
   }, []);
 
-  // *** BỎ COMMENT VÀ SỬA LẠI HÀM NÀY ***
   const fetchRegisteredEventIds = useCallback(async (userId: string) => {
     if (!userId) {
       setIsLoadingRegisteredIds(false);
@@ -229,7 +247,7 @@ export default function UserHome() {
         return;
       }
       const headers: HeadersInit = { Authorization: `Bearer ${token}` };
-      const url = `http://localhost:8080/identity/api/events/attendee/${userId}`; // <<< API ĐÚNG
+      const url = `http://localhost:8080/identity/api/events/attendee/${userId}`;
       const res = await fetch(url, { headers });
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
@@ -239,7 +257,6 @@ export default function UserHome() {
         const ids = new Set(data.result.map((event: any) => event.id));
         setRegisteredEventIds(ids);
       } else {
-        console.warn("API /attendee không trả về mảng:", data);
         setRegisteredEventIds(new Set());
       }
     } catch (err: any) {
@@ -250,7 +267,6 @@ export default function UserHome() {
     }
   }, []);
 
-  // fetchUserCreatedEvents giữ nguyên
   const fetchUserCreatedEvents = useCallback(async (userId: string) => {
     if (!userId) {
       setIsLoadingCreatedEventIds(false);
@@ -274,7 +290,6 @@ export default function UserHome() {
         const ids = new Set(data.result.map((event: any) => event.id));
         setCreatedEventIds(ids);
       } else {
-        console.warn("API /creator không trả về mảng:", data);
         setCreatedEventIds(new Set());
       }
     } catch (err: any) {
@@ -285,7 +300,6 @@ export default function UserHome() {
     }
   }, []);
 
-  // --- useEffect Chính ---
   useEffect(() => {
     let isMounted = true;
     setIsLoadingUser(true);
@@ -294,21 +308,24 @@ export default function UserHome() {
     setIsLoadingCreatedEventIds(true);
     const token = localStorage.getItem("authToken");
     let userIdForFetches: string | null = null;
+
     const loadInitialData = async () => {
       const eventsPromise = fetchAllEvents();
+
       if (token) {
         try {
           const headers: HeadersInit = { Authorization: `Bearer ${token}` };
           const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
           const userRes = await fetch(userInfoUrl, { headers });
+
           if (!userRes.ok) throw new Error("InvalidTokenCheck");
+
           const userData = await userRes.json();
           if (userData.code === 1000 && userData.result?.id) {
             const fetchedUser: User = userData.result;
             userIdForFetches = fetchedUser.id;
             if (isMounted) {
               setUser(fetchedUser);
-              localStorage.setItem("user", JSON.stringify(fetchedUser));
             }
           } else {
             throw new Error("Invalid user data");
@@ -316,14 +333,11 @@ export default function UserHome() {
         } catch (error: any) {
           console.error("Lỗi fetch user info:", error.message);
           localStorage.removeItem("authToken");
-          localStorage.removeItem("role");
-          localStorage.removeItem("user");
           if (isMounted) setUser(null);
           userIdForFetches = null;
         } finally {
           if (isMounted) setIsLoadingUser(false);
         }
-        refreshToken();
       } else {
         if (isMounted) {
           setUser(null);
@@ -332,9 +346,10 @@ export default function UserHome() {
           setIsLoadingCreatedEventIds(false);
         }
       }
+
       await eventsPromise;
+
       if (userIdForFetches && isMounted) {
-        // *** GỌI CẢ HAI HÀM FETCH ***
         await Promise.all([
           fetchRegisteredEventIds(userIdForFetches),
           fetchUserCreatedEvents(userIdForFetches),
@@ -344,14 +359,15 @@ export default function UserHome() {
         setIsLoadingCreatedEventIds(false);
       }
     };
+
     loadInitialData();
+
     return () => {
       isMounted = false;
     };
-    // Thêm fetchRegisteredEventIds vào dependency array
   }, []);
 
-  // handleLogout giữ nguyên
+
   const handleLogout = async () => {
     try {
       const t = localStorage.getItem("authToken");
@@ -375,35 +391,36 @@ export default function UserHome() {
     }
   };
 
-  // executeRegistration và handleRegister giữ nguyên
   const executeRegistration = async (event: EventDisplayInfo) => {
     if (!user?.id || isRegistering) return;
+
     setIsRegistering(event.id);
     const token = localStorage.getItem("authToken");
+
     if (!token) {
       toast.error("Vui lòng đăng nhập lại.");
       setIsRegistering(null);
       return;
     }
+
     try {
       const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
       const res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+
       if (!res.ok) {
         let m = "Đăng ký thất bại";
         try {
           const d = await res.json();
           m = d.message || m;
         } catch (_) {}
-        if (res.status === 403) {
-          m = "Không có quyền.";
-        } else if (res.status === 400) {
-          m = "Yêu cầu không hợp lệ.";
-        }
+        if (res.status === 403) m = "Không có quyền.";
+        else if (res.status === 400) m = "Yêu cầu không hợp lệ.";
         throw new Error(m);
       }
+
       const data = await res.json();
       if (data.code === 1000) {
         toast.success(`Đã đăng ký "${event.title}"!`);
@@ -418,6 +435,7 @@ export default function UserHome() {
       setIsRegistering(null);
     }
   };
+
   const handleRegister = (event: EventDisplayInfo) => {
     if (!user?.id) {
       toast.error("Đăng nhập để đăng ký.");
@@ -430,6 +448,7 @@ export default function UserHome() {
       createdEventIds.has(event.id)
     )
       return;
+
     setConfirmationState({
       isOpen: true,
       title: "Xác nhận đăng ký",
@@ -446,12 +465,8 @@ export default function UserHome() {
     });
   };
 
-  // handleModalDataChange giữ nguyên
   const handleModalDataChange = useCallback(
     (eventId: string, registered: boolean) => {
-      console.log(
-        `Modal data changed (HomeGuest): Event ${eventId}, Registered: ${registered}`
-      );
       setRegisteredEventIds((prevIds) => {
         const newIds = new Set(prevIds);
         if (registered) {
@@ -465,12 +480,11 @@ export default function UserHome() {
     []
   );
 
-  // handleEvent giữ nguyên
   const handleEvent = (event: EventDisplayInfo) => setSelectedEvent(event);
 
-  // processedEvents giữ nguyên
   const processedEvents = useMemo(() => {
     let evts = [...allEvents];
+
     if (search) {
       const l = search.toLowerCase();
       evts = evts.filter(
@@ -479,8 +493,10 @@ export default function UserHome() {
           e.location.toLowerCase().includes(l)
       );
     }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     if (timeFilterOption === "upcoming") {
       evts = evts.filter((e) => new Date(e.date) >= today);
     } else if (timeFilterOption === "thisWeek") {
@@ -496,6 +512,7 @@ export default function UserHome() {
         return d >= startOfMonth && d <= endOfMonth;
       });
     }
+
     if (sortOption === "az") {
       evts.sort((a, b) => a.title.localeCompare(b.title));
     } else {
@@ -506,88 +523,95 @@ export default function UserHome() {
     return evts;
   }, [allEvents, search, timeFilterOption, sortOption]);
 
-  // *** Cập nhật isPageLoading ***
   const isPageLoading =
     isLoadingEvents ||
     isLoadingUser ||
     isLoadingRegisteredIds ||
     isLoadingCreatedEventIds;
 
+
+  const handleSelectChatConversation = (conversation: Conversation) => {
+    setSelectedConversationDetail(conversation);
+    setShowModalChat(false);
+    setShowModalChatDetail(true);
+  };
+
+  const handleCloseChatDetailModal = () => {
+    setShowModalChatDetail(false);
+    setSelectedConversationDetail(null);
+  };
+
+  const handleGoBackToChatList = () => {
+    setShowModalChatDetail(false);
+    setSelectedConversationDetail(null);
+    setShowModalChat(true); // Mở lại danh sách chat
+  };
+
+
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
       <Toaster toastOptions={{ duration: 3000 }} />
-      {/* Nav Bar */}
       <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6">
-        {" "}
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          {" "}
-          <div className="text-lg sm:text-xl font-bold">
-            Quản lý sự kiện
-          </div>{" "}
+          <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            {" "}
             <Link href="/about">
               <span className="cursor-pointer hover:text-gray-300">
                 Giới thiệu
               </span>
-            </Link>{" "}
+            </Link>
             <span
               className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
             >
               Liên hệ
-            </span>{" "}
-            <UserMenu user={user} onLogout={handleLogout} />{" "}
-          </div>{" "}
-        </div>{" "}
+            </span>
+            <UserMenu user={user} onLogout={handleLogout} />
+          </div>
+        </div>
       </nav>
-      {/* Quick Buttons */}
+
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 flex justify-center gap-8 border border-gray-200">
-        {" "}
         <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
-          {" "}
           <button
             onClick={() => setShowModalEvent(true)}
             className=" cursor-pointer px-4 py-2 text-xs sm:text-sm bg-blue-100 text-blue-800 hover:bg-blue-200 font-semibold rounded-full shadow-sm transition"
           >
             🛠 Sự kiện của tôi
-          </button>{" "}
+          </button>
           <button
             onClick={() => setShowModalAttendees(true)}
             className="cursor-pointer px-4 py-2 text-xs sm:text-sm bg-teal-100 text-teal-800 hover:bg-teal-200 font-semibold rounded-full shadow-sm transition"
           >
             ✅ Người tham gia
-          </button>{" "}
+          </button>
           <button
             onClick={() => setShowModalEventRegister(true)}
             className="px-4 cursor-pointer py-2 text-xs sm:text-sm bg-green-100 text-green-800 hover:bg-green-200 font-semibold rounded-full shadow-sm transition"
           >
             📋 Danh sách sự kiện
-          </button>{" "}
+          </button>
           <button
             onClick={() => setShowModalMember(true)}
             className="px-4 cursor-pointer py-2 text-xs sm:text-sm bg-pink-100 text-pink-800 hover:bg-pink-200 font-semibold rounded-full shadow-sm transition"
           >
             👥 Thành viên CLB
-          </button>{" "}
+          </button>
           <button
             onClick={() => setShowModalChat(true)}
             className="cursor-pointer px-4 py-2 text-xs sm:text-sm bg-purple-100 text-purple-800 hover:bg-purple-200 font-semibold rounded-full shadow-sm transition"
           >
             💬 Danh sách chat
-          </button>{" "}
-        </div>{" "}
+          </button>
+        </div>
       </div>
-      {/* Main Content */}
+
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          {" "}
           <h1 className="text-2xl sm:text-3xl font-bold text-blue-600">
             🎉 Trang chủ Sự kiện
-          </h1>{" "}
+          </h1>
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            {" "}
-            {/* Filters */}{" "}
             <div className="flex-1 sm:flex-none">
               <select
                 id="sortOptionGuest"
@@ -611,14 +635,13 @@ export default function UserHome() {
                 <option value="thisMonth">🗓️ Tháng này</option>
                 <option value="all">♾️ Tất cả</option>
               </select>
-            </div>{" "}
-          </div>{" "}
+            </div>
+          </div>
         </div>
         <div className="relative w-full mb-6">
-          {" "}
           <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
             🔍
-          </span>{" "}
+          </span>
           <input
             id="searchGuest"
             type="text"
@@ -626,7 +649,7 @@ export default function UserHome() {
             className="w-full p-3 pl-10 pr-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-          />{" "}
+          />
         </div>
 
         {isPageLoading ? (
@@ -638,12 +661,20 @@ export default function UserHome() {
             {errorEvents}
           </p>
         ) : selectedEvent ? (
-          <div className="p-6 border rounded-lg shadow-lg bg-gray-50">
-            {/* Event Detail View */}
-          </div>
+               <div className="p-6 border rounded-lg shadow-lg bg-gray-50">
+                   <h2 className="text-xl font-bold mb-4">{selectedEvent.title}</h2>
+                   <p><strong>Ngày:</strong> {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}</p>
+                   <p><strong>Địa điểm:</strong> {selectedEvent.location}</p>
+                   <p className="mt-4 whitespace-pre-wrap">{selectedEvent.description}</p>
+                   <button
+                      onClick={() => setSelectedEvent(null)}
+                      className="mt-6 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md"
+                   >
+                      Quay lại danh sách
+                   </button>
+               </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {" "}
             {processedEvents.length > 0 ? (
               processedEvents.map((event) => {
                 const isRegistered = registeredEventIds.has(event.id);
@@ -653,13 +684,13 @@ export default function UserHome() {
                   new Date(event.date) >=
                   new Date(new Date().setHours(0, 0, 0, 0));
                 const canRegister = !!user?.id && isEventUpcoming;
+
                 return (
                   <div
                     key={event.id}
-                    className="p-5 bg-white shadow-md rounded-xl cursor-pointer transform transition hover:scale-[1.03] hover:shadow-lg flex flex-col justify-between"
+                    className="p-5 bg-white shadow-md rounded-xl cursor-pointer transform transition hover:scale-[1.03] hover:shadow-lg flex flex-col justify-between border border-transparent hover:border-blue-300"
                     onClick={() => handleEvent(event)}
                   >
-                    {" "}
                     <div>
                       <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
                         {event.title}
@@ -670,14 +701,14 @@ export default function UserHome() {
                       <p className="text-sm text-gray-600 mb-3">
                         📍 {event.location}
                       </p>
-                    </div>{" "}
+                    </div>
                     {isCreatedByUser ? (
-                      <button
+                       <button
                         className="w-full mt-3 px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
                         disabled
-                      >
-                        ✨ Sự kiện của bạn
-                      </button>
+                       >
+                         ✨ Sự kiện của bạn
+                       </button>
                     ) : canRegister ? (
                       <button
                         onClick={(e) => {
@@ -698,7 +729,6 @@ export default function UserHome() {
                           isLoadingCreatedEventIds
                         }
                       >
-                        {" "}
                         {isRegistered ? (
                           <span>✅ Đã đăng ký</span>
                         ) : processing ? (
@@ -727,11 +757,10 @@ export default function UserHome() {
                           </>
                         ) : (
                           <span className="cursor-pointer">📝 Đăng ký</span>
-                        )}{" "}
+                        )}
                       </button>
                     ) : (
                       <>
-                        {" "}
                         {user?.id && !isEventUpcoming && (
                           <button
                             className="w-full mt-3 px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
@@ -739,17 +768,17 @@ export default function UserHome() {
                           >
                             Đã kết thúc
                           </button>
-                        )}{" "}
+                        )}
                         {!user?.id && isEventUpcoming && (
                           <button
-                            onClick={() => router.push("/login")}
+                            onClick={(e) => { e.stopPropagation(); router.push("/login"); }}
                             className="w-full mt-3 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
                           >
                             Đăng nhập để đăng ký
                           </button>
-                        )}{" "}
+                        )}
                       </>
-                    )}{" "}
+                    )}
                   </div>
                 );
               })
@@ -757,10 +786,11 @@ export default function UserHome() {
               <p className="text-gray-500 text-center col-span-1 md:col-span-2 py-6 italic">
                 Không tìm thấy sự kiện.
               </p>
-            )}{" "}
+            )}
           </div>
         )}
       </div>
+
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
         title={confirmationState.title}
@@ -771,21 +801,16 @@ export default function UserHome() {
         onConfirm={() => {
           if (confirmationState.onConfirm) confirmationState.onConfirm();
           setConfirmationState({
-            isOpen: false,
-            title: "",
-            message: "",
-            onConfirm: null,
+            isOpen: false, title: "", message: "", onConfirm: null,
           });
         }}
         onCancel={() =>
           setConfirmationState({
-            isOpen: false,
-            title: "",
-            message: "",
-            onConfirm: null,
+            isOpen: false, title: "", message: "", onConfirm: null,
           })
         }
       />
+
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
@@ -796,19 +821,39 @@ export default function UserHome() {
         <ModalAttendees onClose={() => setShowModalAttendees(false)} />
       )}
       {showModalMember && (
-        <ModalMember onClose={() => setShowModalMember(false)} />
+         <ModalMember
+            onClose={() => setShowModalMember(false)}
+            userRole={user?.roles?.[0]?.name?.toUpperCase() || 'UNKNOWN'}
+            currentUserEmail={user?.email || null}
+         />
       )}
       {showModalEventRegister && (
         <ModalEventRegister
           onClose={() => setShowModalEventRegister(false)}
           onDataChanged={handleModalDataChange}
           currentUserId={user?.id || null}
-          isLoadingUserId={isLoadingUser} // Có thể cần để modal hiển thị loading phù hợp
-          registeredEventIds={registeredEventIds} // Truyền set ID đã đăng ký
+          isLoadingUserId={isLoadingUser}
+          registeredEventIds={registeredEventIds}
           createdEventIds={createdEventIds}
         />
       )}
-      {showModalChat && <ModalChat onClose={() => setShowModalChat(false)} />}
+
+      {showModalChat && (
+        <ModalChat
+          onClose={() => setShowModalChat(false)}
+          onSelectConversation={handleSelectChatConversation}
+        />
+      )}
+
+      {showModalChatDetail && selectedConversationDetail && (
+        <ModalChatDetail
+        conversation={selectedConversationDetail}
+        onClose={handleCloseChatDetailModal}
+        onGoBack={handleGoBackToChatList}
+        currentUser={user}
+        />
+      )}
+
     </div>
   );
 }

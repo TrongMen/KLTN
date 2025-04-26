@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import UserMenu from "./menu";
@@ -8,8 +8,39 @@ import ContactModal from "./contact";
 import ModalMember from "./ModalMember";
 import ModalEventRegister from "./ModalEventRegister";
 import ModalChat from "./ModalChat";
+import ModalChatDetail from "./ModalChatDetail";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
+
+interface Role {
+  name: string;
+  description?: string;
+  permissions?: any[];
+}
+interface User {
+  id: string;
+  roles?: Role[];
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  dob?: string;
+  avatar?: string;
+  email?: string;
+  gender?: boolean;
+}
+interface Participant {
+    id: string | number;
+    name: string;
+    avatar?: string;
+}
+interface Conversation {
+  id: number | string;
+  name: string;
+  isGroup: boolean;
+  participants?: Participant[];
+  message: string;
+  avatar?: string;
+}
 
 interface ConfirmationDialogProps {
   isOpen: boolean;
@@ -70,12 +101,10 @@ function ConfirmationDialog({
         <div className="text-sm text-gray-600 mb-5">{message}</div>
         <div className="flex gap-3">
           <button onClick={onCancel} className={cancelButtonClasses}>
-            {" "}
-            {cancelText}{" "}
+            {cancelText}
           </button>
           <button onClick={onConfirm} className={confirmButtonClasses}>
-            {" "}
-            {confirmText}{" "}
+            {confirmText}
           </button>
         </div>
       </div>
@@ -94,23 +123,6 @@ interface EventDisplayInfo {
   time?: string;
   status?: string;
   purpose?: string;
-}
-interface Role {
-  name: string;
-  description?: string;
-  permissions?: any[];
-}
-interface User {
-  id: string;
-  roles?: Role[];
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-  dob?: string;
-  avatar?: string;
-  email?: string;
-  gender?: boolean;
-  role?: string;
 }
 
 const getWeekRange = (
@@ -159,6 +171,9 @@ export default function HomeGuest() {
   const [showModalMember, setShowModalMember] = useState(false);
   const [showModalEventRegister, setShowModalEventRegister] = useState(false);
   const [showModalChat, setShowModalChat] = useState(false);
+  const [showModalChatDetail, setShowModalChatDetail] = useState(false);
+  const [selectedConversationDetail, setSelectedConversationDetail] =
+    useState<Conversation | null>(null);
   const [isRegistering, setIsRegistering] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<{
     isOpen: boolean;
@@ -227,7 +242,7 @@ export default function HomeGuest() {
         return;
       }
       const headers: HeadersInit = { Authorization: `Bearer ${token}` };
-      const url = `http://localhost:8080/identity/api/events/attendee/${userId}`; // Correct endpoint
+      const url = `http://localhost:8080/identity/api/events/attendee/${userId}`;
       const res = await fetch(url, { headers });
       if (!res.ok) {
         let msg = `Lỗi tải sự kiện đã đăng ký`;
@@ -399,7 +414,7 @@ export default function HomeGuest() {
       title: "Xác nhận đăng ký",
       message: (
         <>
-          Đăng ký sự kiện <br />{" "}
+          Đăng ký sự kiện <br />
           <strong className="text-indigo-600">"{event.title}"</strong>?
         </>
       ),
@@ -412,9 +427,6 @@ export default function HomeGuest() {
 
   const handleModalDataChange = useCallback(
     (eventId: string, registered: boolean) => {
-      console.log(
-        `Modal data changed: Event ${eventId}, Registered: ${registered}`
-      );
       setRegisteredEventIds((prevIds) => {
         const newIds = new Set(prevIds);
         if (registered) {
@@ -472,118 +484,114 @@ export default function HomeGuest() {
   const isPageLoading =
     isLoadingEvents || isLoadingUser || isLoadingRegisteredIds;
 
+  const handleSelectChatConversation = (conversation: Conversation) => {
+    setSelectedConversationDetail(conversation);
+    setShowModalChat(false);
+    setShowModalChatDetail(true);
+  };
+
+  const handleCloseChatDetailModal = () => {
+    setShowModalChatDetail(false);
+    setSelectedConversationDetail(null);
+  };
+
+  const handleGoBackToChatList = () => {
+    setShowModalChatDetail(false);
+    setSelectedConversationDetail(null);
+    setShowModalChat(true);
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
       <Toaster toastOptions={{ duration: 3000 }} />
       <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6">
-        {" "}
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          {" "}
           <div className="text-lg sm:text-xl font-bold">
             Quản lý sự kiện
-          </div>{" "}
+          </div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            {" "}
             <Link href="/about">
               <span className="cursor-pointer hover:text-gray-300">
-                {" "}
-                Giới thiệu{" "}
+                Giới thiệu
               </span>
-            </Link>{" "}
+            </Link>
             <span
               className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
             >
-              {" "}
-              Liên hệ{" "}
-            </span>{" "}
+              Liên hệ
+            </span>
             <UserMenu
               user={isLoadingUser ? undefined : user}
               onLogout={handleLogout}
-            />{" "}
-          </div>{" "}
-        </div>{" "}
+            />
+          </div>
+        </div>
       </nav>
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 flex justify-center gap-8 border border-gray-200">
-        {" "}
         <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
-          {" "}
           <button
             onClick={() => setShowModalEventRegister(true)}
             className="px-4 cursor-pointer py-2 text-xs sm:text-sm bg-green-100 text-green-800 hover:bg-green-200 font-semibold rounded-full shadow-sm transition"
           >
-            {" "}
-            📋 Danh sách sự kiện{" "}
-          </button>{" "}
+            📋 Danh sách sự kiện
+          </button>
           <button
             onClick={() => setShowModalMember(true)}
             className="px-4 cursor-pointer py-2 text-xs sm:text-sm bg-pink-100 text-pink-800 hover:bg-pink-200 font-semibold rounded-full shadow-sm transition"
           >
-            {" "}
-            👥 Thành viên CLB{" "}
-          </button>{" "}
+            👥 Thành viên CLB
+          </button>
           <button
             onClick={() => setShowModalChat(true)}
             className="cursor-pointer px-4 py-2 text-xs sm:text-sm bg-purple-100 text-purple-800 hover:bg-purple-200 font-semibold rounded-full shadow-sm transition"
           >
-            {" "}
-            💬 Danh sách chat{" "}
-          </button>{" "}
-        </div>{" "}
+            💬 Danh sách chat
+          </button>
+        </div>
       </div>
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          {" "}
           <h1 className="text-2xl sm:text-3xl font-bold text-blue-600">
-            {" "}
-            🎉 Trang chủ Sự kiện{" "}
-          </h1>{" "}
+            🎉 Trang chủ Sự kiện
+          </h1>
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            {" "}
             <div className="flex-1 sm:flex-none">
-              {" "}
               <label htmlFor="sortOptionGuest" className="sr-only">
-                {" "}
-                Sắp xếp{" "}
-              </label>{" "}
+                Sắp xếp
+              </label>
               <select
                 id="sortOptionGuest"
                 value={sortOption}
                 onChange={(e) => setSortOption(e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                {" "}
-                <option value="date">📅 Sắp xếp: Ngày gần nhất</option>{" "}
-                <option value="az">🔤 Sắp xếp: A-Z</option>{" "}
-              </select>{" "}
-            </div>{" "}
+                <option value="date">📅 Sắp xếp: Ngày gần nhất</option>
+                <option value="az">🔤 Sắp xếp: A-Z</option>
+              </select>
+            </div>
             <div className="flex-1 sm:flex-none">
-              {" "}
               <label htmlFor="timeFilterOptionGuest" className="sr-only">
-                {" "}
-                Lọc theo thời gian{" "}
-              </label>{" "}
+                Lọc theo thời gian
+              </label>
               <select
                 id="timeFilterOptionGuest"
                 value={timeFilterOption}
                 onChange={(e) => setTimeFilterOption(e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                {" "}
-                <option value="upcoming">⏳ Lọc: Sắp diễn ra</option>{" "}
-                <option value="thisWeek">🗓️ Lọc: Tuần này</option>{" "}
-                <option value="thisMonth">🗓️ Lọc: Tháng này</option>{" "}
-                <option value="all">♾️ Lọc: Tất cả</option>{" "}
-              </select>{" "}
-            </div>{" "}
-          </div>{" "}
+                <option value="upcoming">⏳ Lọc: Sắp diễn ra</option>
+                <option value="thisWeek">🗓️ Lọc: Tuần này</option>
+                <option value="thisMonth">🗓️ Lọc: Tháng này</option>
+                <option value="all">♾️ Lọc: Tất cả</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div className="relative w-full mb-6">
-          {" "}
           <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-            {" "}
-            🔍{" "}
-          </span>{" "}
+            🔍
+          </span>
           <input
             id="searchGuest"
             type="text"
@@ -591,63 +599,54 @@ export default function HomeGuest() {
             className="w-full p-3 pl-10 pr-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-          />{" "}
+          />
         </div>
         {isPageLoading ? (
           <p className="text-center text-gray-500 italic py-6">
-            {" "}
-            Đang tải dữ liệu sự kiện...{" "}
+            Đang tải dữ liệu sự kiện...
           </p>
         ) : errorEvents ? (
           <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-            {" "}
-            {errorEvents}{" "}
+            {errorEvents}
           </p>
         ) : selectedEvent ? (
           <div className="p-6 border rounded-lg shadow-lg bg-gray-50">
-            {" "}
             <h2 className="text-xl font-semibold text-gray-800">
               {selectedEvent.title}
-            </h2>{" "}
+            </h2>
             <p className="text-gray-600">
-              {" "}
-              📅 Ngày:{" "}
-              {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}{" "}
-            </p>{" "}
+              📅 Ngày:
+              {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}
+            </p>
             {selectedEvent.time && (
               <p className="text-gray-600">
-                🕒 Thời gian:{" "}
+                🕒 Thời gian:
                 {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
               </p>
-            )}{" "}
+            )}
             <p className="text-gray-600">
-              {" "}
-              📍 Địa điểm: {selectedEvent.location}{" "}
-            </p>{" "}
+              📍 Địa điểm: {selectedEvent.location}
+            </p>
             {selectedEvent.speaker && (
               <p className="text-gray-600">
-                {" "}
-                🎤 Diễn giả: {selectedEvent.speaker}{" "}
+                🎤 Diễn giả: {selectedEvent.speaker}
               </p>
-            )}{" "}
+            )}
             <p className="text-gray-600">
-              {" "}
-              📜 Mô tả: {selectedEvent.description}{" "}
-            </p>{" "}
+              📜 Mô tả: {selectedEvent.description}
+            </p>
             <button
               onClick={() => setSelectedEvent(null)}
               className="mt-4 px-4 py-2 bg-red-500 hover:bg-red-700 text-white rounded-lg transition text-sm"
             >
-              {" "}
-              Đóng{" "}
-            </button>{" "}
+              Đóng
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {" "}
             {processedEvents.length > 0 ? (
               processedEvents.map((event) => {
                 const isRegistered = registeredEventIds.has(event.id);
@@ -662,19 +661,17 @@ export default function HomeGuest() {
                     className="p-5 bg-white shadow-md rounded-xl cursor-pointer transform transition hover:scale-[1.03] hover:shadow-lg flex flex-col justify-between"
                     onClick={() => handleEvent(event)}
                   >
-                    {" "}
                     <div>
-                      {" "}
                       <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
                         {event.title}
-                      </h2>{" "}
+                      </h2>
                       <p className="text-sm text-gray-600">
                         📅 {new Date(event.date).toLocaleDateString("vi-VN")}
-                      </p>{" "}
+                      </p>
                       <p className="text-sm text-gray-600 mb-3">
                         📍 {event.location}
-                      </p>{" "}
-                    </div>{" "}
+                      </p>
+                    </div>
                     {canRegister && (
                       <button
                         onClick={(e) => {
@@ -692,16 +689,18 @@ export default function HomeGuest() {
                           isRegistered || processing || isLoadingRegisteredIds
                         }
                       >
-                        {" "}
                         {isRegistered ? (
                           <span>✅ Đã đăng ký</span>
                         ) : processing ? (
-                          <>{/* SVG loading */}...</>
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>
+                             ...
+                          </>
                         ) : (
                           <span className="cursor-pointer">📝 Đăng ký</span>
-                        )}{" "}
+                        )}
                       </button>
-                    )}{" "}
+                    )}
                     {user?.id &&
                       new Date(event.date) <
                         new Date(new Date().setHours(0, 0, 0, 0)) && (
@@ -711,26 +710,25 @@ export default function HomeGuest() {
                         >
                           Đã kết thúc
                         </button>
-                      )}{" "}
+                      )}
                     {!user?.id &&
                       new Date(event.date) >=
                         new Date(new Date().setHours(0, 0, 0, 0)) && (
                         <button
-                          onClick={() => router.push("/login")}
+                          onClick={(e) => { e.stopPropagation(); router.push("/login"); }}
                           className="w-full mt-3 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
                         >
                           Đăng nhập để đăng ký
                         </button>
-                      )}{" "}
+                      )}
                   </div>
                 );
               })
             ) : (
               <p className="text-gray-500 text-center col-span-1 md:col-span-2 py-6 italic">
-                {" "}
-                Không tìm thấy sự kiện nào phù hợp.{" "}
+                Không tìm thấy sự kiện nào phù hợp.
               </p>
-            )}{" "}
+            )}
           </div>
         )}
       </div>
@@ -763,15 +761,36 @@ export default function HomeGuest() {
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
       {showModalMember && (
-        <ModalMember onClose={() => setShowModalMember(false)} />
+         <ModalMember
+            onClose={() => setShowModalMember(false)}
+             userRole={user?.roles?.[0]?.name?.toUpperCase() || 'GUEST'} // Default to GUEST if no role
+             currentUserEmail={user?.email || null}
+         />
       )}
       {showModalEventRegister && (
         <ModalEventRegister
           onClose={() => setShowModalEventRegister(false)}
           onDataChanged={handleModalDataChange}
+          currentUserId={user?.id || null}
+          isLoadingUserId={isLoadingUser}
+          registeredEventIds={registeredEventIds}
+          // HomeGuest không cần createdEventIds
         />
       )}
-      {showModalChat && <ModalChat onClose={() => setShowModalChat(false)} />}
+      {showModalChat && (
+        <ModalChat
+          onClose={() => setShowModalChat(false)}
+          onSelectConversation={handleSelectChatConversation}
+        />
+      )}
+      {showModalChatDetail && selectedConversationDetail && (
+        <ModalChatDetail
+          conversation={selectedConversationDetail}
+          onClose={handleCloseChatDetailModal}
+          onGoBack={handleGoBackToChatList}
+          currentUser={user}
+        />
+      )}
     </div>
   );
 }

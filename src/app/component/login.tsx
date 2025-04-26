@@ -24,10 +24,18 @@ export default function LoginPage() {
     }
     return result;
   };
+  
+
 
   useEffect(() => {
     setCaptcha(generateCaptcha());
   }, []);
+
+  const handleRefreshCaptcha = () => {
+    setCaptcha(generateCaptcha());
+    setCaptchaInput("");
+    setError("");
+  };
 
   const handleLogin = async (e) => {
     e?.preventDefault();
@@ -104,14 +112,12 @@ export default function LoginPage() {
     } catch (error) {
       console.error("Đăng nhập thất bại:", error);
       toast.error("Đăng nhập thất bại: " + error.message);
+      handleRefreshCaptcha();
+      setPassword("");
+      return;
     }
   };
 
-  const handleRefreshCaptcha = () => {
-    setCaptcha(generateCaptcha());
-    setCaptchaInput("");
-    setError("");
-  };
 
   const handleUsernameChange = (e) => {
     const value = e.target.value;
@@ -162,7 +168,7 @@ export default function LoginPage() {
               type="text"
               placeholder="Nhập mã captcha"
               value={captchaInput}
-              onChange={(e) => setCaptchaInput(e.target.value)}
+              onChange={(e) => setCaptchaInput(e.target.value.toUpperCase())}
               className="w-1/2 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
             />
             <div className="flex items-center space-x-2">

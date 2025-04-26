@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import ContactModal from "./contact";
 
 
 const events = [
@@ -50,11 +51,7 @@ export default function Dashboard() {
 
   const handleLogin = () => router.push("/login");
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    setUser(null);
-    router.push("/login");
-  };
+  
 
   const handleRegister = (eventId) => {
     if (!registeredEvents.includes(eventId)) {
@@ -124,20 +121,8 @@ export default function Dashboard() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        {/* <input
-          type="text"
-          placeholder="🔍 Tìm kiếm sự kiện..."
-          className="w-full p-3 border rounded-lg mb-6 shadow-sm"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        /> */}
-        {user?.role === "organizer" && (
-          <Link href="/event">
-            <button className="cursor-pointer mb-4 px-5 py-2 bg-gradient-to-r from-green-400 to-green-600 hover:to-green-700 text-white rounded-lg transition shadow-md">
-              + Tạo sự kiện
-            </button>
-          </Link>
-        )}
+        
+       
 
         {selectedEvent ? (
           <div className="p-6 border rounded-lg shadow-lg bg-white">
@@ -182,24 +167,7 @@ export default function Dashboard() {
                   </h2>
                   <p className="text-gray-600">📅 {event.date}</p>
                   <p className="text-gray-600">📍 {event.location}</p>
-                  {user?.role === "student" && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRegister(event.id);
-                      }}
-                      className={`mt-3 px-4 py-2 rounded-lg text-white shadow-md transition ${
-                        registeredEvents.includes(event.id)
-                          ? "bg-gray-400"
-                          : "bg-blue-500 hover:bg-blue-700"
-                      }`}
-                      disabled={registeredEvents.includes(event.id)}
-                    >
-                      {registeredEvents.includes(event.id)
-                        ? "✅ Đã đăng ký"
-                        : "📝 Đăng ký"}
-                    </button>
-                  )}
+                  
                 </div>
               ))
             ) : (
@@ -210,7 +178,7 @@ export default function Dashboard() {
           </div>
         )}
       </div>
-      
+      {showContactModal && <ContactModal onClose={() => setShowContactModal(false)} />}
     </div>
   );
 }

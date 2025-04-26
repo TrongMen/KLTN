@@ -674,7 +674,7 @@ export default function UserMenu() {
                   <button
                     onClick={handleSaveProfile}
                     disabled={isSavingProfile || isUploadingAvatar}
-                    className={`px-5 py-2 rounded-lg font-semibold shadow transition flex items-center justify-center ${
+                    className={`px-5 py-2 rounded-lg font-semibold cursor-pointer shadow transition flex items-center justify-center ${
                       isSavingProfile || isUploadingAvatar
                         ? "bg-green-300 cursor-not-allowed"
                         : "bg-green-500 hover:bg-green-600 text-white"
@@ -716,11 +716,11 @@ export default function UserMenu() {
                       setProfileErrors({});
                     }}
                     disabled={isSavingProfile || isUploadingAvatar}
-                    className="px-5 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg font-semibold shadow transition"
+                    className="px-5 py-2 bg-gray-300 hover:bg-gray-400 cursor-pointer text-gray-800 rounded-lg font-semibold shadow transition"
                   >
-                    {" "}
-                    Hủy{" "}
-                  </button>{" "}
+                    
+                    Hủy
+                  </button>
                 </>
               ) : (
                 <>

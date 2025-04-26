@@ -321,7 +321,7 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
       return;
     }
     const promises = changes.map(({ userId, status }) => {
-      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}?isAttending=${status}`;
+      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}?isAttending=${status}`;
       return fetch(url, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
@@ -383,7 +383,7 @@ export default function ModalAttendees({ onClose }: ModalAttendeesProps) {
       return;
     }
     const promises = ids.map((userId) => {
-      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}`;
+      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}`;
       return fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },

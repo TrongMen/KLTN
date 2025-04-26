@@ -1,5 +1,5 @@
-import  HomeAdmin from  '../component/homeadmin';
+import AdminHome from  '../component/homeadmin';
 
 export default function AdminPage() {
-  return <HomeAdmin />;
+  return <AdminHome />;
 }

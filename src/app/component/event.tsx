@@ -8,7 +8,7 @@ import { BTCSection, type BTCSectionHandle } from "./BTCSection";
 import {
   ParticipantSection,
   type ParticipantSectionHandle,
-} from "./ParticipantSection";
+} from "../component/ParticipantSection";
 import EventList from "./ListEvenUser"; // File này chứa cả ConfirmDialog
 
 // --- START: Định nghĩa Types chung ---

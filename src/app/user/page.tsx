@@ -1,7 +1,7 @@
 "use client";
 
-import UserPage from "../component/homeuser";
+import UserHome from "../component/homeuser";
 
-export default function HomeUser() {
-  return <UserPage />;
+export default function UserPage() {
+  return <UserHome />;
 }

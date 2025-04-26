@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import UserMenu from "./menu";
 import ContactModal from "./contact";
-import ModalEvent from "./ModalEvent";
-import ModalAttendees from "./ModalAttende";
-import ModalMember from "./ModalMember";
-import ModalEventRegister from "./ModalEventRegisterUser";
-import ModalChat from "./ModalChat";
-import ModalChatDetail from "./ModalChatDetail";
+import HomeTabContent from "./tabs/HomeTabContent";
+import MyEventsTabContent from "./tabs/MyEventsTabContent";
+import AttendeesTabContent from "./tabs/AttendeesTabContent";
+import RegisteredEventsTabContent from "./tabs/RegisteredEventsTabContent";
+import MembersTabContent from "./tabs/MembersTabContent";
+import ChatTabContent from "./tabs/ChatTabContent";
+import CreateEventTabContent from "./tabs/CreateEventTabContent";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 
@@ -19,7 +20,7 @@ interface Participant {
   name: string;
   avatar?: string;
 }
-interface Conversation {
+export interface Conversation {
   id: number | string;
   name: string;
   isGroup: boolean;
@@ -27,7 +28,36 @@ interface Conversation {
   message: string;
   avatar?: string;
 }
+export interface EventDisplayInfo {
+  id: string;
+  title: string;
+  date: string;
+  location: string;
+  description: string;
+  speaker?: string;
+  image?: string;
+  time?: string;
+  status?: string;
+  purpose?: string;
+}
 
+export interface Role {
+  name: string;
+  description?: string;
+  permissions?: any[];
+}
+
+export interface User {
+  id: string;
+  roles?: Role[];
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  dob?: string;
+  avatar?: string;
+  email?: string;
+  gender?: boolean;
+}
 
 interface ConfirmationDialogProps {
   isOpen: boolean;
@@ -98,37 +128,6 @@ function ConfirmationDialog({
   );
 }
 
-interface EventDisplayInfo {
-  id: string;
-  title: string;
-  date: string;
-  location: string;
-  description: string;
-  speaker?: string;
-  image?: string;
-  time?: string;
-  status?: string;
-  purpose?: string;
-}
-
-interface Role {
-  name: string;
-  description?: string;
-  permissions?: any[];
-}
-
-interface User {
-  id: string;
-  roles?: Role[];
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-  dob?: string;
-  avatar?: string;
-  email?: string;
-  gender?: boolean;
-}
-
 const getWeekRange = (
   refDate: Date
 ): { startOfWeek: Date; endOfWeek: Date } => {
@@ -154,6 +153,15 @@ const getMonthRange = (
   return { startOfMonth: start, endOfMonth: end };
 };
 
+type ActiveTab =
+  | "home"
+  | "createEvent"
+  | "myEvents"
+  | "attendees"
+  | "registeredEvents"
+  | "members"
+  | "chatList";
+
 export default function UserHome() {
   const [search, setSearch] = useState("");
   const [allEvents, setAllEvents] = useState<EventDisplayInfo[]>([]);
@@ -178,15 +186,8 @@ export default function UserHome() {
   const [sortOption, setSortOption] = useState("date");
   const [timeFilterOption, setTimeFilterOption] = useState("upcoming");
   const [showContactModal, setShowContactModal] = useState(false);
-  const [showModalMember, setShowModalMember] = useState(false);
-  const [showModalEventRegister, setShowModalEventRegister] = useState(false);
-  const [showModalChat, setShowModalChat] = useState(false);
-  const [showModalChatDetail, setShowModalChatDetail] = useState(false);
-  const [selectedConversationDetail, setSelectedConversationDetail] =
-    useState<Conversation | null>(null);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [isRegistering, setIsRegistering] = useState<string | null>(null);
-  const [showModalEvent, setShowModalEvent] = useState(false);
-  const [showModalAttendees, setShowModalAttendees] = useState(false);
   const [confirmationState, setConfirmationState] = useState<{
     isOpen: boolean;
     title: string;
@@ -365,8 +366,7 @@ export default function UserHome() {
     return () => {
       isMounted = false;
     };
-  }, []);
-
+  }, [fetchAllEvents, fetchRegisteredEventIds, fetchUserCreatedEvents]);
 
   const handleLogout = async () => {
     try {
@@ -387,6 +387,7 @@ export default function UserHome() {
       setUser(null);
       setRegisteredEventIds(new Set());
       setCreatedEventIds(new Set());
+      setActiveTab("home");
       router.push("/login");
     }
   };
@@ -418,6 +419,7 @@ export default function UserHome() {
         } catch (_) {}
         if (res.status === 403) m = "Không có quyền.";
         else if (res.status === 400) m = "Yêu cầu không hợp lệ.";
+        else if (res.status === 409) m = "Bạn đã đăng ký sự kiện này rồi.";
         throw new Error(m);
       }
 
@@ -426,7 +428,7 @@ export default function UserHome() {
         toast.success(`Đã đăng ký "${event.title}"!`);
         setRegisteredEventIds((prev) => new Set(prev).add(event.id));
       } else {
-        throw new Error(data.message || "Lỗi đăng ký.");
+        throw new Error(data.message || "Lỗi đăng ký không xác định.");
       }
     } catch (err: any) {
       console.error("Lỗi đăng ký:", err);
@@ -447,7 +449,17 @@ export default function UserHome() {
       isRegistering ||
       createdEventIds.has(event.id)
     )
-      return;
+     {
+         if (registeredEventIds.has(event.id)) toast.error("Bạn đã đăng ký sự kiện này.");
+         if (createdEventIds.has(event.id)) toast.error("Bạn là người tạo sự kiện này.");
+         return;
+     }
+     const isEventUpcoming = new Date(event.date) >= new Date(new Date().setHours(0, 0, 0, 0));
+     if (!isEventUpcoming) {
+         toast.error("Sự kiện này đã diễn ra.");
+         return;
+     }
+
 
     setConfirmationState({
       isOpen: true,
@@ -458,14 +470,18 @@ export default function UserHome() {
           <strong className="text-indigo-600">"{event.title}"</strong>?
         </>
       ),
-      onConfirm: () => executeRegistration(event),
+      onConfirm: () => {
+          setConfirmationState({ isOpen: false, title: "", message: "", onConfirm: null });
+          executeRegistration(event);
+      },
+      onCancel: () => setConfirmationState({ isOpen: false, title: "", message: "", onConfirm: null }),
       confirmVariant: "primary",
       confirmText: "Đăng ký",
       cancelText: "Hủy",
     });
   };
 
-  const handleModalDataChange = useCallback(
+  const handleRegistrationChange = useCallback(
     (eventId: string, registered: boolean) => {
       setRegisteredEventIds((prevIds) => {
         const newIds = new Set(prevIds);
@@ -480,314 +496,233 @@ export default function UserHome() {
     []
   );
 
-  const handleEvent = (event: EventDisplayInfo) => setSelectedEvent(event);
-
-  const processedEvents = useMemo(() => {
-    let evts = [...allEvents];
-
-    if (search) {
-      const l = search.toLowerCase();
-      evts = evts.filter(
-        (e) =>
-          e.title.toLowerCase().includes(l) ||
-          e.location.toLowerCase().includes(l)
-      );
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (timeFilterOption === "upcoming") {
-      evts = evts.filter((e) => new Date(e.date) >= today);
-    } else if (timeFilterOption === "thisWeek") {
-      const { startOfWeek, endOfWeek } = getWeekRange(new Date());
-      evts = evts.filter((e) => {
-        const d = new Date(e.date);
-        return d >= startOfWeek && d <= endOfWeek;
-      });
-    } else if (timeFilterOption === "thisMonth") {
-      const { startOfMonth, endOfMonth } = getMonthRange(new Date());
-      evts = evts.filter((e) => {
-        const d = new Date(e.date);
-        return d >= startOfMonth && d <= endOfMonth;
-      });
-    }
-
-    if (sortOption === "az") {
-      evts.sort((a, b) => a.title.localeCompare(b.title));
-    } else {
-      evts.sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-      );
-    }
-    return evts;
-  }, [allEvents, search, timeFilterOption, sortOption]);
-
-  const isPageLoading =
-    isLoadingEvents ||
-    isLoadingUser ||
-    isLoadingRegisteredIds ||
-    isLoadingCreatedEventIds;
-
-
-  const handleSelectChatConversation = (conversation: Conversation) => {
-    setSelectedConversationDetail(conversation);
-    setShowModalChat(false);
-    setShowModalChatDetail(true);
+  const handleEventClick = (event: EventDisplayInfo) => {
+      setSelectedEvent(event);
   };
+  const handleBackToList = () => {
+        setSelectedEvent(null);
+  }
 
-  const handleCloseChatDetailModal = () => {
-    setShowModalChatDetail(false);
-    setSelectedConversationDetail(null);
-  };
+  const isPageLoading = isLoadingUser || (activeTab === 'home' && (isLoadingEvents || isLoadingRegisteredIds || isLoadingCreatedEventIds));
 
-  const handleGoBackToChatList = () => {
-    setShowModalChatDetail(false);
-    setSelectedConversationDetail(null);
-    setShowModalChat(true); // Mở lại danh sách chat
+  const getTabButtonClasses = (tabName: ActiveTab): string => {
+    const baseClasses = "cursor-pointer px-4 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition";
+    const activeClasses = "text-white";
+    const inactiveClasses = "hover:bg-opacity-80";
+
+    let specificBg = "";
+    let specificText = "";
+    let specificHoverBg = "";
+
+    switch (tabName) {
+        case 'home':
+            specificBg = activeTab === tabName ? 'bg-indigo-600' : 'bg-indigo-100';
+            specificText = activeTab === tabName ? '' : 'text-indigo-800';
+            specificHoverBg = activeTab === tabName ? 'hover:bg-indigo-700' : 'hover:bg-indigo-200';
+            break;
+        case 'createEvent':
+             specificBg = activeTab === tabName ? 'bg-cyan-600' : 'bg-cyan-100';
+             specificText = activeTab === tabName ? '' : 'text-cyan-800';
+             specificHoverBg = activeTab === tabName ? 'hover:bg-cyan-700' : 'hover:bg-cyan-200';
+             break;
+        case 'myEvents':
+            specificBg = activeTab === tabName ? 'bg-blue-600' : 'bg-blue-100';
+            specificText = activeTab === tabName ? '' : 'text-blue-800';
+            specificHoverBg = activeTab === tabName ? 'hover:bg-blue-700' : 'hover:bg-blue-200';
+            break;
+        case 'attendees':
+            specificBg = activeTab === tabName ? 'bg-teal-600' : 'bg-teal-100';
+            specificText = activeTab === tabName ? '' : 'text-teal-800';
+            specificHoverBg = activeTab === tabName ? 'hover:bg-teal-700' : 'hover:bg-teal-200';
+            break;
+        case 'registeredEvents':
+            specificBg = activeTab === tabName ? 'bg-green-600' : 'bg-green-100';
+            specificText = activeTab === tabName ? '' : 'text-green-800';
+            specificHoverBg = activeTab === tabName ? 'hover:bg-green-700' : 'hover:bg-green-200';
+            break;
+        case 'members':
+            specificBg = activeTab === tabName ? 'bg-pink-600' : 'bg-pink-100';
+            specificText = activeTab === tabName ? '' : 'text-pink-800';
+            specificHoverBg = activeTab === tabName ? 'hover:bg-pink-700' : 'hover:bg-pink-200';
+            break;
+        case 'chatList':
+            specificBg = activeTab === tabName ? 'bg-purple-600' : 'bg-purple-100';
+            specificText = activeTab === tabName ? '' : 'text-purple-800';
+            specificHoverBg = activeTab === tabName ? 'hover:bg-purple-700' : 'hover:bg-purple-200';
+            break;
+        default:
+            specificBg = 'bg-gray-100';
+            specificText = 'text-gray-800';
+            specificHoverBg = 'hover:bg-gray-200';
+    }
+
+    return `${baseClasses} ${specificBg} ${activeTab === tabName ? activeClasses : specificText} ${activeTab !== tabName ? inactiveClasses : ''} ${specificHoverBg}`;
   };
 
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
-      <Toaster toastOptions={{ duration: 3000 }} />
+      <Toaster toastOptions={{ duration: 3000 }} position="top-center"/>
       <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            <Link href="/about">
-              <span className="cursor-pointer hover:text-gray-300">
-                Giới thiệu
-              </span>
+             <Link href="/about">
+               <span className="cursor-pointer hover:text-gray-300">Giới thiệu</span>
             </Link>
-            <span
-              className="cursor-pointer hover:text-gray-300"
-              onClick={() => setShowContactModal(true)}
+             <span
+                className="cursor-pointer hover:text-gray-300"
+                onClick={() => setShowContactModal(true)}
             >
-              Liên hệ
+                Liên hệ
             </span>
-            <UserMenu user={user} onLogout={handleLogout} />
+             {!isLoadingUser && <UserMenu user={user} onLogout={handleLogout} />}
+             {isLoadingUser && <span className="text-gray-400">Đang tải...</span>}
+             {!isLoadingUser && !user && (
+                 <Link href="/login">
+                      <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
+                          Đăng nhập
+                      </span>
+                 </Link>
+             )}
           </div>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 flex justify-center gap-8 border border-gray-200">
+      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200">
         <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
-          <button
-            onClick={() => setShowModalEvent(true)}
-            className=" cursor-pointer px-4 py-2 text-xs sm:text-sm bg-blue-100 text-blue-800 hover:bg-blue-200 font-semibold rounded-full shadow-sm transition"
-          >
-            🛠 Sự kiện của tôi
-          </button>
-          <button
-            onClick={() => setShowModalAttendees(true)}
-            className="cursor-pointer px-4 py-2 text-xs sm:text-sm bg-teal-100 text-teal-800 hover:bg-teal-200 font-semibold rounded-full shadow-sm transition"
-          >
-            ✅ Người tham gia
-          </button>
-          <button
-            onClick={() => setShowModalEventRegister(true)}
-            className="px-4 cursor-pointer py-2 text-xs sm:text-sm bg-green-100 text-green-800 hover:bg-green-200 font-semibold rounded-full shadow-sm transition"
-          >
-            📋 Danh sách sự kiện
-          </button>
-          <button
-            onClick={() => setShowModalMember(true)}
-            className="px-4 cursor-pointer py-2 text-xs sm:text-sm bg-pink-100 text-pink-800 hover:bg-pink-200 font-semibold rounded-full shadow-sm transition"
-          >
-            👥 Thành viên CLB
-          </button>
-          <button
-            onClick={() => setShowModalChat(true)}
-            className="cursor-pointer px-4 py-2 text-xs sm:text-sm bg-purple-100 text-purple-800 hover:bg-purple-200 font-semibold rounded-full shadow-sm transition"
-          >
-            💬 Danh sách chat
-          </button>
+            <button
+              onClick={() => setActiveTab("home")}
+              className={getTabButtonClasses("home")}
+            >
+              🎉 Trang chủ
+            </button>
+
+            {user && (
+                <button
+                onClick={() => setActiveTab("createEvent")}
+                className={getTabButtonClasses("createEvent")}
+                >
+                ➕ Tạo sự kiện
+                </button>
+            )}
+
+          {user && (
+              <>
+                 <button
+                    onClick={() => setActiveTab("myEvents")}
+                    className={getTabButtonClasses("myEvents")}
+                >
+                    🛠 Sự kiện của tôi
+                </button>
+                 <button
+                    onClick={() => setActiveTab("attendees")}
+                    className={getTabButtonClasses("attendees")}
+                 >
+                    ✅ Người tham gia
+                </button>
+                 <button
+                    onClick={() => setActiveTab("registeredEvents")}
+                    className={getTabButtonClasses("registeredEvents")}
+                >
+                    📋 Sự kiện đã đăng ký
+                </button>
+                <button
+                    onClick={() => setActiveTab("members")}
+                    className={getTabButtonClasses("members")}
+                >
+                    👥 Thành viên CLB
+                </button>
+                <button
+                    onClick={() => setActiveTab("chatList")}
+                    className={getTabButtonClasses("chatList")}
+                 >
+                    💬 Danh sách chat
+                </button>
+              </>
+          )}
+           {!user && !isLoadingUser && (
+               <span className="text-sm text-gray-500 italic p-2">Đăng nhập để xem các mục khác</span>
+           )}
+
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-blue-600">
-            🎉 Trang chủ Sự kiện
-          </h1>
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-            <div className="flex-1 sm:flex-none">
-              <select
-                id="sortOptionGuest"
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="date">📅 Ngày gần nhất</option>
-                <option value="az">🔤 A-Z</option>
-              </select>
-            </div>
-            <div className="flex-1 sm:flex-none">
-              <select
-                id="timeFilterOptionGuest"
-                value={timeFilterOption}
-                onChange={(e) => setTimeFilterOption(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="upcoming">⏳ Sắp diễn ra</option>
-                <option value="thisWeek">🗓️ Tuần này</option>
-                <option value="thisMonth">🗓️ Tháng này</option>
-                <option value="all">♾️ Tất cả</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div className="relative w-full mb-6">
-          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-            🔍
-          </span>
-          <input
-            id="searchGuest"
-            type="text"
-            placeholder="Tìm sự kiện..."
-            className="w-full p-3 pl-10 pr-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
         {isPageLoading ? (
-          <p className="text-center text-gray-500 italic py-6">
-            Đang tải dữ liệu...
-          </p>
-        ) : errorEvents ? (
-          <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-            {errorEvents}
-          </p>
-        ) : selectedEvent ? (
-               <div className="p-6 border rounded-lg shadow-lg bg-gray-50">
-                   <h2 className="text-xl font-bold mb-4">{selectedEvent.title}</h2>
-                   <p><strong>Ngày:</strong> {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}</p>
-                   <p><strong>Địa điểm:</strong> {selectedEvent.location}</p>
-                   <p className="mt-4 whitespace-pre-wrap">{selectedEvent.description}</p>
-                   <button
-                      onClick={() => setSelectedEvent(null)}
-                      className="mt-6 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md"
-                   >
-                      Quay lại danh sách
-                   </button>
-               </div>
+          <p className="text-center text-gray-500 italic py-6">Đang tải dữ liệu...</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {processedEvents.length > 0 ? (
-              processedEvents.map((event) => {
-                const isRegistered = registeredEventIds.has(event.id);
-                const isCreatedByUser = createdEventIds.has(event.id);
-                const processing = isRegistering === event.id;
-                const isEventUpcoming =
-                  new Date(event.date) >=
-                  new Date(new Date().setHours(0, 0, 0, 0));
-                const canRegister = !!user?.id && isEventUpcoming;
-
-                return (
-                  <div
-                    key={event.id}
-                    className="p-5 bg-white shadow-md rounded-xl cursor-pointer transform transition hover:scale-[1.03] hover:shadow-lg flex flex-col justify-between border border-transparent hover:border-blue-300"
-                    onClick={() => handleEvent(event)}
-                  >
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
-                        {event.title}
-                      </h2>
-                      <p className="text-sm text-gray-600">
-                        📅 {new Date(event.date).toLocaleDateString("vi-VN")}
-                      </p>
-                      <p className="text-sm text-gray-600 mb-3">
-                        📍 {event.location}
-                      </p>
-                    </div>
-                    {isCreatedByUser ? (
-                       <button
-                        className="w-full mt-3 px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
-                        disabled
-                       >
-                         ✨ Sự kiện của bạn
-                       </button>
-                    ) : canRegister ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRegister(event);
-                        }}
-                        className={`w-full mt-3 px-4 py-2 rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center ${
-                          isRegistered
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : processing
-                            ? "bg-blue-300 cursor-wait"
-                            : "bg-blue-500 hover:bg-blue-600"
-                        }`}
-                        disabled={
-                          isRegistered ||
-                          processing ||
-                          isLoadingRegisteredIds ||
-                          isLoadingCreatedEventIds
-                        }
-                      >
-                        {isRegistered ? (
-                          <span>✅ Đã đăng ký</span>
-                        ) : processing ? (
-                          <>
-                            <svg
-                              className="animate-spin -ml-1 mr-2 h-4 w-4"
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                            >
-                              <circle
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                                className="opacity-25"
-                              ></circle>
-                              <path
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                className="opacity-75"
-                              ></path>
-                            </svg>
-                            ...
-                          </>
-                        ) : (
-                          <span className="cursor-pointer">📝 Đăng ký</span>
-                        )}
-                      </button>
-                    ) : (
-                      <>
-                        {user?.id && !isEventUpcoming && (
-                          <button
-                            className="w-full mt-3 px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
-                            disabled
-                          >
-                            Đã kết thúc
-                          </button>
-                        )}
-                        {!user?.id && isEventUpcoming && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); router.push("/login"); }}
-                            className="w-full mt-3 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
-                          >
-                            Đăng nhập để đăng ký
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-gray-500 text-center col-span-1 md:col-span-2 py-6 italic">
-                Không tìm thấy sự kiện.
-              </p>
+          <>
+            {activeTab === "home" && (
+              <HomeTabContent
+                allEvents={allEvents}
+                isLoadingEvents={isLoadingEvents}
+                errorEvents={errorEvents}
+                registeredEventIds={registeredEventIds}
+                createdEventIds={createdEventIds}
+                user={user}
+                isLoadingRegisteredIds={isLoadingRegisteredIds}
+                isLoadingCreatedEventIds={isLoadingCreatedEventIds}
+                isRegistering={isRegistering}
+                onRegister={handleRegister}
+                onEventClick={handleEventClick}
+                selectedEvent={selectedEvent}
+                onBackToList={handleBackToList}
+                search={search}
+                setSearch={setSearch}
+                sortOption={sortOption}
+                setSortOption={setSortOption}
+                timeFilterOption={timeFilterOption}
+                setTimeFilterOption={setTimeFilterOption}
+              />
             )}
-          </div>
+            {activeTab === "createEvent" && user && (
+              <CreateEventTabContent
+                 user={user}
+                 onEventCreated={() => {
+                     fetchAllEvents();
+                     if(user?.id) fetchUserCreatedEvents(user.id);
+                     setActiveTab('myEvents');
+                     toast.success("Sự kiện đã được tạo thành công và đang chờ duyệt!");
+                 }}
+               />
+            )}
+            {activeTab === "myEvents" && user && (
+              <MyEventsTabContent
+                user={user}
+              />
+            )}
+            {activeTab === "attendees" && user && (
+                <AttendeesTabContent
+                    user={user}
+                />
+            )}
+            {activeTab === "registeredEvents" && user && (
+              <RegisteredEventsTabContent
+                currentUserId={user.id}
+                isLoadingUserId={isLoadingUser}
+                registeredEventIds={registeredEventIds}
+                createdEventIds={createdEventIds}
+                onRegistrationChange={handleRegistrationChange}
+              />
+            )}
+            {activeTab === "members" && user && (
+                <MembersTabContent
+                    user={user}
+                    userRole={user.roles?.[0]?.name?.toUpperCase() || 'UNKNOWN'}
+                    currentUserEmail={user.email || null}
+                 />
+            )}
+            {activeTab === "chatList" && user && (
+                <ChatTabContent
+                    currentUser={user}
+                />
+            )}
+
+             {activeTab !== 'home' && !user && !isLoadingUser && (
+                 <p className="text-center text-red-500 py-6">Vui lòng đăng nhập để truy cập mục này.</p>
+             )}
+          </>
         )}
       </div>
 
@@ -800,58 +735,13 @@ export default function UserHome() {
         cancelText={confirmationState.cancelText}
         onConfirm={() => {
           if (confirmationState.onConfirm) confirmationState.onConfirm();
-          setConfirmationState({
-            isOpen: false, title: "", message: "", onConfirm: null,
-          });
+          setConfirmationState({ isOpen: false, title: "", message: "", onConfirm: null });
         }}
-        onCancel={() =>
-          setConfirmationState({
-            isOpen: false, title: "", message: "", onConfirm: null,
-          })
-        }
+        onCancel={() => setConfirmationState({ isOpen: false, title: "", message: "", onConfirm: null })}
       />
 
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
-      )}
-      {showModalEvent && (
-        <ModalEvent onClose={() => setShowModalEvent(false)} />
-      )}
-      {showModalAttendees && (
-        <ModalAttendees onClose={() => setShowModalAttendees(false)} />
-      )}
-      {showModalMember && (
-         <ModalMember
-            onClose={() => setShowModalMember(false)}
-            userRole={user?.roles?.[0]?.name?.toUpperCase() || 'UNKNOWN'}
-            currentUserEmail={user?.email || null}
-         />
-      )}
-      {showModalEventRegister && (
-        <ModalEventRegister
-          onClose={() => setShowModalEventRegister(false)}
-          onDataChanged={handleModalDataChange}
-          currentUserId={user?.id || null}
-          isLoadingUserId={isLoadingUser}
-          registeredEventIds={registeredEventIds}
-          createdEventIds={createdEventIds}
-        />
-      )}
-
-      {showModalChat && (
-        <ModalChat
-          onClose={() => setShowModalChat(false)}
-          onSelectConversation={handleSelectChatConversation}
-        />
-      )}
-
-      {showModalChatDetail && selectedConversationDetail && (
-        <ModalChatDetail
-        conversation={selectedConversationDetail}
-        onClose={handleCloseChatDetailModal}
-        onGoBack={handleGoBackToChatList}
-        currentUser={user}
-        />
       )}
 
     </div>

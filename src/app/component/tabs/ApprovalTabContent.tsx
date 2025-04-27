@@ -6,271 +6,284 @@ import { User as MainUserType } from "../homeadmin"; // Adjust path if needed
 
 // Interfaces
 type EventType = {
-  id: string;
-  name: string;
-  time?: string;
-  location?: string;
-  speaker?: string;
-  content?: string;
-  status?: "PENDING" | "APPROVED" | "REJECTED";
-  rejectionReason?: string;
+    id: string;
+    name: string;
+    time?: string;
+    location?: string;
+    speaker?: string;
+    content?: string;
+    status?: "PENDING" | "APPROVED" | "REJECTED";
+    rejectionReason?: string;
 };
 
 interface ApprovalTabContentProps {
-  user: MainUserType | null;
+    user: MainUserType | null;
 }
 
-// --- Helper Functions for Date Filtering ---
+// --- Helper Functions for Date Comparison ---
+
 const isToday = (date: Date): boolean => {
-  const today = new Date();
-  return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
-  );
+    const today = new Date();
+    return (
+        date.getDate() === today.getDate() &&
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() === today.getFullYear()
+    );
 };
 
 const isThisWeek = (date: Date): boolean => {
-  const today = new Date();
-  const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
-  const firstDayOfWeek = new Date(today);
-  const diff = firstDayOfWeek.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
-  firstDayOfWeek.setDate(diff);
-  firstDayOfWeek.setHours(0, 0, 0, 0);
+    const today = new Date();
+    const currentDay = today.getDay();
+    const firstDayOfWeek = new Date(today);
+    // Adjust to Monday (day 1, Sunday is 0)
+    const diff = firstDayOfWeek.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+    firstDayOfWeek.setDate(diff);
+    firstDayOfWeek.setHours(0, 0, 0, 0);
 
-  const lastDayOfWeek = new Date(firstDayOfWeek);
-  lastDayOfWeek.setDate(lastDayOfWeek.getDate() + 6);
-  lastDayOfWeek.setHours(23, 59, 59, 999);
+    const lastDayOfWeek = new Date(firstDayOfWeek);
+    lastDayOfWeek.setDate(lastDayOfWeek.getDate() + 6);
+    lastDayOfWeek.setHours(23, 59, 59, 999);
 
-  return date >= firstDayOfWeek && date <= lastDayOfWeek;
+    return date >= firstDayOfWeek && date <= lastDayOfWeek;
 };
 
-
-const isNextMonth = (date: Date): boolean => {
-  const today = new Date();
-  const firstDayNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  firstDayNextMonth.setHours(0, 0, 0, 0);
-  const lastDayNextMonth = new Date(today.getFullYear(), today.getMonth() + 2, 0); // Day 0 of month after next gets last day of next month
-  lastDayNextMonth.setHours(23, 59, 59, 999);
-  return date >= firstDayNextMonth && date <= lastDayNextMonth;
+// Renamed and logic updated
+const isThisMonth = (date: Date): boolean => {
+    const today = new Date();
+    return (
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() === today.getFullYear()
+    );
 };
 
 const formatDateForInput = (date: Date | null | undefined): string => {
-  if (!date) return "";
-  try {
-      if (Object.prototype.toString.call(date) === '[object Date]' && !isNaN(date.getTime())) {
+    if (!date) return "";
+    try {
+        if (Object.prototype.toString.call(date) === '[object Date]' && !isNaN(date.getTime())) {
             const year = date.getFullYear();
             const month = (date.getMonth() + 1).toString().padStart(2, "0");
             const day = date.getDate().toString().padStart(2, "0");
             return `${year}-${month}-${day}`;
-      }
-  } catch (e) {
-      console.error("Error formatting date:", date, e);
-  }
-  return "";
+        }
+    } catch (e) {
+        console.error("Error formatting date:", date, e);
+    }
+    return "";
 };
 
 
 // --- Main Tab Component ---
 const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({ user }) => {
-  const [tab, setTab] = useState<"pending" | "approved" | "rejected">("pending");
-  const [pendingEvents, setPendingEvents] = useState<EventType[]>([]);
-  const [approvedEvents, setApprovedEvents] = useState<EventType[]>([]);
-  const [rejectedEvents, setRejectedEvents] = useState<EventType[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [currentEvent, setCurrentEvent] = useState<EventType | null>(null);
-  const [rejectionReason, setRejectReason] = useState("");
+    const [tab, setTab] = useState<"pending" | "approved" | "rejected">("pending");
+    const [pendingEvents, setPendingEvents] = useState<EventType[]>([]);
+    const [approvedEvents, setApprovedEvents] = useState<EventType[]>([]);
+    const [rejectedEvents, setRejectedEvents] = useState<EventType[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [showRejectModal, setShowRejectModal] = useState(false);
+    const [currentEvent, setCurrentEvent] = useState<EventType | null>(null);
+    const [rejectionReason, setRejectReason] = useState("");
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortOrder, setSortOrder] = useState<"default" | "az" | "za">("default");
-  const [dateFilter, setDateFilter] = useState<"all" | "today" | "thisWeek" | "nextMonth" | "range">("all");
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
-  const [viewMode, setViewMode] = useState<"card" | "list">("card");
+    const [searchTerm, setSearchTerm] = useState("");
+    const [sortOrder, setSortOrder] = useState<"default" | "az" | "za">("default");
+    // Updated dateFilter state type and default value if needed
+    const [dateFilter, setDateFilter] = useState<"all" | "today" | "thisWeek" | "thisMonth" | "range">("all"); // Changed "nextMonth" to "thisMonth"
+    const [startDate, setStartDate] = useState<Date | null>(null);
+    const [endDate, setEndDate] = useState<Date | null>(null);
+    const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
 
-  const fetchEventsByStatus = useCallback(async (status: "PENDING" | "APPROVED" | "REJECTED"): Promise<EventType[]> => {
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-        toast.error("Token không tồn tại. Vui lòng đăng nhập lại.");
-        return [];
-    }
-    const headers = { Authorization: `Bearer ${token}` };
-    const url = `http://localhost:8080/identity/api/events/status?status=${status}`;
-    try {
-        const res = await fetch(url, { headers, cache: 'no-store' });
-
-        if (!res.ok) {
-          let errorMsg = `Failed to fetch ${status} events`;
-          try {
-            const errorData = await res.json();
-            errorMsg = errorData.message || `Lỗi ${res.status}`;
-          } catch (_) {
-              errorMsg = `Lỗi ${res.status}`;
-          }
-          throw new Error(errorMsg);
+    const fetchEventsByStatus = useCallback(async (status: "PENDING" | "APPROVED" | "REJECTED"): Promise<EventType[]> => {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            toast.error("Token không tồn tại. Vui lòng đăng nhập lại.");
+            return [];
         }
-        const data = await res.json();
-        if (data.code === 1000 && Array.isArray(data.result)) {
-          return data.result;
-        } else {
-          throw new Error(data.message || `Dữ liệu không hợp lệ cho ${status} events`);
-        }
-    } catch (error: any) {
-        console.error(`Error fetching ${status} events:`, error);
-        toast.error(`Lỗi tải sự kiện ${status.toLowerCase()}: ${error.message}`);
-        return [];
-    }
-  }, []);
-
-
-  const fetchAllEventData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [pending, approved, rejected] = await Promise.all([
-        fetchEventsByStatus("PENDING"),
-        fetchEventsByStatus("APPROVED"),
-        fetchEventsByStatus("REJECTED"),
-      ]);
-      setPendingEvents(pending);
-      setApprovedEvents(approved);
-      setRejectedEvents(rejected);
-    } catch (error: any) {
-      console.error("Error fetching all event data:", error);
-       setPendingEvents([]);
-       setApprovedEvents([]);
-       setRejectedEvents([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [fetchEventsByStatus]);
-
-
-  useEffect(() => {
-    fetchAllEventData();
-  }, [fetchAllEventData]);
-
-  const handleApprove = async (event: EventType) => {
-    const loadingToastId = toast.loading("Đang phê duyệt...");
-    try {
-      const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("Token không tồn tại.");
-      const url = `http://localhost:8080/identity/api/events/${event.id}/approve`;
-      const res = await fetch(url, { method: "PUT", headers: { Authorization: `Bearer ${token}` } });
-
-      if (!res.ok) {
-        let errorMsg = "Phê duyệt thất bại";
-        try { const errorData = await res.json(); errorMsg = errorData.message || `Phê duyệt thất bại (Status: ${res.status})`; }
-        catch (_) { errorMsg = `Phê duyệt thất bại (Status: ${res.status})`; }
-        throw new Error(errorMsg);
-      }
-      const data = await res.json();
-      if (data.code === 1000) {
-        toast.success("Đã phê duyệt sự kiện!", { id: loadingToastId });
-        await fetchAllEventData();
-      } else {
-        throw new Error(data.message || "Phê duyệt thành công nhưng có phản hồi không mong đợi.");
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Lỗi khi phê duyệt sự kiện", { id: loadingToastId });
-      console.error("Approve status error:", error);
-    }
-  };
-
-  const openRejectModal = (event: EventType) => {
-    setCurrentEvent(event);
-    setShowRejectModal(true);
-    setRejectReason("");
-  };
-
-  const handleReject = async () => {
-    if (!currentEvent) return;
-    const trimmedReason = rejectionReason.trim();
-    if (!trimmedReason) { toast.error("Vui lòng nhập lý do từ chối!"); return; }
-
-    const loadingToastId = toast.loading("Đang từ chối...");
-    try {
-      const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("Token không tồn tại.");
-      const url = `http://localhost:8080/identity/api/events/${currentEvent.id}/reject?reason=${encodeURIComponent(trimmedReason)}`;
-      const res = await fetch(url, { method: "PUT", headers: { Authorization: `Bearer ${token}` } });
-
-      if (!res.ok) {
-        let errorMsg = "Từ chối thất bại";
-        try { const errorData = await res.json(); errorMsg = errorData.message || `Từ chối thất bại (Status: ${res.status})`; }
-        catch (_) { errorMsg = `Từ chối thất bại (Status: ${res.status})`; }
-        throw new Error(errorMsg);
-      }
-      const data = await res.json();
-      if (data.code === 1000) {
-        toast.success(`Đã từ chối sự kiện.`, { id: loadingToastId });
-        setShowRejectModal(false);
-        setCurrentEvent(null);
-        setRejectReason("");
-        await fetchAllEventData();
-      } else {
-        throw new Error(data.message || "Từ chối thành công nhưng có phản hồi không mong đợi.");
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Lỗi khi từ chối sự kiện", { id: loadingToastId });
-      console.error("Reject status error:", error);
-    }
-  };
-
-  const displayedEvents = useMemo(() => {
-    let currentList: EventType[] = [];
-    if (tab === "pending") currentList = pendingEvents;
-    else if (tab === "approved") currentList = approvedEvents;
-    else if (tab === "rejected") currentList = rejectedEvents;
-
-    let filteredByDate = currentList.filter(event => {
-        if (!event.time && dateFilter !== 'all') return false;
-        if (dateFilter === 'all') return true;
-        if (!event.time) return false;
+        const headers = { Authorization: `Bearer ${token}` };
+        const url = `http://localhost:8080/identity/api/events/status?status=${status}`;
         try {
-            const eventDate = new Date(event.time);
-            if (isNaN(eventDate.getTime())) return false;
-            switch (dateFilter) {
-                case 'today': return isToday(eventDate);
-                case 'thisWeek': return isThisWeek(eventDate);
-                case 'nextMonth': return isNextMonth(eventDate);
-                case 'range':
-                    if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return false;
-                    const startOfDay = new Date(startDate); startOfDay.setHours(0, 0, 0, 0);
-                    const endOfDay = new Date(endDate); endOfDay.setHours(23, 59, 59, 999);
-                    return eventDate >= startOfDay && eventDate <= endOfDay;
-                default: return true;
+            const res = await fetch(url, { headers, cache: 'no-store' });
+
+            if (!res.ok) {
+                let errorMsg = `Failed to fetch ${status} events`;
+                try {
+                    const errorData = await res.json();
+                    errorMsg = errorData.message || `Lỗi ${res.status}`;
+                } catch (_) {
+                    errorMsg = `Lỗi ${res.status}`;
+                }
+                throw new Error(errorMsg);
             }
-        } catch (e) { return false; }
-    });
+            const data = await res.json();
+            if (data.code === 1000 && Array.isArray(data.result)) {
+                return data.result;
+            } else {
+                throw new Error(data.message || `Dữ liệu không hợp lệ cho ${status} events`);
+            }
+        } catch (error: any) {
+            console.error(`Error fetching ${status} events:`, error);
+            toast.error(`Lỗi tải sự kiện ${status.toLowerCase()}: ${error.message}`);
+            return [];
+        }
+    }, []);
 
-    let filteredByName = filteredByDate;
-    if (searchTerm.trim()) {
-      filteredByName = filteredByDate.filter(event =>
-        event.name.toLowerCase().includes(searchTerm.trim().toLowerCase())
-      );
-    }
 
-    let sortedList = [...filteredByName];
-    if (sortOrder === "az") {
-      sortedList.sort((a, b) => a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }));
-    } else if (sortOrder === "za") {
-      sortedList.sort((a, b) => b.name.localeCompare(a.name, 'vi', { sensitivity: 'base' }));
-    } else {
-        sortedList.sort((a, b) => {
-             const timeA = a.time ? new Date(a.time).getTime() : 0;
-             const timeB = b.time ? new Date(b.time).getTime() : 0;
-             const validTimeA = !isNaN(timeA) && timeA > 0;
-             const validTimeB = !isNaN(timeB) && timeB > 0;
-             if (validTimeA && validTimeB) return timeB - timeA;
-             if (validTimeA) return -1;
-             if (validTimeB) return 1;
-             return 0;
+    const fetchAllEventData = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const [pending, approved, rejected] = await Promise.all([
+                fetchEventsByStatus("PENDING"),
+                fetchEventsByStatus("APPROVED"),
+                fetchEventsByStatus("REJECTED"),
+            ]);
+            setPendingEvents(pending);
+            setApprovedEvents(approved);
+            setRejectedEvents(rejected);
+        } catch (error: any) {
+            console.error("Error fetching all event data:", error);
+            setPendingEvents([]);
+            setApprovedEvents([]);
+            setRejectedEvents([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [fetchEventsByStatus]);
+
+
+    useEffect(() => {
+        fetchAllEventData();
+    }, [fetchAllEventData]);
+
+    const handleApprove = async (event: EventType) => {
+        const loadingToastId = toast.loading("Đang phê duyệt...");
+        try {
+            const token = localStorage.getItem("authToken");
+            if (!token) throw new Error("Token không tồn tại.");
+            const url = `http://localhost:8080/identity/api/events/${event.id}/approve`;
+            const res = await fetch(url, { method: "PUT", headers: { Authorization: `Bearer ${token}` } });
+
+            if (!res.ok) {
+                let errorMsg = "Phê duyệt thất bại";
+                try { const errorData = await res.json(); errorMsg = errorData.message || `Phê duyệt thất bại (Status: ${res.status})`; }
+                catch (_) { errorMsg = `Phê duyệt thất bại (Status: ${res.status})`; }
+                throw new Error(errorMsg);
+            }
+            const data = await res.json();
+            if (data.code === 1000) {
+                toast.success("Đã phê duyệt sự kiện!", { id: loadingToastId });
+                await fetchAllEventData(); // Refresh data
+            } else {
+                throw new Error(data.message || "Phê duyệt thành công nhưng có phản hồi không mong đợi.");
+            }
+        } catch (error: any) {
+            toast.error(error.message || "Lỗi khi phê duyệt sự kiện", { id: loadingToastId });
+            console.error("Approve status error:", error);
+        }
+    };
+
+    const openRejectModal = (event: EventType) => {
+        setCurrentEvent(event);
+        setShowRejectModal(true);
+        setRejectReason("");
+    };
+
+    const handleReject = async () => {
+        if (!currentEvent) return;
+        const trimmedReason = rejectionReason.trim();
+        if (!trimmedReason) { toast.error("Vui lòng nhập lý do từ chối!"); return; }
+
+        const loadingToastId = toast.loading("Đang từ chối...");
+        try {
+            const token = localStorage.getItem("authToken");
+            if (!token) throw new Error("Token không tồn tại.");
+            const url = `http://localhost:8080/identity/api/events/${currentEvent.id}/reject?reason=${encodeURIComponent(trimmedReason)}`;
+            const res = await fetch(url, { method: "PUT", headers: { Authorization: `Bearer ${token}` } });
+
+            if (!res.ok) {
+                let errorMsg = "Từ chối thất bại";
+                try { const errorData = await res.json(); errorMsg = errorData.message || `Từ chối thất bại (Status: ${res.status})`; }
+                catch (_) { errorMsg = `Từ chối thất bại (Status: ${res.status})`; }
+                throw new Error(errorMsg);
+            }
+            const data = await res.json();
+            if (data.code === 1000) {
+                toast.success(`Đã từ chối sự kiện.`, { id: loadingToastId });
+                setShowRejectModal(false);
+                setCurrentEvent(null);
+                setRejectReason("");
+                await fetchAllEventData(); // Refresh data
+            } else {
+                throw new Error(data.message || "Từ chối thành công nhưng có phản hồi không mong đợi.");
+            }
+        } catch (error: any) {
+            toast.error(error.message || "Lỗi khi từ chối sự kiện", { id: loadingToastId });
+            console.error("Reject status error:", error);
+        }
+    };
+
+    // Memoized calculation for displayed events based on filters and sorting
+    const displayedEvents = useMemo(() => {
+        let currentList: EventType[] = [];
+        if (tab === "pending") currentList = pendingEvents;
+        else if (tab === "approved") currentList = approvedEvents;
+        else if (tab === "rejected") currentList = rejectedEvents;
+
+        // Filter by date
+        let filteredByDate = currentList.filter(event => {
+            if (dateFilter === 'all') return true; // No date filter applied
+            if (!event.time) return false; // Cannot filter if event has no time
+
+            try {
+                const eventDate = new Date(event.time);
+                if (isNaN(eventDate.getTime())) return false; // Invalid date
+
+                switch (dateFilter) {
+                    case 'today': return isToday(eventDate);
+                    case 'thisWeek': return isThisWeek(eventDate);
+                    case 'thisMonth': return isThisMonth(eventDate); // Changed from isNextMonth
+                    case 'range':
+                        if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return false; // Invalid range
+                        // Ensure comparison includes full days
+                        const startOfDay = new Date(startDate); startOfDay.setHours(0, 0, 0, 0);
+                        const endOfDay = new Date(endDate); endOfDay.setHours(23, 59, 59, 999);
+                        return eventDate >= startOfDay && eventDate <= endOfDay;
+                    default: return true; // Should not happen with defined types
+                }
+            } catch (e) {
+                console.error("Error parsing event date for filtering:", event.time, e);
+                return false;
+            }
         });
-     }
-    return sortedList;
-  }, [tab, pendingEvents, approvedEvents, rejectedEvents, searchTerm, sortOrder, dateFilter, startDate, endDate]);
+
+        // Filter by search term
+        let filteredByName = filteredByDate;
+        if (searchTerm.trim()) {
+            const lowerSearchTerm = searchTerm.trim().toLowerCase();
+            filteredByName = filteredByDate.filter(event =>
+                event.name.toLowerCase().includes(lowerSearchTerm)
+            );
+        }
+
+        // Sort the list
+        let sortedList = [...filteredByName];
+        if (sortOrder === "az") {
+            sortedList.sort((a, b) => a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' }));
+        } else if (sortOrder === "za") {
+            sortedList.sort((a, b) => b.name.localeCompare(a.name, 'vi', { sensitivity: 'base' }));
+        } else { // Default sort (newest first based on time)
+            sortedList.sort((a, b) => {
+                const timeA = a.time ? new Date(a.time).getTime() : 0;
+                const timeB = b.time ? new Date(b.time).getTime() : 0;
+                const validTimeA = !isNaN(timeA) && timeA > 0;
+                const validTimeB = !isNaN(timeB) && timeB > 0;
+
+                if (validTimeA && validTimeB) return timeB - timeA; // Newest first
+                if (validTimeA) return -1; // Events with dates first
+                if (validTimeB) return 1;
+                return 0; // Keep original order if no dates or dates are equal
+            });
+        }
+        return sortedList;
+    }, [tab, pendingEvents, approvedEvents, rejectedEvents, searchTerm, sortOrder, dateFilter, startDate, endDate]);
 
 
     // ========================================================================
@@ -290,9 +303,9 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({ user }) => {
         // --- Card Grid View ---
         if (viewMode === 'card') {
             return (
-                 <div className={`${listHeightClass} overflow-y-auto p-3 md:p-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100`}>
-                     {/* Grid layout definition */}
-                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
+                <div className={`${listHeightClass} overflow-y-auto p-3 md:p-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100`}>
+                    {/* Grid layout definition */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
                         {events.map((event, index) => (
                             <div key={event.id} className="border border-gray-200 rounded-lg shadow-md bg-white flex flex-col overflow-hidden hover:shadow-lg transition-shadow duration-200 ease-in-out">
                                 {/* Placeholder Banner */}
@@ -319,8 +332,8 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({ user }) => {
                                         </p>}
                                     </div>
 
-                                     {/* Spacer to push actions/reason to bottom */}
-                                     <div className="flex-grow"></div>
+                                    {/* Spacer to push actions/reason to bottom */}
+                                    <div className="flex-grow"></div>
 
                                     {/* Rejection Reason / Status Area */}
                                     {tab === "rejected" && event.rejectionReason && (
@@ -333,9 +346,9 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({ user }) => {
                                      {/* Example Status for Approved (Optional) */}
                                      {tab === "approved" && (
                                          <div className="mt-2 pt-2 border-t border-dashed border-green-200 flex-grow-0">
-                                             <p className="text-xs text-green-600 font-medium">Đã phê duyệt</p>
-                                         </div>
-                                     )}
+                                            <p className="text-xs text-green-600 font-medium">Đã phê duyệt</p>
+                                        </div>
+                                    )}
 
 
                                     {/* Action Buttons (only for pending tab) */}
@@ -383,123 +396,130 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({ user }) => {
                                     </div>
                                 )}
                             </li>
-                         ))}
+                        ))}
                     </ul>
                 </div>
             );
         }
 
-        return null;
+        return null; // Should not happen
     };
     // ========================================================================
     // END RENDER EVENT LIST
     // ========================================================================
 
-  return (
-    <div className="flex flex-col h-full p-3 md:p-5 bg-gray-100">
-         <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-4 flex-shrink-0">
-             Phê duyệt sự kiện
-         </h2>
+    return (
+        <div className="flex flex-col h-full p-3 md:p-5 bg-gray-100">
+             <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-4 flex-shrink-0">
+                 Phê duyệt sự kiện
+             </h2>
 
-        {/* Controls Section */}
-        <div className="mb-4 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
-                 {/* Search */}
-                <div className="lg:col-span-1 xl:col-span-1">
-                     <label htmlFor="search" className="block text-xs font-medium text-gray-600 mb-1">Tìm kiếm</label>
-                     <input type="text" id="search" placeholder="Tên sự kiện..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out" />
-                </div>
-                 {/* Sort */}
-                <div>
-                    <label htmlFor="sort" className="block text-xs font-medium text-gray-600 mb-1">Sắp xếp</label>
-                    <select id="sort" value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "default" | "az" | "za")}
-                        className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out appearance-none" >
-                        <option value="default">Mới nhất</option> <option value="az">Tên A - Z</option> <option value="za">Tên Z - A</option>
-                    </select>
-                </div>
-                 {/* Date Filter */}
-                <div>
-                    <label htmlFor="dateFilter" className="block text-xs font-medium text-gray-600 mb-1">Lọc thời gian</label>
-                    <select id="dateFilter" value={dateFilter} onChange={(e) => setDateFilter(e.target.value as "all" | "today" | "thisWeek" | "nextMonth" | "range")}
-                        className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out appearance-none" >
-                        <option value="all">Tất cả</option> <option value="today">Hôm nay</option> <option value="thisWeek">Tuần này</option> <option value="nextMonth">Tháng tới</option> <option value="range">Khoảng ngày</option>
-                    </select>
-                </div>
-                {/* Date Range Picker (Conditional) */}
-                {dateFilter === 'range' && (
-                    <>
-                        <div>
-                            <label htmlFor="startDate" className="block text-xs font-medium text-gray-600 mb-1">Từ ngày</label>
-                            <input type="date" id="startDate" value={formatDateForInput(startDate)} onChange={(e) => { const dateVal = e.target.value ? new Date(e.target.value) : null; setStartDate(dateVal); }} max={endDate ? formatDateForInput(endDate) : undefined}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out" />
-                        </div>
-                        <div>
-                            <label htmlFor="endDate" className="block text-xs font-medium text-gray-600 mb-1">Đến ngày</label>
-                            <input type="date" id="endDate" value={formatDateForInput(endDate)} onChange={(e) => { const dateVal = e.target.value ? new Date(e.target.value) : null; setEndDate(dateVal); }} min={startDate ? formatDateForInput(startDate) : undefined}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out" />
-                        </div>
-                     </>
-                 )}
-                {/* View Toggle */}
-                <div className="flex items-end justify-start md:justify-end gap-2 lg:col-start-auto xl:col-start-4">
-                     <button onClick={() => setViewMode('card')} title="Chế độ thẻ"
-                        className={`p-2 rounded-md border transition duration-150 ease-in-out ${ viewMode === 'card' ? 'bg-yellow-500 border-yellow-600 text-white shadow-sm' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400' }`}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v10H5V5z" clipRule="evenodd" fillRule="evenodd" /><path d="M7 7h6v2H7V7zm0 4h6v2H7v-2z" /></svg>
-                    </button>
-                    <button onClick={() => setViewMode('list')} title="Chế độ danh sách"
-                         className={`p-2 rounded-md border transition duration-150 ease-in-out ${ viewMode === 'list' ? 'bg-yellow-500 border-yellow-600 text-white shadow-sm' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400' }`}>
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
-                    </button>
+            {/* Controls Section */}
+            <div className="mb-4 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
+                    {/* Search */}
+                    <div className="lg:col-span-1 xl:col-span-1">
+                        <label htmlFor="searchApproval" className="block text-xs font-medium text-gray-600 mb-1">Tìm kiếm</label>
+                        <input type="text" id="searchApproval" placeholder="Tên sự kiện..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out" />
+                    </div>
+                    {/* Sort */}
+                    <div>
+                        <label htmlFor="sortApproval" className="block text-xs font-medium text-gray-600 mb-1">Sắp xếp</label>
+                        <select id="sortApproval" value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "default" | "az" | "za")}
+                                className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out appearance-none" >
+                             {/* Removed default option, relies on initial state */}
+                             <option value="default">Mới nhất</option>
+                             <option value="az">Tên A - Z</option>
+                             <option value="za">Tên Z - A</option>
+                        </select>
+                    </div>
+                    {/* Date Filter */}
+                    <div>
+                        <label htmlFor="dateFilterApproval" className="block text-xs font-medium text-gray-600 mb-1">Lọc thời gian</label>
+                        {/* Updated onChange type */}
+                        <select id="dateFilterApproval" value={dateFilter} onChange={(e) => setDateFilter(e.target.value as "all" | "today" | "thisWeek" | "thisMonth" | "range")}
+                                className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out appearance-none" >
+                            <option value="all">Tất cả</option>
+                            <option value="today">Hôm nay</option>
+                            <option value="thisWeek">Tuần này</option>
+                            <option value="thisMonth">Tháng này</option> {/* Changed text and value */}
+                            <option value="range">Khoảng ngày</option>
+                        </select>
+                    </div>
+                    {/* Date Range Picker (Conditional) */}
+                    {dateFilter === 'range' && (
+                        <>
+                            <div>
+                                <label htmlFor="startDateApproval" className="block text-xs font-medium text-gray-600 mb-1">Từ ngày</label>
+                                <input type="date" id="startDateApproval" value={formatDateForInput(startDate)} onChange={(e) => { const dateVal = e.target.value ? new Date(e.target.value) : null; setStartDate(dateVal); }} max={endDate ? formatDateForInput(endDate) : undefined}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out" />
+                            </div>
+                            <div>
+                                <label htmlFor="endDateApproval" className="block text-xs font-medium text-gray-600 mb-1">Đến ngày</label>
+                                <input type="date" id="endDateApproval" value={formatDateForInput(endDate)} onChange={(e) => { const dateVal = e.target.value ? new Date(e.target.value) : null; setEndDate(dateVal); }} min={startDate ? formatDateForInput(startDate) : undefined}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out" />
+                            </div>
+                        </>
+                    )}
+                    {/* View Toggle */}
+                    <div className="flex items-end justify-start md:justify-end gap-2 lg:col-start-auto xl:col-start-4">
+                        <button onClick={() => setViewMode('card')} title="Chế độ thẻ"
+                                className={`p-2 rounded-md border transition duration-150 ease-in-out ${ viewMode === 'card' ? 'bg-yellow-500 border-yellow-600 text-white shadow-sm' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400' }`}>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v10H5V5z" clipRule="evenodd" fillRule="evenodd" /><path d="M7 7h6v2H7V7zm0 4h6v2H7v-2z" /></svg>
+                        </button>
+                        <button onClick={() => setViewMode('list')} title="Chế độ danh sách"
+                                className={`p-2 rounded-md border transition duration-150 ease-in-out ${ viewMode === 'list' ? 'bg-yellow-500 border-yellow-600 text-white shadow-sm' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400' }`}>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" /></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        {/* Tabs Section */}
-        <div className="flex flex-wrap justify-center mb-4 gap-2 md:gap-3 flex-shrink-0">
-             <button onClick={() => setTab("pending")} className={`px-4 py-1.5 rounded-full font-medium cursor-pointer text-sm md:text-base transition-colors duration-150 ease-in-out ${tab === "pending" ? "bg-yellow-500 text-white shadow-md ring-2 ring-yellow-300 ring-offset-1" : "bg-white text-gray-700 hover:bg-yellow-50 border border-gray-200"}`}> Đang chờ ({pendingEvents.length}) </button>
-             <button onClick={() => setTab("approved")} className={`px-4 py-1.5 rounded-full font-medium cursor-pointer text-sm md:text-base transition-colors duration-150 ease-in-out ${tab === "approved" ? "bg-green-600 text-white shadow-md ring-2 ring-green-300 ring-offset-1" : "bg-white text-gray-700 hover:bg-green-50 border border-gray-200"}`}> Đã duyệt ({approvedEvents.length}) </button>
-             <button onClick={() => setTab("rejected")} className={`px-4 py-1.5 rounded-full font-medium cursor-pointer text-sm md:text-base transition-colors duration-150 ease-in-out ${tab === "rejected" ? "bg-red-600 text-white shadow-md ring-2 ring-red-300 ring-offset-1" : "bg-white text-gray-700 hover:bg-red-50 border border-gray-200"}`}> Đã từ chối ({rejectedEvents.length}) </button>
-        </div>
+            {/* Tabs Section */}
+            <div className="flex flex-wrap justify-center mb-4 gap-2 md:gap-3 flex-shrink-0">
+                  <button onClick={() => setTab("pending")} className={`px-4 py-1.5 rounded-full font-medium cursor-pointer text-sm md:text-base transition-colors duration-150 ease-in-out ${tab === "pending" ? "bg-yellow-500 text-white shadow-md ring-2 ring-yellow-300 ring-offset-1" : "bg-white text-gray-700 hover:bg-yellow-50 border border-gray-200"}`}> Đang chờ ({pendingEvents.length}) </button>
+                  <button onClick={() => setTab("approved")} className={`px-4 py-1.5 rounded-full font-medium cursor-pointer text-sm md:text-base transition-colors duration-150 ease-in-out ${tab === "approved" ? "bg-green-600 text-white shadow-md ring-2 ring-green-300 ring-offset-1" : "bg-white text-gray-700 hover:bg-green-50 border border-gray-200"}`}> Đã duyệt ({approvedEvents.length}) </button>
+                  <button onClick={() => setTab("rejected")} className={`px-4 py-1.5 rounded-full font-medium cursor-pointer text-sm md:text-base transition-colors duration-150 ease-in-out ${tab === "rejected" ? "bg-red-600 text-white shadow-md ring-2 ring-red-300 ring-offset-1" : "bg-white text-gray-700 hover:bg-red-50 border border-gray-200"}`}> Đã từ chối ({rejectedEvents.length}) </button>
+            </div>
 
-        {/* Event List Area */}
-        <div className="border border-gray-200 rounded-lg bg-gray-50 shadow-sm flex-1 overflow-hidden flex flex-col"> {/* Changed bg to gray-50 for contrast */}
-            {tab === "pending" && renderEventList(displayedEvents, true)}
-            {tab === "approved" && renderEventList(displayedEvents)}
-            {tab === "rejected" && renderEventList(displayedEvents)}
-        </div>
+            {/* Event List Area */}
+            <div className="border border-gray-200 rounded-lg bg-gray-50 shadow-sm flex-1 overflow-hidden flex flex-col"> {/* Changed bg to gray-50 for contrast */}
+                {tab === "pending" && renderEventList(displayedEvents, true)}
+                {tab === "approved" && renderEventList(displayedEvents)}
+                {tab === "rejected" && renderEventList(displayedEvents)}
+            </div>
 
-        {/* Reject Reason Modal */}
-        {showRejectModal && (
-            <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-[60] p-4 backdrop-blur-sm">
-                 <div className="bg-white w-full max-w-md p-6 rounded-xl shadow-xl relative transform transition-all duration-300 ease-out scale-95 opacity-0 animate-modal-scale-in">
-                     <h3 className="text-lg md:text-xl font-semibold mb-4 text-red-700">Nhập lý do từ chối</h3>
-                     <button onClick={() => setShowRejectModal(false)} className="absolute cursor-pointer top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors text-2xl" aria-label="Đóng"> &times; </button>
-                     <div className="mb-4">
-                         <label htmlFor="rejectionReason" className="block text-gray-700 mb-1 text-sm font-medium">Lý do từ chối <span className="text-red-500">*</span>:</label>
-                         <textarea id="rejectionReason" value={rejectionReason} onChange={(e) => setRejectReason(e.target.value)}
-                             className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-300 focus:border-red-500 focus:outline-none transition duration-150 ease-in-out text-sm"
-                             rows={4} placeholder="Nhập lý do..." />
+            {/* Reject Reason Modal */}
+            {showRejectModal && (
+                <div className="fixed inset-0 bg-black/60 flex justify-center items-center z-[60] p-4 backdrop-blur-sm">
+                     <div className="bg-white w-full max-w-md p-6 rounded-xl shadow-xl relative transform transition-all duration-300 ease-out scale-95 opacity-0 animate-modal-scale-in">
+                         <h3 className="text-lg md:text-xl font-semibold mb-4 text-red-700">Nhập lý do từ chối</h3>
+                         <button onClick={() => setShowRejectModal(false)} className="absolute cursor-pointer top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors text-2xl" aria-label="Đóng"> &times; </button>
+                         <div className="mb-4">
+                             <label htmlFor="rejectionReason" className="block text-gray-700 mb-1 text-sm font-medium">Lý do từ chối <span className="text-red-500">*</span>:</label>
+                             <textarea id="rejectionReason" value={rejectionReason} onChange={(e) => setRejectReason(e.target.value)}
+                                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-300 focus:border-red-500 focus:outline-none transition duration-150 ease-in-out text-sm"
+                                    rows={4} placeholder="Nhập lý do..." />
+                         </div>
+                         <div className="flex justify-end gap-3 mt-5">
+                             <button onClick={() => setShowRejectModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm font-medium transition-colors duration-150 ease-in-out"> Hủy </button>
+                             <button onClick={handleReject} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"> Xác nhận </button>
+                         </div>
                      </div>
-                     <div className="flex justify-end gap-3 mt-5">
-                         <button onClick={() => setShowRejectModal(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm font-medium transition-colors duration-150 ease-in-out"> Hủy </button>
-                         <button onClick={handleReject} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"> Xác nhận </button>
-                     </div>
+                     <style jsx global>{`
+                        @keyframes modal-scale-in {
+                            from { transform: scale(0.95); opacity: 0; }
+                            to { transform: scale(1); opacity: 1; }
+                        }
+                        .animate-modal-scale-in {
+                            animation: modal-scale-in 0.2s ease-out forwards;
+                        }
+                      `}</style>
                  </div>
-                 <style jsx global>{`
-                    @keyframes modal-scale-in {
-                      from { transform: scale(0.95); opacity: 0; }
-                      to { transform: scale(1); opacity: 1; }
-                    }
-                    .animate-modal-scale-in {
-                      animation: modal-scale-in 0.2s ease-out forwards;
-                    }
-                  `}</style>
-            </div>
-        )}
-    </div>
-  );
+            )}
+        </div>
+    );
 };
 
 export default ApprovalTabContent;
-

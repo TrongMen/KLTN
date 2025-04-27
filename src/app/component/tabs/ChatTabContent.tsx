@@ -14,7 +14,7 @@ import {
   Cross2Icon,
   InfoCircledIcon,
   PaperPlaneIcon,
-  FaceIcon, // Icon này sẽ dùng để mở picker
+  FaceIcon,
   Link2Icon,
   PersonIcon,
   TrashIcon,
@@ -23,9 +23,10 @@ import {
   FileTextIcon,
   ImageIcon,
   SpeakerLoudIcon,
+  DownloadIcon,
+  UpdateIcon,
 } from "@radix-ui/react-icons";
-// Import thư viện emoji picker
-import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react'; // Thêm EmojiClickData và Theme nếu cần
+import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 
 import {
   User as MainUserType,
@@ -34,7 +35,6 @@ import {
   Participant,
 } from "../homeuser";
 
-// ... (Các interfaces không thay đổi) ...
 interface ApiGroupChatListItem {
   id: string;
   name: string;
@@ -95,7 +95,6 @@ interface ConfirmationDialogProps {
   confirmVariant?: "primary" | "danger";
 }
 
-// --- ConfirmationDialog Component (Không thay đổi) ---
 function ConfirmationDialog({
   isOpen,
   title,
@@ -156,8 +155,6 @@ function ConfirmationDialog({
   );
 }
 
-
-// --- ChatTabContent Component ---
 const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
   const [viewMode, setViewMode] = useState<"list" | "detail">("list");
   const [selectedConversation, setSelectedConversation] =
@@ -181,17 +178,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
   const [errorMessages, setErrorMessages] = useState<string | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState<boolean>(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const messagesEndRef = useRef<null | HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null); // Ref cho input field
-  const emojiPickerRef = useRef<HTMLDivElement>(null); // Ref cho container của picker
-  const emojiButtonRef = useRef<HTMLButtonElement>(null); // Ref cho nút mở picker
-
-
-  // --- State for Emoji Picker ---
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-
-
   const [mediaMessages, setMediaMessages] = useState<Message[]>([]);
   const [fileMessages, setFileMessages] = useState<Message[]>([]);
   const [audioMessages, setAudioMessages] = useState<Message[]>([]);
@@ -201,6 +188,9 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
   const [errorMedia, setErrorMedia] = useState<string | null>(null);
   const [errorFiles, setErrorFiles] = useState<string | null>(null);
   const [errorAudio, setErrorAudio] = useState<string | null>(null);
+  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(
+    null
+  );
 
   const [removeConfirmationState, setRemoveConfirmationState] = useState<{
     isOpen: boolean;
@@ -213,25 +203,39 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     onConfirm: null,
     onCancel: () => {},
   });
-
   const [leaveConfirmationState, setLeaveConfirmationState] = useState<{
     isOpen: boolean;
     onConfirm: (() => void) | null;
     onCancel: () => void;
   }>({ isOpen: false, onConfirm: null, onCancel: () => {} });
+  const [deleteMessageConfirmationState, setDeleteMessageConfirmationState] =
+    useState<{
+      isOpen: boolean;
+      messageIdToDelete: string | null;
+      onConfirm: (() => void) | null;
+      onCancel: () => void;
+    }>({
+      isOpen: false,
+      messageIdToDelete: null,
+      onConfirm: null,
+      onCancel: () => {},
+    });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<null | HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
-
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  // --- Effect to close Emoji Picker on outside click ---
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // Check if click is outside the picker container AND outside the trigger button
       if (
         showEmojiPicker &&
         emojiPickerRef.current &&
@@ -242,19 +246,14 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
         setShowEmojiPicker(false);
       }
     };
-
-    // Add listener if picker is open
     if (showEmojiPicker) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
-
-    // Cleanup listener
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [showEmojiPicker]); // Re-run this effect when showEmojiPicker changes
+  }, [showEmojiPicker]);
 
-  // --- Fetch Functions (Không thay đổi) ---
   const fetchConversations = useCallback(async () => {
     if (!currentUser?.id) {
       setErrorConversations("Thông tin người dùng không hợp lệ.");
@@ -265,7 +264,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     setIsLoadingConversations(true);
     setErrorConversations(null);
     const userId = currentUser.id;
-
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
@@ -273,7 +271,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (!response.ok) {
         let errorMsg = `Lỗi ${response.status}`;
         try {
@@ -283,7 +280,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
         throw new Error(errorMsg);
       }
       const data = await response.json();
-
       if (data.code === 1000 && Array.isArray(data.result)) {
         const groupChats: MainConversationType[] = data.result.map(
           (group: ApiGroupChatListItem) => ({
@@ -323,16 +319,13 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     setIsLoadingMessages(true);
     setErrorMessages(null);
     setMessages([]);
-
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
-
       const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (!response.ok) {
         let errorMsg = `Lỗi ${response.status}`;
         try {
@@ -341,9 +334,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
         } catch (e) {}
         throw new Error(errorMsg);
       }
-
       const data = await response.json();
-
       if (data.code === 1000 && Array.isArray(data.result)) {
         const sortedMessages = data.result.sort(
           (a: Message, b: Message) =>
@@ -373,25 +364,22 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     }
   }, []);
 
-   const fetchGroupChatDetails = useCallback(
+  const fetchGroupChatDetails = useCallback(
     async (groupId: string) => {
       if (!groupId || !currentUser?.id) return;
       setIsLoadingDetails(true);
       setParticipantSearchTerm("");
       const currentSummary = conversations.find((c) => c.id === groupId);
-      setSelectedConversation(prev => ({
-         ...(prev || {} as MainConversationType),
-         ...(currentSummary || {}),
-         id: groupId,
-       }));
-
+      setSelectedConversation((prev) => ({
+        ...(prev || ({} as MainConversationType)),
+        ...(currentSummary || {}),
+        id: groupId,
+      }));
       let groupDetails: ApiGroupChatDetail | null = null;
       const userDetailsMap = new Map<string, ApiUserDetail>();
-
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Yêu cầu xác thực.");
-
         const groupUrl = `http://localhost:8080/identity/api/events/group-chats/${groupId}`;
         const groupResponse = await fetch(groupUrl, {
           headers: { Authorization: `Bearer ${token}` },
@@ -411,12 +399,10 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           );
         }
         groupDetails = groupData.result;
-
         const allParticipantIds = new Set<string>(groupDetails.memberIds || []);
         if (groupDetails.groupLeaderId) {
           allParticipantIds.add(groupDetails.groupLeaderId);
         }
-
         const participantPromises = Array.from(allParticipantIds).map(
           async (userId) => {
             try {
@@ -457,9 +443,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             }
           }
         );
-
         const results = await Promise.allSettled(participantPromises);
-
         results.forEach((result) => {
           if (
             result.status === "fulfilled" &&
@@ -479,13 +463,11 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             );
           }
         });
-
         const finalParticipantList: Participant[] = [];
         allParticipantIds.forEach((userId) => {
           const userDetail = userDetailsMap.get(userId);
           let participantName: string;
           let participantAvatar: string | null = null;
-
           if (userId === currentUser.id) {
             participantName =
               `${currentUser.lastName || ""} ${
@@ -510,14 +492,12 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             participantName = `User (${userId.substring(0, 4)}...)`;
             participantAvatar = `https://ui-avatars.com/api/?name=?&background=random&size=32`;
           }
-
           finalParticipantList.push({
             id: userId,
             name: participantName,
             avatar: participantAvatar,
           });
         });
-
         setSelectedConversation((prev) => ({
           ...(prev || ({} as MainConversationType)),
           id: groupDetails!.id,
@@ -526,12 +506,20 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           groupLeaderId: groupDetails!.groupLeaderId,
           participants: finalParticipantList,
           message: prev?.message || "...",
-          avatar: prev?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(groupDetails!.name)}&background=random&font-size=0.4`,
+          avatar:
+            prev?.avatar ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(
+              groupDetails!.name
+            )}&background=random&font-size=0.4`,
         }));
       } catch (error: any) {
         console.error(`Lỗi tải chi tiết nhóm chat ${groupId}:`, error);
         toast.error(`Lỗi tải chi tiết nhóm: ${error.message}`);
-         setSelectedConversation(prev => ({ ...(currentSummary || {} as MainConversationType), id: groupId, participants: prev?.participants || [] }));
+        setSelectedConversation((prev) => ({
+          ...(currentSummary || ({} as MainConversationType)),
+          id: groupId,
+          participants: prev?.participants || [],
+        }));
       } finally {
         setIsLoadingDetails(false);
       }
@@ -544,31 +532,38 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     setIsLoadingMedia(true);
     setErrorMedia(null);
     setMediaMessages([]);
-
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
       const url = `http://localhost:8080/identity/api/events/${groupId}/messages/media`;
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
-          let errorMsg = `Lỗi tải media ${response.status}`;
-          try { const errData = await response.json(); errorMsg = errData.message || errorMsg; } catch (e) {}
-          throw new Error(errorMsg);
+        let errorMsg = `Lỗi tải media ${response.status}`;
+        try {
+          const errData = await response.json();
+          errorMsg = errData.message || errorMsg;
+        } catch (e) {}
+        throw new Error(errorMsg);
       }
       const data = await response.json();
       if (data.code === 1000 && Array.isArray(data.result)) {
         setMediaMessages(data.result);
       } else {
-         if (data.code === 1000 && Array.isArray(data.result) && data.result.length === 0) {
-             setMediaMessages([]);
-         } else {
-            throw new Error(data.message || "Không thể tải danh sách media.");
-         }
+        if (
+          data.code === 1000 &&
+          Array.isArray(data.result) &&
+          data.result.length === 0
+        ) {
+          setMediaMessages([]);
+        } else {
+          throw new Error(data.message || "Không thể tải danh sách media.");
+        }
       }
     } catch (error: any) {
       console.error(`Lỗi tải media cho nhóm ${groupId}:`, error);
       setErrorMedia(error.message || "Lỗi tải media.");
-      // toast.error(`Lỗi tải media: ${error.message}`); // Maybe too noisy
     } finally {
       setIsLoadingMedia(false);
     }
@@ -579,31 +574,38 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     setIsLoadingFiles(true);
     setErrorFiles(null);
     setFileMessages([]);
-
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
       const url = `http://localhost:8080/identity/api/events/${groupId}/messages/files`;
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-       if (!response.ok) {
-          let errorMsg = `Lỗi tải file ${response.status}`;
-          try { const errData = await response.json(); errorMsg = errData.message || errorMsg; } catch (e) {}
-          throw new Error(errorMsg);
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        let errorMsg = `Lỗi tải file ${response.status}`;
+        try {
+          const errData = await response.json();
+          errorMsg = errData.message || errorMsg;
+        } catch (e) {}
+        throw new Error(errorMsg);
       }
       const data = await response.json();
-       if (data.code === 1000 && Array.isArray(data.result)) {
+      if (data.code === 1000 && Array.isArray(data.result)) {
         setFileMessages(data.result);
       } else {
-          if (data.code === 1000 && Array.isArray(data.result) && data.result.length === 0) {
-             setFileMessages([]);
-         } else {
-            throw new Error(data.message || "Không thể tải danh sách file.");
-         }
+        if (
+          data.code === 1000 &&
+          Array.isArray(data.result) &&
+          data.result.length === 0
+        ) {
+          setFileMessages([]);
+        } else {
+          throw new Error(data.message || "Không thể tải danh sách file.");
+        }
       }
     } catch (error: any) {
       console.error(`Lỗi tải file cho nhóm ${groupId}:`, error);
       setErrorFiles(error.message || "Lỗi tải file.");
-      // toast.error(`Lỗi tải file: ${error.message}`);
     } finally {
       setIsLoadingFiles(false);
     }
@@ -614,38 +616,44 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     setIsLoadingAudio(true);
     setErrorAudio(null);
     setAudioMessages([]);
-
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
-      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audio`; // Placeholder URL
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-       if (!response.ok) {
-          let errorMsg = `Lỗi tải audio ${response.status}`;
-          try { const errData = await response.json(); errorMsg = errData.message || errorMsg; } catch (e) {}
-          throw new Error(errorMsg);
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audio`;
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        let errorMsg = `Lỗi tải audio ${response.status}`;
+        try {
+          const errData = await response.json();
+          errorMsg = errData.message || errorMsg;
+        } catch (e) {}
+        throw new Error(errorMsg);
       }
       const data = await response.json();
       if (data.code === 1000 && Array.isArray(data.result)) {
         setAudioMessages(data.result);
       } else {
-          if (data.code === 1000 && Array.isArray(data.result) && data.result.length === 0) {
-             setAudioMessages([]);
-         } else {
-             throw new Error(data.message || "Không thể tải danh sách audio.");
-         }
+        if (
+          data.code === 1000 &&
+          Array.isArray(data.result) &&
+          data.result.length === 0
+        ) {
+          setAudioMessages([]);
+        } else {
+          throw new Error(data.message || "Không thể tải danh sách audio.");
+        }
       }
     } catch (error: any) {
       console.error(`Lỗi tải audio cho nhóm ${groupId}:`, error);
       setErrorAudio(error.message || "Lỗi tải audio.");
-      // toast.error(`Lỗi tải audio: ${error.message}`);
     } finally {
       setIsLoadingAudio(false);
     }
   }, []);
 
-  // --- Action Handlers (Không thay đổi) ---
- const handleRemoveMember = useCallback(
+  const handleRemoveMember = useCallback(
     async (
       groupId: string | number,
       memberIdToRemove: string,
@@ -657,18 +665,14 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       }
       setIsProcessingAction(true);
       const loadingToastId = toast.loading("Đang xóa thành viên...");
-
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Yêu cầu xác thực.");
-
         const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/members/${memberIdToRemove}?leaderId=${leaderId}`;
-
         const response = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (!response.ok) {
           let errorMsg = `Lỗi ${response.status}`;
           try {
@@ -677,9 +681,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           } catch (e) {}
           throw new Error(errorMsg);
         }
-
         toast.success("Xóa thành viên thành công!", { id: loadingToastId });
-
         setSelectedConversation((prev) => {
           if (!prev || !prev.participants) return prev;
           return {
@@ -689,7 +691,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             ),
           };
         });
-
         setRemoveConfirmationState({
           isOpen: false,
           memberToRemove: null,
@@ -706,7 +707,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     []
   );
 
- const closeRemoveConfirmationDialog = useCallback(() => {
+  const closeRemoveConfirmationDialog = useCallback(() => {
     setRemoveConfirmationState({
       isOpen: false,
       memberToRemove: null,
@@ -714,9 +715,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       onCancel: () => {},
     });
   }, []);
-
-
- const confirmRemoveMember = (member: Participant) => {
+  const confirmRemoveMember = (member: Participant) => {
     if (
       !selectedConversation ||
       !currentUser ||
@@ -725,7 +724,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       return;
     const groupId = selectedConversation.id;
     const leaderId = currentUser.id;
-
     setRemoveConfirmationState({
       isOpen: true,
       memberToRemove: member,
@@ -733,7 +731,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       onCancel: closeRemoveConfirmationDialog,
     });
   };
-
   const handleGoBackToList = useCallback(() => {
     setViewMode("list");
     setSelectedConversation(null);
@@ -747,18 +744,14 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       }
       setIsProcessingAction(true);
       const loadingToastId = toast.loading("Đang rời khỏi nhóm...");
-
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Yêu cầu xác thực.");
-
         const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
-
         const response = await fetch(url, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
-
         if (!response.ok) {
           let errorMsg = `Lỗi ${response.status}`;
           try {
@@ -767,9 +760,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           } catch (e) {}
           throw new Error(errorMsg);
         }
-
         toast.success("Rời khỏi nhóm thành công!", { id: loadingToastId });
-
         setConversations((prev) => prev.filter((c) => c.id !== groupId));
         handleGoBackToList();
       } catch (error: any) {
@@ -789,7 +780,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     [handleGoBackToList]
   );
 
-
   const closeLeaveConfirmationDialog = useCallback(() => {
     setLeaveConfirmationState({
       isOpen: false,
@@ -797,7 +787,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       onCancel: () => {},
     });
   }, []);
-
   const confirmLeaveGroup = () => {
     if (
       !selectedConversation ||
@@ -807,7 +796,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       return;
     const groupId = selectedConversation.id;
     const memberId = currentUser.id;
-
     setLeaveConfirmationState({
       isOpen: true,
       onConfirm: () => handleLeaveGroup(groupId, memberId),
@@ -824,26 +812,19 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     const groupId = selectedConversation.id;
     const senderId = currentUser.id;
     setMessageInput("");
-    setShowEmojiPicker(false); // Close picker when sending
-
+    setShowEmojiPicker(false);
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
-
       const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
-
       const formData = new FormData();
       formData.append("senderId", senderId);
       formData.append("content", messageContent);
-
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-
       if (!response.ok) {
         let errorMsg = `Lỗi ${response.status}`;
         try {
@@ -857,9 +838,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
         }
         throw new Error(errorMsg);
       }
-
       const data = await response.json();
-
       if (data.code === 1000 && data.result) {
         const newMessage: Message = data.result;
         setMessages((prevMessages) => [...prevMessages, newMessage]);
@@ -881,7 +860,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     } catch (error: any) {
       console.error("Lỗi gửi tin nhắn:", error);
       toast.error(`Gửi thất bại: ${error.message}`);
-      setMessageInput(messageContent); // Restore input on error
+      setMessageInput(messageContent);
     } finally {
       setIsSendingMessage(false);
     }
@@ -892,30 +871,22 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       if (!file || !selectedConversation?.id || !currentUser?.id) {
         return;
       }
-      setIsSendingMessage(true); // Use same sending state
+      setIsSendingMessage(true);
       const groupId = selectedConversation.id;
       const senderId = currentUser.id;
-
       const loadingToastId = toast.loading(`Đang tải lên ${file.name}...`);
-
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Yêu cầu xác thực.");
-
         const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
-
         const formData = new FormData();
         formData.append("senderId", senderId);
         formData.append("file", file);
-
         const response = await fetch(url, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
-
         if (!response.ok) {
           let errorMsg = `Lỗi ${response.status}`;
           try {
@@ -924,9 +895,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           } catch (e) {}
           throw new Error(errorMsg);
         }
-
         const data = await response.json();
-
         if (data.code === 1000 && data.result) {
           toast.success(`Đã gửi ${file.name} thành công!`, {
             id: loadingToastId,
@@ -943,13 +912,14 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                 : convo
             )
           );
-           // Refetch info panel data after successful upload
-           if (showInfoPanel && selectedConversation?.id) {
-              if (newMessage.type === 'IMAGE' || newMessage.type === 'VIDEO') fetchMediaMessages(selectedConversation.id);
-              else if (newMessage.type === 'FILE') fetchFileMessages(selectedConversation.id);
-              else if (newMessage.type === 'AUDIO') fetchAudioMessages(selectedConversation.id);
-           }
-
+          if (showInfoPanel && selectedConversation?.id) {
+            if (newMessage.type === "IMAGE" || newMessage.type === "VIDEO")
+              fetchMediaMessages(selectedConversation.id);
+            else if (newMessage.type === "FILE")
+              fetchFileMessages(selectedConversation.id);
+            else if (newMessage.type === "AUDIO")
+              fetchAudioMessages(selectedConversation.id);
+          }
         } else {
           throw new Error(
             data.message || `Gửi file ${file.name} không thành công.`
@@ -964,9 +934,167 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
         setIsSendingMessage(false);
       }
     },
-    [selectedConversation, currentUser, setConversations, showInfoPanel, fetchMediaMessages, fetchFileMessages, fetchAudioMessages] // Added dependencies
+    [
+      selectedConversation,
+      currentUser,
+      setConversations,
+      showInfoPanel,
+      fetchMediaMessages,
+      fetchFileMessages,
+      fetchAudioMessages,
+    ]
   );
 
+  const handleDownloadFile = useCallback(
+    async (messageId: string, fileName?: string | null) => {
+      if (!messageId) return;
+      setDownloadingFileId(messageId);
+      const toastId = toast.loading(`Đang tải ${fileName || "file"}...`);
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Yêu cầu xác thực không thành công.");
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}/download`;
+        const response = await fetch(url, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          let errorMsg = `Lỗi tải file: ${response.status}`;
+          try {
+            const errData = await response.json();
+            errorMsg = errData.message || errorMsg;
+          } catch (e) {
+            errorMsg = `Lỗi ${response.status}: ${
+              response.statusText || "Không thể tải file"
+            }`;
+          }
+          throw new Error(errorMsg);
+        }
+        const disposition = response.headers.get("content-disposition");
+        let finalFileName = fileName || "downloaded_file";
+        if (disposition) {
+          const filenameMatch = disposition.match(/filename="?(.+)"?/i);
+          if (filenameMatch && filenameMatch[1]) {
+            finalFileName = decodeURIComponent(filenameMatch[1]);
+          }
+        }
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = downloadUrl;
+        a.download = finalFileName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(downloadUrl);
+        a.remove();
+        toast.success(`Đã tải ${finalFileName} thành công!`, { id: toastId });
+      } catch (error: any) {
+        console.error("Lỗi tải file:", error);
+        toast.error(
+          `Tải file thất bại: ${error.message || "Lỗi không xác định"}`,
+          { id: toastId }
+        );
+      } finally {
+        setDownloadingFileId(null);
+      }
+    },
+    []
+  );
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!messageId || !currentUser?.id) {
+        toast.error("Không thể xóa tin nhắn.");
+        return;
+      }
+      const userId = currentUser.id;
+      setIsProcessingAction(true); // Reuse processing state or add a new one for deletion
+      const loadingToastId = toast.loading("Đang xóa tin nhắn...");
+
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Yêu cầu xác thực không thành công.");
+
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}?userId=${userId}`;
+
+        const response = await fetch(url, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          let errorMsg = `Lỗi ${response.status}`;
+          try {
+            const errData = await response.json();
+            errorMsg = errData.message || errorMsg;
+          } catch (e) {
+            errorMsg = `Lỗi ${response.status}: ${
+              response.statusText || "Không thể xóa tin nhắn"
+            }`;
+          }
+          throw new Error(errorMsg);
+        }
+
+        // Check if the response body is empty (common for successful DELETE) or contains JSON
+        const responseText = await response.text();
+        let data;
+        try {
+          data = responseText ? JSON.parse(responseText) : { code: 1000 }; // Assume success if empty
+        } catch (e) {
+          // If parsing fails but status was OK, assume success (e.g., 204 No Content)
+          if (response.ok) data = { code: 1000 };
+          else throw new Error("Phản hồi xóa tin nhắn không hợp lệ.");
+        }
+
+        if (data.code === 1000) {
+          // Assuming code 1000 indicates success
+          toast.success("Đã xóa tin nhắn!", { id: loadingToastId });
+          setMessages((prevMessages) =>
+            prevMessages.filter((msg) => msg.id !== messageId)
+          );
+          // Optionally update last message preview in conversation list if this was the last message
+        } else {
+          throw new Error(data.message || "Xóa tin nhắn không thành công.");
+        }
+      } catch (error: any) {
+        console.error("Lỗi xóa tin nhắn:", error);
+        toast.error(`Xóa thất bại: ${error.message}`, { id: loadingToastId });
+      } finally {
+        setDeleteMessageConfirmationState({
+          isOpen: false,
+          messageIdToDelete: null,
+          onConfirm: null,
+          onCancel: () => {},
+        }); // Close dialog regardless of outcome
+        setIsProcessingAction(false);
+      }
+    },
+    [currentUser, setMessages]
+  ); // Added setMessages dependency
+
+  const confirmDeleteMessage = useCallback(
+    (message: Message) => {
+      if (!message || !currentUser || message.senderId !== currentUser.id)
+        return; // Ensure it's the user's message
+
+      setDeleteMessageConfirmationState({
+        isOpen: true,
+        messageIdToDelete: message.id,
+        onConfirm: () => handleDeleteMessage(message.id),
+        onCancel: () =>
+          setDeleteMessageConfirmationState({
+            isOpen: false,
+            messageIdToDelete: null,
+            onConfirm: null,
+            onCancel: () => {},
+          }),
+      });
+    },
+    [currentUser, handleDeleteMessage]
+  ); // Added dependencies
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -977,17 +1105,12 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       }
     }
   };
-
   const triggerFileInput = () => {
     fileInputRef.current?.click();
   };
-
-  // --- Emoji Picker Handler ---
   const onEmojiClick = (emojiData: EmojiClickData, event: MouseEvent) => {
-    setMessageInput(prevInput => prevInput + emojiData.emoji);
-    // Keep picker open after selection, user can manually close or click outside
-    // setShowEmojiPicker(false);
-    inputRef.current?.focus(); // Focus input after adding emoji
+    setMessageInput((prevInput) => prevInput + emojiData.emoji);
+    inputRef.current?.focus();
   };
 
   const filteredConversations = useMemo(() => {
@@ -997,7 +1120,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       conv.name.toLowerCase().includes(lowerCaseSearchTerm)
     );
   }, [searchTerm, conversations]);
-
   const filteredParticipants = useMemo(() => {
     if (!selectedConversation?.participants) return [];
     if (!participantSearchTerm.trim()) {
@@ -1009,12 +1131,11 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     );
   }, [selectedConversation?.participants, participantSearchTerm]);
 
-
-   const handleSelectConversation = useCallback(
+  const handleSelectConversation = useCallback(
     (conversation: MainConversationType) => {
       setViewMode("detail");
       setShowInfoPanel(false);
-      setShowEmojiPicker(false); // Close emoji picker when changing convo
+      setShowEmojiPicker(false);
       setMessageInput("");
       setParticipantSearchTerm("");
       setMessages([]);
@@ -1025,7 +1146,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       setErrorFiles(null);
       setErrorAudio(null);
       setSelectedFile(null);
-
       if (conversation.isGroup && typeof conversation.id === "string") {
         fetchGroupChatDetails(conversation.id);
         fetchMessages(conversation.id);
@@ -1038,7 +1158,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     [fetchGroupChatDetails, fetchMessages]
   );
 
-
   const getParticipantInfo = (conversation: MainConversationType | null) => {
     if (!conversation?.isGroup) return null;
     if (
@@ -1047,25 +1166,25 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     ) {
       return (
         <p className="text-xs text-gray-500 truncate mt-0.5">
-          Đang tải thành viên...
+          {" "}
+          Đang tải thành viên...{" "}
         </p>
       );
     }
     if (!conversation.participants || conversation.participants.length === 0) {
       return (
         <p className="text-xs text-gray-500 truncate mt-0.5">
-          (Chưa có thông tin thành viên)
+          {" "}
+          (Chưa có thông tin thành viên){" "}
         </p>
       );
     }
-
     const count = conversation.participants.length;
     const namesToShow = conversation.participants
       .slice(0, 3)
       .map((p) => p.name)
       .join(", ");
     const remainingCount = count - 3;
-
     return (
       <p
         className="text-xs text-gray-500 truncate mt-0.5 cursor-pointer hover:underline"
@@ -1074,60 +1193,72 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           setParticipantSearchTerm("");
         }}
       >
-        {count} thành viên: {namesToShow}
-        {remainingCount > 0 && ` và ${remainingCount} người khác`}
+        {" "}
+        {count} thành viên: {namesToShow}{" "}
+        {remainingCount > 0 && ` và ${remainingCount} người khác`}{" "}
       </p>
     );
   };
 
-
   useEffect(() => {
-    if (showInfoPanel && selectedConversation?.id && selectedConversation.isGroup) {
-       if (mediaMessages.length === 0 && !isLoadingMedia && !errorMedia) {
-           fetchMediaMessages(selectedConversation.id);
+    if (
+      showInfoPanel &&
+      selectedConversation?.id &&
+      selectedConversation.isGroup
+    ) {
+      if (mediaMessages.length === 0 && !isLoadingMedia && !errorMedia) {
+        fetchMediaMessages(selectedConversation.id);
       }
-       if (fileMessages.length === 0 && !isLoadingFiles && !errorFiles) {
-           fetchFileMessages(selectedConversation.id);
-       }
-        if (audioMessages.length === 0 && !isLoadingAudio && !errorAudio) {
-           fetchAudioMessages(selectedConversation.id);
-       }
+      if (fileMessages.length === 0 && !isLoadingFiles && !errorFiles) {
+        fetchFileMessages(selectedConversation.id);
+      }
+      if (audioMessages.length === 0 && !isLoadingAudio && !errorAudio) {
+        fetchAudioMessages(selectedConversation.id);
+      }
     }
   }, [
-      showInfoPanel,
-      selectedConversation?.id,
-      selectedConversation?.isGroup,
-      fetchMediaMessages,
-      fetchFileMessages,
-      fetchAudioMessages,
-      mediaMessages.length,
-      fileMessages.length,
-      audioMessages.length,
-      isLoadingMedia, isLoadingFiles, isLoadingAudio,
-      errorMedia, errorFiles, errorAudio
-    ]);
-
+    showInfoPanel,
+    selectedConversation?.id,
+    selectedConversation?.isGroup,
+    fetchMediaMessages,
+    fetchFileMessages,
+    fetchAudioMessages,
+    mediaMessages.length,
+    fileMessages.length,
+    audioMessages.length,
+    // isLoadingMedia,
+    // isLoadingFiles,
+    // isLoadingAudio,
+    errorMedia,
+    errorFiles,
+    errorAudio,
+  ]);
 
   const renderListView = () => (
     <div className="flex flex-col h-full">
       <div className="p-3 border-b border-gray-200 flex-shrink-0">
+        {" "}
         <div className="relative">
+          {" "}
           <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-            <MagnifyingGlassIcon width="16" height="16" />
-          </span>
+            {" "}
+            <MagnifyingGlassIcon width="16" height="16" />{" "}
+          </span>{" "}
           <input
             type="text"
             placeholder="Tìm kiếm theo tên nhóm..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
+          />{" "}
+        </div>{" "}
       </div>
       <ul className="space-y-1 p-3 overflow-y-auto flex-1 bg-gray-50">
+        {" "}
         {isLoadingConversations ? (
           <p className="text-center text-gray-500 py-6 italic">
-            Đang tải danh sách...
+            {" "}
+            Đang tải danh sách...{" "}
           </p>
         ) : errorConversations ? (
           <p className="text-center text-red-500 py-6">{errorConversations}</p>
@@ -1144,6 +1275,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                   handleSelectConversation(conv);
               }}
             >
+              {" "}
               <img
                 src={
                   conv.avatar ||
@@ -1153,24 +1285,28 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                 }
                 alt={`Avatar của ${conv.name}`}
                 className="w-11 h-11 rounded-full object-cover flex-shrink-0 border"
-              />
+              />{" "}
               <div className="flex-1 overflow-hidden">
+                {" "}
                 <p className="font-semibold text-gray-800 text-sm truncate group-hover:text-blue-700">
-                  {conv.name}
-                </p>
+                  {" "}
+                  {conv.name}{" "}
+                </p>{" "}
                 <p className="text-xs text-gray-500 truncate group-hover:text-gray-700">
-                  {conv.message}
-                </p>
-              </div>
+                  {" "}
+                  {conv.message}{" "}
+                </p>{" "}
+              </div>{" "}
             </li>
           ))
         ) : (
           <p className="text-center text-gray-500 py-6 italic">
+            {" "}
             {searchTerm
               ? "Không tìm thấy nhóm chat nào."
-              : "Không có nhóm chat nào."}
+              : "Không có nhóm chat nào."}{" "}
           </p>
-        )}
+        )}{" "}
       </ul>
     </div>
   );
@@ -1178,12 +1314,10 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
   const renderDetailView = (conversation: MainConversationType) => {
     const isLeader =
       conversation.isGroup && currentUser?.id === conversation.groupLeaderId;
-
     const getParticipantDisplayName = (participant: Participant) => {
       const isCurrentUser = participant.id === currentUser?.id;
       const isGroupLeader = participant.id === conversation.groupLeaderId;
       let displayName = participant.name;
-
       if (isGroupLeader && isCurrentUser) {
         return `${displayName} (Trưởng nhóm, Bạn)`;
       } else if (isGroupLeader) {
@@ -1198,15 +1332,16 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     return (
       <div className="flex-1 flex flex-col overflow-hidden relative h-150">
         <div className="flex justify-between items-center p-3 md:p-4 border-b bg-gray-50 flex-shrink-0">
-           {/* Header content */}
-           <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            {" "}
             <button
               onClick={handleGoBackToList}
               aria-label="Quay lại"
               className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-200 cursor-pointer"
             >
-              <ChevronLeftIcon width="24" height="24" />
-            </button>
+              {" "}
+              <ChevronLeftIcon width="24" height="24" />{" "}
+            </button>{" "}
             <img
               src={
                 conversation.avatar ||
@@ -1218,33 +1353,36 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
               }
               alt={conversation.name}
               className="w-9 h-9 md:w-10 md:h-10 rounded-full object-cover border flex-shrink-0"
-            />
+            />{" "}
             <div className="flex-1 min-w-0">
+              {" "}
               <h2 className="text-base md:text-lg font-semibold truncate">
-                {conversation.name}
-              </h2>
-              {conversation.isGroup && getParticipantInfo(conversation)}
-            </div>
+                {" "}
+                {conversation.name}{" "}
+              </h2>{" "}
+              {conversation.isGroup && getParticipantInfo(conversation)}{" "}
+            </div>{" "}
           </div>
           <div className="flex items-center gap-1 md:gap-2">
+            {" "}
             {conversation.isGroup && (
               <button
                 onClick={() => {
                   setShowInfoPanel(!showInfoPanel);
                   setParticipantSearchTerm("");
-                   if (!showInfoPanel) { // Fetch data only when opening panel
-                        setShowEmojiPicker(false); // Close emoji picker if open
-                   }
+                  if (!showInfoPanel) {
+                    setShowEmojiPicker(false);
+                  }
                 }}
                 aria-label="Thông tin"
                 className="text-gray-500 hover:text-blue-600 p-1 rounded-full hover:bg-gray-200 cursor-pointer"
               >
-                <InfoCircledIcon width="22" height="22" />
+                {" "}
+                <InfoCircledIcon width="22" height="22" />{" "}
               </button>
-            )}
+            )}{" "}
           </div>
         </div>
-
         <div className="flex-1 flex overflow-hidden">
           <div
             className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
@@ -1252,10 +1390,10 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             }`}
           >
             <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-white">
-              {/* Message rendering */}
-               {isLoadingMessages && (
+              {isLoadingMessages && (
                 <div className="flex justify-center items-center h-full text-gray-500 italic">
-                  Đang tải tin nhắn...
+                  {" "}
+                  Đang tải tin nhắn...{" "}
                 </div>
               )}
               {!isLoadingMessages && errorMessages && (
@@ -1267,6 +1405,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                 !errorMessages &&
                 messages.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 italic">
+                    {" "}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       className="h-12 w-12 text-gray-300 mb-2"
@@ -1275,27 +1414,38 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                       stroke="currentColor"
                       strokeWidth={1}
                     >
+                      {" "}
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                      />
-                    </svg>
-                    Chưa có tin nhắn nào. <br /> Bắt đầu cuộc trò chuyện!
+                      />{" "}
+                    </svg>{" "}
+                    Chưa có tin nhắn nào. <br /> Bắt đầu cuộc trò chuyện!{" "}
                   </div>
                 )}
-
               {!isLoadingMessages &&
                 !errorMessages &&
                 messages.map((msg) => (
-                   <div
+                  <div
                     key={msg.id}
-                    className={`flex items-end gap-2 ${
+                    className={`flex items-end gap-2 group relative ${
                       msg.senderId === currentUser?.id
                         ? "justify-end"
                         : "justify-start"
                     }`}
                   >
+                    {/* --- DELETE BUTTON FOR OWN MESSAGES --- */}
+                    {msg.senderId === currentUser?.id && (
+                      <button
+                        onClick={() => confirmDeleteMessage(msg)}
+                        disabled={isProcessingAction}
+                        aria-label="Xóa tin nhắn"
+                        className="relative cursor-pointer top-1/2 left-0 -translate-x-8 -translate-y-1/2 p-2 rounded-full bg-white shadow hover:bg-red-100 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all duration-200 ease-in-out focus:opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <TrashIcon width={14} height={14} />
+                      </button>
+                    )}
                     {msg.senderId !== currentUser?.id && (
                       <img
                         src={
@@ -1327,56 +1477,91 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                               "Unknown User"}
                           </span>
                         )}
-
                       {msg.type === "TEXT" && (
                         <p className="text-sm whitespace-pre-wrap break-words">
-                          {msg.content}
+                          {" "}
+                          {msg.content}{" "}
                         </p>
                       )}
                       {msg.type === "IMAGE" && msg.fileUrl && (
-                        <a
-                          href={msg.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={msg.fileName || "Xem ảnh"}
+                        <div className="relative group/image">
+                          {" "}
+                          <a
+                            href={msg.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={msg.fileName || "Xem ảnh"}
+                          >
+                            {" "}
+                            <img
+                              src={msg.fileUrl}
+                              alt={msg.fileName || "Hình ảnh đã gửi"}
+                              className="max-w-xs max-h-48 rounded object-contain cursor-pointer"
+                            />{" "}
+                          </a>{" "}
+                          <button
+                            onClick={() =>
+                              handleDownloadFile(msg.id, msg.fileName)
+                            }
+                            disabled={downloadingFileId === msg.id}
+                            aria-label={`Tải ${msg.fileName || "ảnh"}`}
+                            className={`absolute top-1 right-1 cursor-pointer bg-black/50 text-white p-1 rounded-full hover:bg-black/75 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-wait`}
+                          >
+                            {" "}
+                            {downloadingFileId === msg.id ? (
+                              <UpdateIcon className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <DownloadIcon className="w-4 h-4  " />
+                            )}{" "}
+                          </button>{" "}
+                        </div>
+                      )}
+                      {msg.type === "FILE" && (
+                        <button
+                          onClick={() =>
+                            handleDownloadFile(msg.id, msg.fileName)
+                          }
+                          disabled={downloadingFileId === msg.id}
+                          className="flex items-center gap-2 cursor-pointer p-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-wait"
                         >
-                          <img
-                            src={msg.fileUrl}
-                            alt={msg.fileName || "Hình ảnh đã gửi"}
-                            className="max-w-xs max-h-48 rounded object-contain cursor-pointer"
-                          />
-                        </a>
-                      )}
-                      {msg.type === "FILE" && msg.fileUrl && (
-                         <a
-                          href={msg.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          download={msg.fileName || "file"}
-                          className="flex items-center gap-2 p-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
-                         >
-                          <FileTextIcon className="w-4 h-4 flex-shrink-0" />
+                          {" "}
+                          {downloadingFileId === msg.id ? (
+                            <UpdateIcon className="w-4 h-4 flex-shrink-0 animate-spin" />
+                          ) : (
+                            <DownloadIcon className="w-4 h-4 flex-shrink-0 cursor-pointer" />
+                          )}{" "}
                           <span className="text-sm font-medium truncate">
-                            {msg.fileName || "Tệp đính kèm"}
-                          </span>
-                         </a>
+                            {" "}
+                            {msg.fileName || "Tệp đính kèm"}{" "}
+                          </span>{" "}
+                        </button>
                       )}
-                       {msg.type === "VIDEO" && msg.fileUrl && (
-                           <div>
-                               <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                   Video: {msg.fileName || "Xem video"}
-                               </a>
-                           </div>
-                       )}
-                       {msg.type === "AUDIO" && msg.fileUrl && (
-                           <div>
-                               <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                   Audio: {msg.fileName || "Nghe audio"}
-                               </a>
-                           </div>
-                       )}
-
-
+                      {msg.type === "VIDEO" && msg.fileUrl && (
+                        <div>
+                          <a
+                            href={msg.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {" "}
+                            Video: {msg.fileName || "Xem video"}{" "}
+                          </a>
+                        </div>
+                      )}
+                      {msg.type === "AUDIO" && msg.fileUrl && (
+                        <div>
+                          <a
+                            href={msg.fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {" "}
+                            Audio: {msg.fileName || "Nghe audio"}{" "}
+                          </a>
+                        </div>
+                      )}
                       <span
                         className={`text-xs mt-1 block text-left ${
                           msg.senderId === currentUser?.id
@@ -1384,20 +1569,19 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             : "text-gray-500 opacity-75"
                         }`}
                       >
+                        {" "}
                         {new Date(msg.sentAt).toLocaleTimeString("vi-VN", {
                           hour: "2-digit",
                           minute: "2-digit",
                           hour12: false,
-                        })}
+                        })}{" "}
                       </span>
                     </div>
                   </div>
                 ))}
               <div ref={messagesEndRef} />
             </div>
-
-            {/* Input Area - Added Emoji Picker */}
-            <div className="p-3 md:p-4 border-t bg-gray-50 flex-shrink-0 relative"> {/* Added relative positioning */}
+            <div className="p-3 md:p-4 border-t bg-gray-50 flex-shrink-0 relative">
               <div className="flex items-center gap-2">
                 <input
                   type="file"
@@ -1411,29 +1595,34 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                   disabled={isSendingMessage}
                   className="p-2 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full cursor-pointer disabled:opacity-50"
                 >
-                  <Link2Icon width="20" height="20" />
+                  {" "}
+                  <Link2Icon width="20" height="20" />{" "}
                 </button>
                 <input
-                  ref={inputRef} // Added ref
+                  ref={inputRef}
                   type="text"
                   placeholder="Nhập tin nhắn..."
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && messageInput.trim() && !isSendingMessage) {
+                    if (
+                      e.key === "Enter" &&
+                      messageInput.trim() &&
+                      !isSendingMessage
+                    ) {
                       handleSendMessage();
                     }
                   }}
                   disabled={isSendingMessage}
                   className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
                 />
-                {/* Emoji Button */}
                 <button
-                   ref={emojiButtonRef} // Added ref
-                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                   className="p-2 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full cursor-pointer"
+                  ref={emojiButtonRef}
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="p-2 text-gray-500 hover:text-blue-600 hover:bg-gray-200 rounded-full cursor-pointer"
                 >
-                  <FaceIcon width="20" height="20" />
+                  {" "}
+                  <FaceIcon width="20" height="20" />{" "}
                 </button>
                 <button
                   onClick={handleSendMessage}
@@ -1445,253 +1634,332 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                   }`}
                   aria-label="Gửi tin nhắn"
                 >
+                  {" "}
                   {isSendingMessage ? (
                     <span className="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full"></span>
                   ) : (
                     <PaperPlaneIcon width="20" height="20" />
-                  )}
+                  )}{" "}
                 </button>
               </div>
-
-              {/* Emoji Picker Container */}
               {showEmojiPicker && (
                 <div
-                  ref={emojiPickerRef} // Added ref
-                  className="absolute bottom-full right-0 mb-2 z-50" // Positioned above and to the right
+                  ref={emojiPickerRef}
+                  className="absolute bottom-full right-0 mb-2 z-50"
                 >
-                   <EmojiPicker
-                      onEmojiClick={onEmojiClick}
-                      autoFocusSearch={false}
-                      theme={Theme.AUTO} // Or Theme.LIGHT / Theme.DARK
-                      lazyLoadEmojis={true}
-                      // width={350} // Optional: Adjust width/height
-                      // height={450}
-                   />
+                  {" "}
+                  <EmojiPicker
+                    onEmojiClick={onEmojiClick}
+                    autoFocusSearch={false}
+                    theme={Theme.AUTO}
+                    lazyLoadEmojis={true}
+                  />{" "}
                 </div>
               )}
             </div>
           </div>
-
-          {/* Info Panel (Đã cập nhật ở câu trả lời trước) */}
-           {conversation.isGroup && (
+          {conversation.isGroup && (
             <div
               className={`absolute top-0 right-0 h-full bg-white border-l shadow-lg transition-transform duration-300 transform ${
                 showInfoPanel ? "translate-x-0" : "translate-x-full"
               } w-full md:w-[350px] flex flex-col`}
             >
               <div className="flex justify-between items-center p-4 border-b flex-shrink-0">
-                <h3 className="text-base font-semibold">Thông tin</h3>
+                {" "}
+                <h3 className="text-base font-semibold">Thông tin</h3>{" "}
                 <button
                   onClick={() => setShowInfoPanel(false)}
                   aria-label="Đóng"
                   className="text-gray-400 cursor-pointer hover:text-gray-600 p-1 rounded-full hover:bg-gray-200"
                 >
-                  <Cross2Icon width="20" height="20" />
-                </button>
+                  {" "}
+                  <Cross2Icon width="20" height="20" />{" "}
+                </button>{" "}
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-5 flex flex-col">
-                 {isLoadingDetails ? (
-                   <div className="flex justify-center items-center py-10 text-gray-500">
-                     <span className="animate-spin mr-2">⏳</span> Đang tải...
-                   </div>
-                 ) : (
-                   <>
-                     {/* Participants Section */}
-                     <div className="pb-4 border-b">
-                       <div className="flex justify-between items-center mb-2">
-                         <h4 className="text-sm font-semibold text-gray-600">
-                           <PersonIcon className="inline mr-1 mb-0.5" />
-                           {filteredParticipants?.length || 0} Thành viên
-                         </h4>
-                       </div>
-                       <div className="relative mb-3">
-                         <span className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400">
-                           <MagnifyingGlassIcon width="14" height="14" />
-                         </span>
-                         <input
-                           type="text"
-                           placeholder="Tìm thành viên..."
-                           value={participantSearchTerm}
-                           onChange={(e) =>
-                             setParticipantSearchTerm(e.target.value)
-                           }
-                           className="w-full pl-8 pr-2 py-1 border border-gray-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 shadow-sm"
-                         />
-                       </div>
-                       <ul className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                         {filteredParticipants.length > 0 ? (
-                           filteredParticipants.map((p) => (
-                             <li
-                               key={p.id}
-                               className="flex items-center justify-between group"
-                             >
-                               <div className="flex items-center gap-2 min-w-0">
-                                 <img
-                                   src={
-                                     p.avatar ||
-                                     `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                       p.name
-                                     )}&background=random&size=32`
-                                   }
-                                   alt={p.name}
-                                   className="w-7 h-7 rounded-full object-cover flex-shrink-0"
-                                 />
-                                 <span className="text-sm text-gray-700 truncate">
-                                   {getParticipantDisplayName(p)}
-                                 </span>
-                               </div>
-                               {isLeader && p.id !== currentUser?.id && (
-                                 <button
-                                   onClick={() => confirmRemoveMember(p)}
-                                   disabled={isProcessingAction}
-                                   aria-label={`Xóa ${p.name}`}
-                                   className={`p-1 text-gray-400 cursor-pointer hover:text-red-600 opacity-0 group-hover:opacity-100 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
-                                 >
-                                   <TrashIcon width="16" height="16" />
-                                 </button>
-                               )}
-                             </li>
-                           ))
-                         ) : (
-                           <li className="text-center text-xs text-gray-400 italic py-4">
-                             Không tìm thấy thành viên.
-                           </li>
-                         )}
-                       </ul>
-                       {isLeader && (
-                         <button
-                           onClick={() =>
-                             toast.error(
-                               "Chức năng thêm thành viên chưa được cài đặt."
-                             )
-                           }
-                           className="mt-3 w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 cursor-pointer"
-                         >
-                           <PlusIcon /> Thêm thành viên
-                         </button>
-                       )}
-                     </div>
-
-                     {/* Media Section */}
-                     <div className="pb-4 border-b">
-                       <h4 className="text-sm font-semibold text-gray-600 mb-2">
-                         <ImageIcon className="inline mr-1 mb-0.5" /> Media ({mediaMessages.length})
-                       </h4>
-                       {isLoadingMedia ? (
-                           <p className="text-xs text-gray-500 italic">Đang tải media...</p>
-                       ) : errorMedia ? (
-                           <p className="text-xs text-red-500">{errorMedia}</p>
-                       ) : mediaMessages.length > 0 ? (
-                           <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-                               {mediaMessages.map(msg => (
-                                   <a key={msg.id} href={msg.fileUrl || '#'} target="_blank" rel="noopener noreferrer" className="aspect-square bg-gray-100 rounded overflow-hidden hover:opacity-80">
-                                      {msg.type === 'IMAGE' && msg.fileUrl && (
-                                          <img src={msg.fileUrl} alt={msg.fileName || 'media'} className="w-full h-full object-cover"/>
-                                      )}
-                                       {msg.type === 'VIDEO' && (
-                                           <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white text-xs p-1">
-                                                <span>{msg.fileName || 'Video'}</span>
-                                           </div>
-                                       )}
-                                   </a>
-                               ))}
-                           </div>
-                       ) : (
-                           <p className="text-xs text-gray-400 italic">Không có hình ảnh/video.</p>
-                       )}
-                     </div>
-
-                     {/* Files Section */}
-                     <div className="pb-4 border-b">
-                       <h4 className="text-sm font-semibold text-gray-600 mb-2">
-                          <FileTextIcon className="inline mr-1 mb-0.5" /> Files ({fileMessages.length})
-                       </h4>
-                       {isLoadingFiles ? (
-                           <p className="text-xs text-gray-500 italic">Đang tải file...</p>
-                       ) : errorFiles ? (
-                            <p className="text-xs text-red-500">{errorFiles}</p>
-                       ) : fileMessages.length > 0 ? (
-                           <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                              {fileMessages.map(msg => (
-                                  <li key={msg.id}>
-                                      <a href={msg.fileUrl || '#'} target="_blank" rel="noopener noreferrer" download={msg.fileName || 'file'}
-                                         className="flex items-center gap-2 text-xs text-blue-600 hover:underline p-1 hover:bg-gray-100 rounded">
-                                          <FileTextIcon className="w-3 h-3 flex-shrink-0"/>
-                                          <span className="truncate">{msg.fileName || 'Tài liệu không tên'}</span>
-                                      </a>
-                                  </li>
-                              ))}
-                           </ul>
-                       ) : (
-                           <p className="text-xs text-gray-400 italic">Không có file nào.</p>
-                       )}
-                     </div>
-
-                     {/* Audio Section */}
-                      <div className="pb-4 border-b">
-                       <h4 className="text-sm font-semibold text-gray-600 mb-2">
-                           <SpeakerLoudIcon className="inline mr-1 mb-0.5" /> Âm thanh ({audioMessages.length})
-                       </h4>
-                       {isLoadingAudio ? (
-                            <p className="text-xs text-gray-500 italic">Đang tải âm thanh...</p>
-                       ) : errorAudio ? (
-                            <p className="text-xs text-red-500">{errorAudio}</p>
-                       ) : audioMessages.length > 0 ? (
-                           <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                               {audioMessages.map(msg => (
-                                  <li key={msg.id}>
-                                       <a href={msg.fileUrl || '#'} target="_blank" rel="noopener noreferrer"
-                                          className="flex items-center gap-2 text-xs text-blue-600 hover:underline p-1 hover:bg-gray-100 rounded">
-                                          <SpeakerLoudIcon className="w-3 h-3 flex-shrink-0"/>
-                                           <span className="truncate">{msg.fileName || 'Audio không tên'}</span>
-                                       </a>
-                                   </li>
-                               ))}
-                           </ul>
-                       ) : (
-                            <p className="text-xs text-gray-400 italic">Không có file âm thanh.</p>
-                       )}
-                     </div>
-
-                     {/* Actions Section */}
-                     <div className="mt-auto pt-4">
-                       {!isLeader && conversation.isGroup && currentUser && (
-                         <button
-                           onClick={confirmLeaveGroup}
-                           disabled={isProcessingAction}
-                           className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded border border-red-200 font-medium mb-3 cursor-pointer disabled:opacity-50"
-                         >
-                           <ExitIcon /> Rời khỏi nhóm
-                         </button>
-                       )}
-                       {isLeader && (
-                         <button
-                           onClick={() =>
-                             toast.error(
-                               "Chức năng giải tán nhóm chưa được cài đặt."
-                             )
-                           }
-                           className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded border border-red-700 font-medium cursor-pointer"
-                         >
-                           <TrashIcon /> Giải tán nhóm
-                         </button>
-                       )}
-                     </div>
-                   </>
-                 )}
+                {isLoadingDetails ? (
+                  <div className="flex justify-center items-center py-10 text-gray-500">
+                    {" "}
+                    <span className="animate-spin mr-2">⏳</span> Đang tải...{" "}
+                  </div>
+                ) : (
+                  <>
+                    <div className="pb-4 border-b">
+                      <div className="flex justify-between items-center mb-2">
+                        {" "}
+                        <h4 className="text-sm font-semibold text-gray-600">
+                          {" "}
+                          <PersonIcon className="inline mr-1 mb-0.5" />{" "}
+                          {filteredParticipants?.length || 0} Thành viên{" "}
+                        </h4>{" "}
+                      </div>
+                      <div className="relative mb-3">
+                        {" "}
+                        <span className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400">
+                          {" "}
+                          <MagnifyingGlassIcon width="14" height="14" />{" "}
+                        </span>{" "}
+                        <input
+                          type="text"
+                          placeholder="Tìm thành viên..."
+                          value={participantSearchTerm}
+                          onChange={(e) =>
+                            setParticipantSearchTerm(e.target.value)
+                          }
+                          className="w-full pl-8 pr-2 py-1 border border-gray-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 shadow-sm"
+                        />{" "}
+                      </div>
+                      <ul className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                        {" "}
+                        {filteredParticipants.length > 0 ? (
+                          filteredParticipants.map((p) => (
+                            <li
+                              key={p.id}
+                              className="flex items-center justify-between group"
+                            >
+                              {" "}
+                              <div className="flex items-center gap-2 min-w-0">
+                                {" "}
+                                <img
+                                  src={
+                                    p.avatar ||
+                                    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                      p.name
+                                    )}&background=random&size=32`
+                                  }
+                                  alt={p.name}
+                                  className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                                />{" "}
+                                <span className="text-sm text-gray-700 truncate">
+                                  {" "}
+                                  {getParticipantDisplayName(p)}{" "}
+                                </span>{" "}
+                              </div>{" "}
+                              {isLeader && p.id !== currentUser?.id && (
+                                <button
+                                  onClick={() => confirmRemoveMember(p)}
+                                  disabled={isProcessingAction}
+                                  aria-label={`Xóa ${p.name}`}
+                                  className={`p-1 text-gray-400 cursor-pointer hover:text-red-600 opacity-0 group-hover:opacity-100 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0`}
+                                >
+                                  {" "}
+                                  <TrashIcon width="16" height="16" />{" "}
+                                </button>
+                              )}{" "}
+                            </li>
+                          ))
+                        ) : (
+                          <li className="text-center text-xs text-gray-400 italic py-4">
+                            {" "}
+                            Không tìm thấy thành viên.{" "}
+                          </li>
+                        )}{" "}
+                      </ul>
+                      {isLeader && (
+                        <button
+                          onClick={() =>
+                            toast.error(
+                              "Chức năng thêm thành viên chưa được cài đặt."
+                            )
+                          }
+                          className="mt-3 w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 rounded border border-blue-200 cursor-pointer"
+                        >
+                          {" "}
+                          <PlusIcon /> Thêm thành viên{" "}
+                        </button>
+                      )}
+                    </div>
+                    <div className="pb-4 border-b">
+                      <h4 className="text-sm font-semibold text-gray-600 mb-2">
+                        {" "}
+                        <ImageIcon className="inline mr-1 mb-0.5" /> Media (
+                        {mediaMessages.length}){" "}
+                      </h4>
+                      {isLoadingMedia ? (
+                        <p className="text-xs text-gray-500 italic">
+                          Đang tải media...
+                        </p>
+                      ) : errorMedia ? (
+                        <p className="text-xs text-red-500">{errorMedia}</p>
+                      ) : mediaMessages.length > 0 ? (
+                        <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                          {" "}
+                          {mediaMessages.map((msg) => (
+                            <a
+                              key={msg.id}
+                              href={msg.fileUrl || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="relative group aspect-square bg-gray-100 rounded overflow-hidden hover:opacity-80"
+                            >
+                              {" "}
+                              {msg.type === "IMAGE" && msg.fileUrl && (
+                                <img
+                                  src={msg.fileUrl}
+                                  alt={msg.fileName || "media"}
+                                  className="w-full h-full object-cover"
+                                />
+                              )}{" "}
+                              {msg.type === "VIDEO" && (
+                                <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white text-xs p-1">
+                                  {" "}
+                                  <span>{msg.fileName || "Video"}</span>{" "}
+                                </div>
+                              )}{" "}
+                              <button
+                                onClick={() =>
+                                  handleDownloadFile(msg.id, msg.fileName)
+                                }
+                                disabled={downloadingFileId === msg.id}
+                                aria-label={`Tải ${msg.fileName || "media"}`}
+                                className={`absolute top-1 right-1 cursor-pointer bg-black/50 text-white p-1 rounded-full hover:bg-black/75 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-wait`}
+                              >
+                                {" "}
+                                {downloadingFileId === msg.id ? (
+                                  <UpdateIcon className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <DownloadIcon className="w-3 h-3" />
+                                )}{" "}
+                              </button>{" "}
+                            </a>
+                          ))}{" "}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">
+                          Không có hình ảnh/video.
+                        </p>
+                      )}
+                    </div>
+                    <div className="pb-4 border-b">
+                      <h4 className="text-sm font-semibold text-gray-600 mb-2">
+                        {" "}
+                        <FileTextIcon className="inline mr-1 mb-0.5" /> Files (
+                        {fileMessages.length}){" "}
+                      </h4>
+                      {isLoadingFiles ? (
+                        <p className="text-xs text-gray-500 italic">
+                          Đang tải file...
+                        </p>
+                      ) : errorFiles ? (
+                        <p className="text-xs text-red-500">{errorFiles}</p>
+                      ) : fileMessages.length > 0 ? (
+                        <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                          {" "}
+                          {fileMessages.map((msg) => (
+                            <li key={msg.id}>
+                              {" "}
+                              <button
+                                onClick={() =>
+                                  handleDownloadFile(msg.id, msg.fileName)
+                                }
+                                disabled={downloadingFileId === msg.id}
+                                className="flex w-full items-center cursor-pointer gap-2 text-xs text-blue-600 hover:underline p-1 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-wait"
+                              >
+                                {" "}
+                                {downloadingFileId === msg.id ? (
+                                  <UpdateIcon className="w-3 h-3 flex-shrink-0 animate-spin" />
+                                ) : (
+                                  <DownloadIcon className="w-3 h-3 flex-shrink-0" />
+                                )}{" "}
+                                <span className="truncate text-left">
+                                  {msg.fileName || "Tài liệu không tên"}
+                                </span>{" "}
+                              </button>{" "}
+                            </li>
+                          ))}{" "}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">
+                          Không có file nào.
+                        </p>
+                      )}
+                    </div>
+                    <div className="pb-4 border-b">
+                      <h4 className="text-sm font-semibold text-gray-600 mb-2">
+                        {" "}
+                        <SpeakerLoudIcon className="inline mr-1 mb-0.5" /> Âm
+                        thanh ({audioMessages.length}){" "}
+                      </h4>
+                      {isLoadingAudio ? (
+                        <p className="text-xs text-gray-500 italic">
+                          Đang tải âm thanh...
+                        </p>
+                      ) : errorAudio ? (
+                        <p className="text-xs text-red-500">{errorAudio}</p>
+                      ) : audioMessages.length > 0 ? (
+                        <ul className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                          {" "}
+                          {audioMessages.map((msg) => (
+                            <li key={msg.id}>
+                              {" "}
+                              <button
+                                onClick={() =>
+                                  handleDownloadFile(msg.id, msg.fileName)
+                                }
+                                disabled={downloadingFileId === msg.id}
+                                className="flex w-full items-center gap-2 text-xs text-blue-600 hover:underline p-1 hover:bg-gray-100 rounded disabled:opacity-50 disabled:cursor-wait"
+                              >
+                                {" "}
+                                {downloadingFileId === msg.id ? (
+                                  <UpdateIcon className="w-3 h-3 flex-shrink-0 animate-spin" />
+                                ) : (
+                                  <DownloadIcon className="w-3 h-3 flex-shrink-0" />
+                                )}{" "}
+                                <span className="truncate text-left">
+                                  {msg.fileName || "Audio không tên"}
+                                </span>{" "}
+                              </button>{" "}
+                            </li>
+                          ))}{" "}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-gray-400 italic">
+                          Không có file âm thanh.
+                        </p>
+                      )}
+                    </div>
+                    <div className="mt-auto pt-4">
+                      {!isLeader && conversation.isGroup && currentUser && (
+                        <button
+                          onClick={confirmLeaveGroup}
+                          disabled={isProcessingAction}
+                          className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded border border-red-200 font-medium mb-3 cursor-pointer disabled:opacity-50"
+                        >
+                          {" "}
+                          <ExitIcon /> Rời khỏi nhóm{" "}
+                        </button>
+                      )}
+                      {isLeader && (
+                        <button
+                          onClick={() =>
+                            toast.error(
+                              "Chức năng giải tán nhóm chưa được cài đặt."
+                            )
+                          }
+                          className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded border border-red-700 font-medium cursor-pointer"
+                        >
+                          {" "}
+                          <TrashIcon /> Giải tán nhóm{" "}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
         </div>
-
         <ConfirmationDialog
           isOpen={removeConfirmationState.isOpen}
           title="Xác nhận xóa thành viên"
           message={
             <>
+              {" "}
               Bạn có chắc chắn muốn xóa thành viên{" "}
-              <strong>{removeConfirmationState.memberToRemove?.name}</strong>{" "}
-              khỏi nhóm chat này không?
+              <strong>
+                {removeConfirmationState.memberToRemove?.name}
+              </strong>{" "}
+              khỏi nhóm chat này không?{" "}
             </>
           }
           confirmText="Xóa"
@@ -1700,7 +1968,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           onConfirm={removeConfirmationState.onConfirm || (() => {})}
           onCancel={removeConfirmationState.onCancel}
         />
-
         <ConfirmationDialog
           isOpen={leaveConfirmationState.isOpen}
           title="Xác nhận rời nhóm"
@@ -1711,6 +1978,17 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           onConfirm={leaveConfirmationState.onConfirm || (() => {})}
           onCancel={leaveConfirmationState.onCancel}
         />
+        {/* --- Delete Message Confirmation Dialog --- */}
+        <ConfirmationDialog
+          isOpen={deleteMessageConfirmationState.isOpen}
+          title="Xác nhận xóa tin nhắn"
+          message="Bạn có chắc chắn muốn xóa tin nhắn này không? Hành động này không thể hoàn tác."
+          confirmText="Xóa tin nhắn"
+          cancelText="Hủy bỏ"
+          confirmVariant="danger"
+          onConfirm={deleteMessageConfirmationState.onConfirm || (() => {})}
+          onCancel={deleteMessageConfirmationState.onCancel}
+        />
       </div>
     );
   };
@@ -1718,16 +1996,19 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
   return (
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-center mb-4 pb-3 border-b flex-shrink-0">
+        {" "}
         <h2 className="text-xl md:text-2xl font-bold text-purple-600">
-          Danh sách Chat
-        </h2>
+          {" "}
+          Danh sách Chat{" "}
+        </h2>{" "}
       </div>
       <div className="flex-1 overflow-hidden">
+        {" "}
         {viewMode === "list"
           ? renderListView()
           : selectedConversation
           ? renderDetailView(selectedConversation)
-          : renderListView()}
+          : renderListView()}{" "}
       </div>
     </div>
   );

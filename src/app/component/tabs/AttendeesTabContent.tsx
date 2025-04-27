@@ -833,8 +833,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   }
                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 h-full shadow-sm bg-white appearance-none pr-8"
                 >
-                  <option value="az">Tên A-Z</option>
-                  <option value="za">Tên Z-A</option>
+                  <option value="az">A - Z</option>
+                  <option value="za">Z - A</option>
                 </select>
               </div>
               <div>

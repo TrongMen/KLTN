@@ -223,7 +223,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
             </div>
 
              {/* Search and Sort Controls */}
-             <div className="flex flex-col sm:flex-row gap-4 mb-5 flex-shrink-0">
+             <div className="flex flex-col sm:flex-row gap-3 mb-4 flex-shrink-0">
                  {/* Search Input */}
                  <div className="relative flex-grow">
                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
@@ -234,21 +234,22 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                          placeholder="Tìm theo tên hoặc email..."
                          value={searchTerm}
                          onChange={(e) => setSearchTerm(e.target.value)}
-                         className="w-full p-2 pl-10 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm"
+                         className="w-full p-2 pl-9 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm"
                          aria-label="Tìm kiếm thành viên"
                      />
                  </div>
                  {/* Sort Select */}
                  <div className="flex-shrink-0">
+                    <label htmlFor="" className="text-base text-gray-500 ">Sắp xếp: </label>
                      <select
                          value={sortOrder}
                          onChange={(e) => setSortOrder(e.target.value as 'az' | 'za' | 'none')}
-                         className="w-full sm:w-auto p-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 h-full shadow-sm bg-white appearance-none pr-8" // Added bg-white and appearance-none
+                         className="w-full sm:w-auto p-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 h-full shadow-sm bg-white appearance-none pr-7" // Added bg-white and appearance-none
                          aria-label="Sắp xếp thành viên"
                      >
-                         <option value="none">Sắp xếp: Mặc định</option>
-                         <option value="az">Sắp xếp: Tên A-Z</option>
-                         <option value="za">Sắp xếp: Tên Z-A</option>
+                         <option value="none">Mặc định</option>
+                         <option value="az">A - Z</option>
+                         <option value="za">Z - A</option>
                      </select>
                  </div>
              </div>

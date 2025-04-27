@@ -450,14 +450,14 @@ export default function UserHome() {
       createdEventIds.has(event.id)
     )
      {
-         if (registeredEventIds.has(event.id)) toast.error("Bạn đã đăng ký sự kiện này.");
-         if (createdEventIds.has(event.id)) toast.error("Bạn là người tạo sự kiện này.");
-         return;
+        if (registeredEventIds.has(event.id)) toast.error("Bạn đã đăng ký sự kiện này.");
+        if (createdEventIds.has(event.id)) toast.error("Bạn là người tạo sự kiện này.");
+        return;
      }
      const isEventUpcoming = new Date(event.date) >= new Date(new Date().setHours(0, 0, 0, 0));
      if (!isEventUpcoming) {
-         toast.error("Sự kiện này đã diễn ra.");
-         return;
+        toast.error("Sự kiện này đã diễn ra.");
+        return;
      }
 
 
@@ -559,6 +559,31 @@ export default function UserHome() {
     return `${baseClasses} ${specificBg} ${activeTab === tabName ? activeClasses : specificText} ${activeTab !== tabName ? inactiveClasses : ''} ${specificHoverBg}`;
   };
 
+  // Thêm hàm này vào component UserHome
+  const getActiveIndicatorColor = (tabName: ActiveTab): string => {
+      switch (tabName) {
+          case 'home': return 'border-t-indigo-600';
+          case 'createEvent': return 'border-t-cyan-600';
+          case 'myEvents': return 'border-t-blue-600';
+          case 'attendees': return 'border-t-teal-600';
+          case 'registeredEvents': return 'border-t-green-600';
+          case 'members': return 'border-t-pink-600';
+          case 'chatList': return 'border-t-purple-600';
+          default: return 'border-t-gray-400';
+      }
+  };
+
+  // Định nghĩa cấu trúc tabs
+  const tabs = [
+      { id: 'home', label: '🎉 Trang chủ', requiresAuth: false },
+      { id: 'createEvent', label: '➕ Tạo sự kiện', requiresAuth: true },
+      { id: 'myEvents', label: '🛠 Sự kiện của tôi', requiresAuth: true },
+      { id: 'attendees', label: '✅ Người tham gia', requiresAuth: true }, // Giả sử cần đăng nhập
+      { id: 'registeredEvents', label: '📋 Sự kiện đã đăng ký', requiresAuth: true },
+      { id: 'members', label: '👥 Thành viên CLB', requiresAuth: true },
+      { id: 'chatList', label: '💬 Danh sách chat', requiresAuth: true },
+  ];
+
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
@@ -567,88 +592,59 @@ export default function UserHome() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-             <Link href="/about">
-               <span className="cursor-pointer hover:text-gray-300">Giới thiệu</span>
-            </Link>
-             <span
+              <Link href="/about">
+                <span className="cursor-pointer hover:text-gray-300">Giới thiệu</span>
+              </Link>
+              <span
                 className="cursor-pointer hover:text-gray-300"
                 onClick={() => setShowContactModal(true)}
-            >
+              >
                 Liên hệ
-            </span>
-             {!isLoadingUser && <UserMenu user={user} onLogout={handleLogout} />}
-             {isLoadingUser && <span className="text-gray-400">Đang tải...</span>}
-             {!isLoadingUser && !user && (
-                 <Link href="/login">
+              </span>
+              {!isLoadingUser && <UserMenu user={user} onLogout={handleLogout} />}
+              {isLoadingUser && <span className="text-gray-400">Đang tải...</span>}
+              {!isLoadingUser && !user && (
+                  <Link href="/login">
                       <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
                           Đăng nhập
                       </span>
-                 </Link>
-             )}
+                  </Link>
+              )}
           </div>
         </div>
       </nav>
 
+      {/* Thay thế phần render nút tab cũ bằng đoạn này */}
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200">
-        <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
-            <button
-              onClick={() => setActiveTab("home")}
-              className={getTabButtonClasses("home")}
-            >
-              🎉 Trang chủ
-            </button>
+        <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
+             {tabs.map((tab) => {
+                 const showTab = !tab.requiresAuth || (tab.requiresAuth && user);
+                 if (!showTab) return null;
 
-            {user && (
-                <button
-                onClick={() => setActiveTab("createEvent")}
-                className={getTabButtonClasses("createEvent")}
-                >
-                ➕ Tạo sự kiện
-                </button>
-            )}
-
-          {user && (
-              <>
-                 <button
-                    onClick={() => setActiveTab("myEvents")}
-                    className={getTabButtonClasses("myEvents")}
-                >
-                    🛠 Sự kiện của tôi
-                </button>
-                 <button
-                    onClick={() => setActiveTab("attendees")}
-                    className={getTabButtonClasses("attendees")}
-                 >
-                    ✅ Người tham gia
-                </button>
-                 <button
-                    onClick={() => setActiveTab("registeredEvents")}
-                    className={getTabButtonClasses("registeredEvents")}
-                >
-                    📋 Sự kiện đã đăng ký
-                </button>
-                <button
-                    onClick={() => setActiveTab("members")}
-                    className={getTabButtonClasses("members")}
-                >
-                    👥 Thành viên CLB
-                </button>
-                <button
-                    onClick={() => setActiveTab("chatList")}
-                    className={getTabButtonClasses("chatList")}
-                 >
-                    💬 Danh sách chat
-                </button>
-              </>
-          )}
-           {!user && !isLoadingUser && (
-               <span className="text-sm text-gray-500 italic p-2">Đăng nhập để xem các mục khác</span>
-           )}
-
+                 return (
+                     <div key={tab.id} className="relative flex flex-col items-center">
+                         <button
+                             onClick={() => setActiveTab(tab.id as ActiveTab)}
+                             className={getTabButtonClasses(tab.id as ActiveTab)}
+                         >
+                             {tab.label}
+                         </button>
+                         {activeTab === tab.id && (
+                             <div className={`absolute top-full mt-1.5 w-0 h-0
+                                 border-l-[6px] border-l-transparent
+                                 border-t-[8px] ${getActiveIndicatorColor(tab.id as ActiveTab)}
+                                 border-r-[6px] border-r-transparent`}
+                                  style={{ left: '50%', transform: 'translateX(-50%)' }}>
+                             </div>
+                         )}
+                     </div>
+                 );
+             })}
+             {!user && !isLoadingUser && (<span className="text-sm text-gray-500 italic p-2 self-center">Đăng nhập để xem các mục khác</span>)}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
         {isPageLoading ? (
           <p className="text-center text-gray-500 italic py-6">Đang tải dữ liệu...</p>
         ) : (
@@ -680,12 +676,12 @@ export default function UserHome() {
               <CreateEventTabContent
                  user={user}
                  onEventCreated={() => {
-                     fetchAllEvents();
-                     if(user?.id) fetchUserCreatedEvents(user.id);
-                     setActiveTab('myEvents');
+                     fetchAllEvents(); // Tải lại danh sách sự kiện chung
+                     if(user?.id) fetchUserCreatedEvents(user.id); // Tải lại danh sách sự kiện user đã tạo
+                     setActiveTab('myEvents'); // Chuyển sang tab sự kiện của tôi
                      toast.success("Sự kiện đã được tạo thành công và đang chờ duyệt!");
                  }}
-               />
+                />
             )}
             {activeTab === "myEvents" && user && (
               <MyEventsTabContent
@@ -693,9 +689,9 @@ export default function UserHome() {
               />
             )}
             {activeTab === "attendees" && user && (
-                <AttendeesTabContent
-                    user={user}
-                />
+                 <AttendeesTabContent
+                     user={user}
+                 />
             )}
             {activeTab === "registeredEvents" && user && (
               <RegisteredEventsTabContent
@@ -707,16 +703,16 @@ export default function UserHome() {
               />
             )}
             {activeTab === "members" && user && (
-                <MembersTabContent
-                    user={user}
-                    userRole={user.roles?.[0]?.name?.toUpperCase() || 'UNKNOWN'}
-                    currentUserEmail={user.email || null}
+                 <MembersTabContent
+                     user={user}
+                     userRole={user.roles?.[0]?.name?.toUpperCase() || 'UNKNOWN'} // Cần xem lại logic lấy role nếu có nhiều role
+                     currentUserEmail={user.email || null}
                  />
             )}
             {activeTab === "chatList" && user && (
-                <ChatTabContent
-                    currentUser={user}
-                />
+                 <ChatTabContent
+                     currentUser={user}
+                 />
             )}
 
              {activeTab !== 'home' && !user && !isLoadingUser && (

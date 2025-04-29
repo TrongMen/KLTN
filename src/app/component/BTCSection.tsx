@@ -12,74 +12,85 @@ import React, {
 import { toast } from "react-hot-toast";
 
 // --- Types ---
-type ApiRole = { id: string; name: string; description?: string }; // Giữ lại để tham khảo cấu trúc con
-type ApiPosition = { id: string; name: string; description?: string }; // Giữ lại để tham khảo cấu trúc con
+type ApiRole = { id: string; name: string; description?: string };
+type ApiPosition = { id: string; name: string; description?: string };
+// ApiUser cơ bản (giữ lại nếu cần ở nơi khác, nhưng không dùng trực tiếp trong props nữa)
 type ApiUser = {
   id: string;
-  firstName: string;
-  lastName: string;
-  username: string;
+  firstName: string | null; // Cho phép null dựa trên API response
+  lastName: string | null;
+  username: string | null;
   email?: string;
 };
 
-// Kiểu dữ liệu mới từ API /users/with-position-and-role
-type ApiUserWithDetails = ApiUser & {
-  position?: ApiPosition | null;
-  organizerRole?: ApiRole | null;
-  // Thêm các trường khác nếu có từ API
-  dob?: string;
-  avatar?: string;
-  gender?: boolean;
-  roles?: { name: string; description?: string; permissions?: any[] }[];
+// Kiểu dữ liệu chi tiết từ API /users/with-position-and-role
+type ApiUserWithDetails = {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    username: string | null;
+    email?: string;
+    position?: ApiPosition | null;
+    organizerRole?: ApiRole | null;
+    // Thêm các trường khác nếu có từ API
+    dob?: string;
+    avatar?: string;
+    gender?: boolean;
+    roles?: { name: string; description?: string; permissions?: any[] }[];
 };
+
 
 type OrganizerData = { userId: string; roleId: string; positionId: string };
 
+// *** Bỏ allUsers khỏi Props ***
 type BTCSectionProps = {
-  allUsers: ApiUser[]; // Vẫn cần cho dropdown tìm kiếm
   existingOrganizers: OrganizerData[];
 };
 
-// Handle type
 export type BTCSectionHandle = {
   getMembersData: () => OrganizerData[];
   resetForms: () => void;
 };
 
-// Cập nhật kiểu cho hàng form
 type OrganizerFormRow = {
   id: number;
   userId: string;
   positionId: string;
-  positionName: string; // Thêm tên để hiển thị
+  positionName: string;
   roleId: string;
-  roleName: string; // Thêm tên để hiển thị
+  roleName: string;
 };
 
+// Sửa kiểu users trong props của dropdown để chấp nhận ApiUserWithDetails
 type SearchableUserDropdownProps = {
-  users: ApiUser[];
+  users: ApiUserWithDetails[]; // *** Thay đổi thành ApiUserWithDetails ***
   selectedUserId: string | null;
   onChange: (userId: string) => void;
   placeholder?: string;
   disabledUserIds?: Set<string>;
 };
 
-const getUserDisplay = (user: ApiUser | null | undefined): string => {
-  if (!user) return "";
-  const fullName = `${user.lastName || ""} ${user.firstName || ""}`.trim();
-  return fullName || user.username;
+// Hàm getUserDisplay giờ nên nhận ApiUserWithDetails hoặc ApiUser
+const getUserDisplay = (user: ApiUserWithDetails | ApiUser | null | undefined): string => {
+    if (!user) return "";
+    const fullName = `${user.lastName || ""} ${user.firstName || ""}`.trim();
+    // Sử dụng toán tử ?? để xử lý null cho username
+    return fullName || user.username ?? "";
 };
 
-// Component SearchableUserDropdown không thay đổi
+
+// --- Component SearchableUserDropdown ---
+// (Giữ nguyên logic, chỉ cần đảm bảo kiểu 'users' được truyền vào là đúng)
 function SearchableUserDropdown({
-  users,
+  users, // Bây giờ nhận ApiUserWithDetails[]
   selectedUserId,
   onChange,
   placeholder = "-- Chọn hoặc tìm user --",
   disabledUserIds = new Set(),
 }: SearchableUserDropdownProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filteredUsers, setFilteredUsers] = useState<ApiUser[]>([]);
+  // filteredUsers bây giờ cũng là ApiUserWithDetails[]
+  const [filteredUsers, setFilteredUsers] = useState<ApiUserWithDetails[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -94,9 +105,7 @@ function SearchableUserDropdown({
       return;
     }
     if (!searchTerm) {
-      // Hiển thị tất cả user khi input trống và focus
-       setFilteredUsers(users);
-       // Hoặc nếu muốn ẩn dropdown khi trống thì: setFilteredUsers([]);
+      setFilteredUsers(users);
       return;
     }
     const lowerSearchTerm = searchTerm.toLowerCase();
@@ -121,33 +130,31 @@ function SearchableUserDropdown({
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setIsDropdownOpen(false);
-        // Khôi phục lại tên hiển thị của user đã chọn khi click ra ngoài
         const selectedUser = users?.find((u) => u.id === selectedUserId);
         setSearchTerm(getUserDisplay(selectedUser));
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [dropdownRef, selectedUserId, users]); // Thêm users vào dependency
+  }, [dropdownRef, selectedUserId, users]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
-    setIsDropdownOpen(true); // Mở dropdown khi gõ
+    setIsDropdownOpen(true);
   };
 
    const handleInputClick = () => {
-    setIsDropdownOpen(true); // Mở dropdown khi click vào input
-     // Nếu muốn hiển thị tất cả user khi click vào input trống
+    setIsDropdownOpen(true);
      if (!searchTerm && users) {
        setFilteredUsers(users);
      }
   };
 
-
-  const handleUserSelect = (user: ApiUser) => {
+  // handleUserSelect giờ nhận ApiUserWithDetails
+  const handleUserSelect = (user: ApiUserWithDetails) => {
     if (disabledUserIds.has(user.id)) return;
     onChange(user.id);
-    setSearchTerm(getUserDisplay(user)); // Cập nhật input với tên user đã chọn
+    setSearchTerm(getUserDisplay(user));
     setIsDropdownOpen(false);
   };
 
@@ -157,9 +164,10 @@ function SearchableUserDropdown({
         type="text"
         value={searchTerm}
         onChange={handleInputChange}
-        onClick={handleInputClick} // Sử dụng onClick thay onFocus để xử lý cả click
+        onClick={handleInputClick}
         placeholder={placeholder}
-        className="border border-gray-300 rounded px-2 py-1 w-full focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+        // Thêm chiều cao cố định cho input
+        className="border border-gray-300 rounded px-2 py-1 w-full focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm h-[30px]"
         autoComplete="off"
       />
       {isDropdownOpen && (
@@ -188,7 +196,8 @@ function SearchableUserDropdown({
             })
           ) : (
             <li className="px-3 py-2 text-gray-500 italic">
-              Không tìm thấy user.
+              {/* Cập nhật thông báo tùy theo ngữ cảnh */}
+              Không tìm thấy user hoặc API không trả về user nào.
             </li>
           )}
         </ul>
@@ -199,12 +208,11 @@ function SearchableUserDropdown({
 
 
 // --- Component Chính BTCSection ---
+// *** Bỏ allUsers khỏi props destructuring ***
 export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
-  ({ allUsers, existingOrganizers }, ref) => {
-    const [organizerForms, setOrganizerForms] = useState<OrganizerFormRow[]>(
-      []
-    );
-    // State mới để lưu user với details
+  ({ existingOrganizers }, ref) => {
+    const [organizerForms, setOrganizerForms] = useState<OrganizerFormRow[]>([]);
+    // State này giờ là nguồn dữ liệu chính cho dropdown
     const [detailedUsers, setDetailedUsers] = useState<ApiUserWithDetails[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -223,25 +231,20 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
           const token = localStorage.getItem("authToken");
           if (!token) throw new Error("Token không tồn tại.");
           const headers = { Authorization: `Bearer ${token}` };
-
-          // Gọi API mới
           const res = await fetch(
-             "http://localhost:8080/identity/users/with-position-and-role", // Thay API endpoint tại đây
+             "http://localhost:8080/identity/users/with-position-and-role",
              { headers }
            );
-
           if (!res.ok) {
              const errorData = await res.json().catch(() => ({ message: res.statusText }));
              throw new Error(`Lỗi tải danh sách user chi tiết: ${errorData?.message || res.status}`);
            }
-
           const data = await res.json();
           if (data?.code !== 1000) {
              throw new Error(`API trả về lỗi: ${data?.message || 'Unknown API error'}`);
            }
-
+          // Lưu kết quả fetch vào detailedUsers
           setDetailedUsers(data?.result || []);
-
         } catch (err: any) {
           const msg = `Lỗi tải dữ liệu BTC: ${err.message}`;
           setError(msg);
@@ -252,47 +255,45 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
         }
       };
       fetchDetailedUsers();
-    }, []); // Chỉ fetch một lần khi component mount
+    }, []); // Chỉ fetch một lần
 
     const addOrganizerFormRow = () =>
       setOrganizerForms((prev) => [
         ...prev,
-        // Khởi tạo giá trị rỗng
         { id: Date.now(), userId: "", positionId: "", positionName: "", roleId: "", roleName: "" },
       ]);
 
     const removeOrganizerFormRow = (id: number) =>
       setOrganizerForms((prev) => prev.filter((f) => f.id !== id));
 
-    // Cập nhật handler để lấy thông tin position/role khi user thay đổi
+    // Handler này giờ sử dụng detailedUsers là nguồn chính để tìm thông tin
     const handleOrganizerChange = useCallback(
       (
         id: number,
-        field: keyof Omit<OrganizerFormRow, "id" | "positionName" | "roleName">, // Chỉ cho phép thay đổi userId qua đây
+        field: keyof Omit<OrganizerFormRow, "id" | "positionName" | "roleName">,
         value: string
       ) => {
         setOrganizerForms((prev) =>
           prev.map((form) => {
             if (form.id === id) {
               if (field === "userId") {
+                // Tìm trong state detailedUsers đã fetch
                 const selectedDetailedUser = detailedUsers.find(u => u.id === value);
                 return {
                   ...form,
                   userId: value,
                   positionId: selectedDetailedUser?.position?.id ?? "",
-                  positionName: selectedDetailedUser?.position?.name ?? "—", // Mặc định nếu không có
+                  positionName: selectedDetailedUser?.position?.name ?? "—",
                   roleId: selectedDetailedUser?.organizerRole?.id ?? "",
-                  roleName: selectedDetailedUser?.organizerRole?.name ?? "—", // Mặc định nếu không có
+                  roleName: selectedDetailedUser?.organizerRole?.name ?? "—",
                 };
               }
-              // Không cho phép thay đổi trực tiếp positionId, roleId từ đây nữa
-              // return { ...form, [field]: value }; // Logic cũ nếu cần
             }
             return form;
           })
         );
       },
-      [detailedUsers] // Thêm detailedUsers vào dependencies của useCallback
+      [detailedUsers] // Dependency là detailedUsers
     );
 
     useImperativeHandle(
@@ -302,21 +303,15 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
           const existingIds = new Set(
             existingOrganizers?.map((o) => o.userId) ?? []
           );
-          // Lọc những form có userId được chọn và chưa tồn tại
           const newMembers = organizerForms
             .filter(
-              (form) =>
-                form.userId && // Chỉ cần check userId
-                !existingIds.has(form.userId)
+              (form) => form.userId && !existingIds.has(form.userId) // Chỉ cần userId hợp lệ và chưa tồn tại
             )
             .map((form) => ({
-              // Trả về userId, positionId, roleId đã lưu
               userId: form.userId,
-              positionId: form.positionId,
-              roleId: form.roleId,
+              positionId: form.positionId, // Lấy từ state của form row
+              roleId: form.roleId,         // Lấy từ state của form row
             }));
-
-          // Đảm bảo không trùng userId trong danh sách mới trả về
           const uniqueNewMembersMap = new Map<string, OrganizerData>();
           newMembers.forEach((member) => {
             if (!uniqueNewMembersMap.has(member.userId)) {
@@ -329,7 +324,7 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
           setOrganizerForms([]);
         },
       }),
-      [organizerForms, existingOrganizers] // Giữ nguyên dependencies
+      [organizerForms, existingOrganizers]
     );
 
     return (
@@ -358,7 +353,7 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
             >
                <div className="w-1/4 sm:flex-grow">
               <SearchableUserDropdown
-                users={allUsers}
+                users={detailedUsers}
                 selectedUserId={form.userId}
                 onChange={(userId) =>
                   handleOrganizerChange(form.id, "userId", userId)

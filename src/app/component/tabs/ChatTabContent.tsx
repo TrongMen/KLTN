@@ -29,12 +29,7 @@ import {
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import { io, Socket } from "socket.io-client";
 
-import {
-  User as MainUserType,
-  // Conversation as MainConversationType, // Defined below
-  Role,
-  Participant, // Giả sử Participant có id, name, avatar
-} from "../homeuser";
+import { User as MainUserType, Role, Participant } from "../homeuser";
 
 // --- Interfaces ---
 interface MainConversationType {
@@ -43,12 +38,13 @@ interface MainConversationType {
   isGroup: boolean;
   message: string;
   avatar?: string | null;
-  participants?: Participant[]; // Lưu danh sách thành viên đã lấy được tên đầy đủ
+  participants?: Participant[];
   groupLeaderId?: string | null;
   sentAt?: string;
   lastMessageSenderId?: string;
-  lastMessageSenderName?: string; // Sẽ lưu tên định dạng "Họ Tên" hoặc "Bạn"
+  lastMessageSenderName?: string;
 }
+
 interface ApiGroupChatListItem {
   id: string;
   name: string;
@@ -59,7 +55,9 @@ interface ApiGroupChatListItem {
   message?: string | null;
   sentAt?: string | null;
   lastMessageSenderId?: string | null;
+  lastMessageSenderName?: string | null;
 }
+
 interface ApiGroupChatDetail {
   id: string;
   name: string;
@@ -68,6 +66,7 @@ interface ApiGroupChatDetail {
   memberIds: string[];
   status: string | null;
 }
+
 interface ApiUserDetail {
   id: string;
   username: string | null;
@@ -79,6 +78,7 @@ interface ApiUserDetail {
   email: string | null;
   gender: boolean | null;
 }
+
 interface Message {
   id: string;
   content: string | null;
@@ -93,9 +93,11 @@ interface Message {
   deleted?: boolean;
   downloadUrl?: string | null;
 }
+
 interface ChatTabContentProps {
   currentUser: MainUserType | null;
 }
+
 interface ConfirmationDialogProps {
   isOpen: boolean;
   title: string;
@@ -153,16 +155,19 @@ function ConfirmationDialog({
             confirmVariant === "danger" ? "text-red-700" : "text-gray-800"
           }`}
         >
-          {title}
+          {" "}
+          {title}{" "}
         </h3>{" "}
         <div className="text-sm text-gray-600 mb-5">{message}</div>{" "}
         <div className="flex gap-3">
           {" "}
           <button onClick={onCancel} className={cancelButtonClasses}>
-            {cancelText}
+            {" "}
+            {cancelText}{" "}
           </button>{" "}
           <button onClick={onConfirm} className={confirmButtonClasses}>
-            {confirmText}
+            {" "}
+            {confirmText}{" "}
           </button>{" "}
         </div>{" "}
       </div>{" "}
@@ -171,7 +176,7 @@ function ConfirmationDialog({
 }
 
 const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
-  // --- States ---
+  // States
   const [viewMode, setViewMode] = useState<"list" | "detail">("list");
   const [selectedConversation, setSelectedConversation] =
     useState<MainConversationType | null>(null);
@@ -238,7 +243,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       onCancel: () => {},
     });
 
-  // --- Refs ---
+  // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -246,7 +251,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const groupSocket = useRef<Socket | null>(null);
 
-  // --- Utility Hooks/Functions ---
+  // Utils
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -276,7 +281,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
   // --- Data Fetching ---
   const fetchConversations = useCallback(async () => {
     if (!currentUser?.id) {
-      setErrorConversations("...");
+      setErrorConversations("Thông tin người dùng không hợp lệ.");
       setIsLoadingConversations(false);
       setConversations([]);
       return;
@@ -284,111 +289,164 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     setIsLoadingConversations(true);
     setErrorConversations(null);
     const userId = currentUser.id;
+    let token: string | null = null;
     try {
-      const token = localStorage.getItem("authToken");
+      token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
       const listUrl = `http://localhost:8080/identity/api/events/group-chats/user/${userId}`;
       const listResponse = await fetch(listUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!listResponse.ok) {
-        let e = `Lỗi ${listResponse.status}`;
-        try {
-          const d = await listResponse.json();
-          e = d.message || e;
-        } catch {}
-        throw new Error(e);
-      }
+      if (!listResponse.ok)
+        throw new Error(`Lỗi ${listResponse.status} khi tải danh sách nhóm.`);
       const listData = await listResponse.json();
-
-      if (listData.code === 1000 && Array.isArray(listData.result)) {
-        const hasRequiredData =
-          listData.result.length > 0 &&
-          listData.result[0].hasOwnProperty("message") &&
-          listData.result[0].hasOwnProperty("sentAt") &&
-          listData.result[0].hasOwnProperty("lastMessageSenderId");
-        let groupChats: MainConversationType[] = listData.result.map(
-          (g: ApiGroupChatListItem) => ({
-            id: g.id,
-            name: g.name,
-            isGroup: true,
-            groupLeaderId: g.groupLeaderId,
-            message: g.message || "...",
-            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(
-              g.name
-            )}&background=random&font-size=0.4`,
-            participants: [],
-            sentAt: g.sentAt,
-            lastMessageSenderId: g.lastMessageSenderId || undefined,
-            lastMessageSenderName: undefined,
-          })
+      if (listData.code !== 1000 || !Array.isArray(listData.result)) {
+        throw new Error(
+          listData.message || "Dữ liệu danh sách nhóm không hợp lệ."
         );
-
-        if (!hasRequiredData && groupChats.length > 0) {
-          console.log("Fetching last messages separately...");
-          const lastMessagePromises = groupChats.map(async (group) => {
-            try {
-              const messagesUrl = `http://localhost:8080/identity/api/events/${group.id}/messages?page=0&size=1&sort=sentAt,desc`;
-              const messagesResponse = await fetch(messagesUrl, {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (!messagesResponse.ok) return group;
-              const messagesData = await messagesResponse.json();
-              const messagesResult =
-                messagesData.result?.content || messagesData.result;
-              if (
-                messagesData.code === 1000 &&
-                Array.isArray(messagesResult) &&
-                messagesResult.length > 0
-              ) {
-                const lastMessage = messagesResult[0] as Message;
-                // Lấy tên từ message payload nếu có, nếu không thì để undefined (sẽ xử lý sau nếu cần)
-                const senderName =
-                  lastMessage.senderId === currentUser?.id
-                    ? "Bạn"
-                    : lastMessage.senderName || undefined;
-                return {
-                  ...group,
-                  message:
-                    lastMessage.content ??
-                    `Đã gửi: ${lastMessage.fileName || "File"}`,
-                  sentAt: lastMessage.sentAt,
-                  lastMessageSenderId: lastMessage.senderId,
-                  lastMessageSenderName: senderName,
-                };
-              }
-              return {
-                ...group,
-                message: "Chưa có tin nhắn",
-                lastMessageSenderId: undefined,
-                lastMessageSenderName: undefined,
-              };
-            } catch (err) {
-              console.error(`Error fetching msg for ${group.id}:`, err);
-              return group;
-            }
-          });
-          groupChats = await Promise.all(lastMessagePromises);
-        } else {
-          groupChats = groupChats.map((gc) => ({
-            ...gc,
-            lastMessageSenderName:
-              gc.lastMessageSenderId === currentUser?.id ? "Bạn" : undefined,
-          }));
-        }
-        const finalSortedChats = groupChats.sort(
-          (a, b) =>
-            (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
-            (a.sentAt ? new Date(a.sentAt).getTime() : 0)
-        );
-        setConversations(finalSortedChats);
-      } else {
-        throw new Error(listData.message || "Định dạng dữ liệu không hợp lệ");
       }
+
+      const groupBaseInfo: {
+        id: string;
+        name: string;
+        groupLeaderId: string | null;
+        avatar: string;
+      }[] = listData.result.map((g: ApiGroupChatListItem) => ({
+        id: g.id,
+        name: g.name,
+        groupLeaderId: g.groupLeaderId,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          g.name
+        )}&background=random&font-size=0.4`,
+      }));
+      if (groupBaseInfo.length === 0) {
+        setConversations([]);
+        setIsLoadingConversations(false);
+        return;
+      }
+
+      console.log("Fetching latest message and sender name for each group...");
+      const conversationPromises = groupBaseInfo.map(async (groupInfo) => {
+        let lastMessage: Message | null = null;
+        let lastMessageText = "Chưa có tin nhắn";
+        let sentAt: string | undefined = undefined;
+        let lastMessageSenderId: string | undefined = undefined;
+        let lastMessageSenderName: string | undefined = undefined;
+        try {
+          const messagesUrl = `http://localhost:8080/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
+          const messagesResponse = await fetch(messagesUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (messagesResponse.ok) {
+            const messagesData = await messagesResponse.json();
+            const messagesResult =
+              messagesData.result?.content || messagesData.result;
+            if (
+              messagesData.code === 1000 &&
+              Array.isArray(messagesResult) &&
+              messagesResult.length > 0
+            ) {
+              lastMessage = messagesResult[0] as Message;
+              lastMessageText =
+                lastMessage.content ??
+                `Đã gửi: ${lastMessage.fileName || "File"}`;
+              sentAt = lastMessage.sentAt;
+              lastMessageSenderId = lastMessage.senderId;
+              if (lastMessage.senderId === currentUser.id) {
+                lastMessageSenderName = "Bạn";
+              } else if (lastMessage.senderName) {
+                if (lastMessage.senderName.includes(" ")) {
+                  lastMessageSenderName = lastMessage.senderName;
+                } else {
+                  try {
+                    const userUrl = `http://localhost:8080/identity/users/notoken/${lastMessage.senderId}`;
+                    const userRes = await fetch(userUrl);
+                    if (userRes.ok) {
+                      const userData = await userRes.json();
+                      if (userData.code === 1000 && userData.result) {
+                        const userDetail = userData.result as ApiUserDetail;
+                        lastMessageSenderName =
+                          `${userDetail.lastName || ""} ${
+                            userDetail.firstName || ""
+                          }`.trim() ||
+                          userDetail.username ||
+                          lastMessage.senderName;
+                      } else {
+                        lastMessageSenderName = lastMessage.senderName;
+                      }
+                    } else {
+                      lastMessageSenderName = lastMessage.senderName;
+                    }
+                  } catch (userErr) {
+                    console.error(
+                      `Lỗi fetch tên user ${lastMessage.senderId}:`,
+                      userErr
+                    );
+                    lastMessageSenderName = lastMessage.senderName;
+                  }
+                }
+              } else {
+                try {
+                  const userUrl = `http://localhost:8080/identity/users/notoken/${lastMessage.senderId}`;
+                  const userRes = await fetch(userUrl);
+                  if (userRes.ok) {
+                    const userData = await userRes.json();
+                    if (userData.code === 1000 && userData.result) {
+                      const userDetail = userData.result as ApiUserDetail;
+                      lastMessageSenderName =
+                        `${userDetail.lastName || ""} ${
+                          userDetail.firstName || ""
+                        }`.trim() ||
+                        userDetail.username ||
+                        undefined;
+                    }
+                  }
+                } catch (userErr) {
+                  console.error(
+                    `Lỗi fetch tên user ${lastMessage.senderId}:`,
+                    userErr
+                  );
+                }
+              }
+            }
+          } else {
+            console.error(
+              `Workspace msg lỗi ${messagesResponse.status} cho group ${groupInfo.id}`
+            );
+            lastMessageText = "Lỗi tải tin nhắn";
+          }
+        } catch (err) {
+          console.error(`Workspace msg error cho group ${groupInfo.id}:`, err);
+          lastMessageText = "Lỗi tải tin nhắn";
+        }
+        return {
+          id: groupInfo.id,
+          name: groupInfo.name,
+          isGroup: true,
+          groupLeaderId: groupInfo.groupLeaderId,
+          avatar: groupInfo.avatar,
+          participants: [],
+          message: lastMessageText,
+          sentAt: sentAt,
+          lastMessageSenderId: lastMessageSenderId,
+          lastMessageSenderName: lastMessageSenderName,
+        };
+      });
+      const resolvedConversations = await Promise.all(conversationPromises);
+      const sortedChats = resolvedConversations.sort(
+        (a, b) =>
+          (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
+          (a.sentAt ? new Date(a.sentAt).getTime() : 0)
+      );
+      console.log(
+        "Final conversations state after fetching all latest messages:",
+        sortedChats
+      );
+      setConversations(sortedChats);
     } catch (error: any) {
-      console.error("Lỗi tải list:", error);
-      setErrorConversations(error.message || "Lỗi tải list.");
-      toast.error(error.message || "Lỗi tải list.");
+      console.error("Lỗi fetchConversations:", error);
+      setErrorConversations(error.message || "Lỗi tải danh sách.");
+      toast.error(error.message || "Lỗi tải danh sách.");
       setConversations([]);
     } finally {
       setIsLoadingConversations(false);
@@ -425,7 +483,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           (a: Message, b: Message) =>
             new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
         );
-        setMessages(sortedMessages); // Chỉ set tin nhắn thô, không map tên ở đây
+        setMessages(sortedMessages);
       } else if (
         data.code === 1000 &&
         Array.isArray(data.result) &&
@@ -444,13 +502,14 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       setIsLoadingMessages(false);
     }
   }, []);
-
   const fetchGroupChatDetails = useCallback(
     async (groupId: string) => {
       if (!groupId || !currentUser?.id) return;
       setIsLoadingDetails(true);
       setParticipantSearchTerm("");
-      const currentSummary = conversations.find((c) => c.id === groupId);
+      const currentSummary = conversations.find(
+        (c) => String(c.id) === groupId
+      );
       setSelectedConversation((prev) => ({
         ...(prev || ({} as MainConversationType)),
         ...(currentSummary || { id: groupId, name: "Loading..." }),
@@ -540,19 +599,16 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           let participantName: string;
           let participantAvatar: string | null = null;
           if (userId === currentUser.id) {
-            // Định dạng tên cho currentUser
             participantName =
               `${currentUser.lastName || ""} ${
                 currentUser.firstName || ""
               }`.trim() || "Bạn";
             participantAvatar = currentUser.avatar || userDetail?.avatar;
           } else if (userDetail) {
-            // Định dạng tên "Họ Tên" cho người khác
             participantName = `${userDetail.lastName || ""} ${
               userDetail.firstName || ""
             }`.trim();
             if (!participantName) {
-              // Fallback nếu không có cả họ và tên
               participantName =
                 userDetail.username || `User (${userId.substring(0, 4)}...)`;
             }
@@ -570,8 +626,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             name: participantName,
             avatar: participantAvatar,
           });
-        }); // Lưu tên đã định dạng vào 'name'
-
+        });
         setSelectedConversation((prev) => ({
           ...(prev || ({} as MainConversationType)),
           id: groupDetails!.id,
@@ -589,6 +644,9 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           sentAt: prev?.sentAt || currentSummary?.sentAt,
           lastMessageSenderId:
             prev?.lastMessageSenderId || currentSummary?.lastMessageSenderId,
+          lastMessageSenderName:
+            prev?.lastMessageSenderName ||
+            currentSummary?.lastMessageSenderName,
         }));
       } catch (error: any) {
         console.error(`Lỗi tải details ${groupId}:`, error);
@@ -604,7 +662,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     },
     [conversations, currentUser]
   );
-
   const fetchMediaMessages = useCallback(async (groupId: string) => {
     if (!groupId) return;
     setIsLoadingMedia(true);
@@ -723,7 +780,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     }
   }, []);
 
-  // --- Action Handlers ---
+  // Action Handlers
   const handleRemoveMember = useCallback(
     async (gId: string | number, mId: string, lId: string) => {
       if (!gId || !mId || !lId) {
@@ -791,8 +848,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
   };
   const handleGoBackToList = useCallback(() => {
     setViewMode("list");
-    setSelectedConversation(null);
-    groupSocket.current?.disconnect();
+    setSelectedConversation(null); /* Không ngắt socket ở đây */
   }, []);
   const handleLeaveGroup = useCallback(
     async (groupId: string | number, memberId: string) => {
@@ -819,7 +875,9 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           throw new Error(e);
         }
         toast.success("Left group!", { id: tId });
-        setConversations((prev) => prev.filter((c) => c.id !== groupId));
+        setConversations((prev) =>
+          prev.filter((c) => String(c.id) !== String(groupId))
+        );
         handleGoBackToList();
       } catch (error: any) {
         console.error("Leave group error:", error);
@@ -1041,46 +1099,44 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
         }
         if (data.code === 1000 || res.ok) {
           toast.success("Deleted!", { id: tId });
-          let newLastMessage: Message | null = null;
-          setMessages((prev) => {
-            const remaining = prev.filter((msg) => msg.id !== messageId);
-            if (remaining.length > 0) {
-              newLastMessage = remaining[remaining.length - 1];
-            }
-            return remaining;
-          });
           const groupId = selectedConversation?.id;
+          let updatedMessagesState: Message[] = [];
+          setMessages((prev) => {
+            updatedMessagesState = prev.filter((msg) => msg.id !== messageId);
+            return updatedMessagesState;
+          });
           if (groupId) {
+            const newLastMessage =
+              updatedMessagesState.length > 0
+                ? updatedMessagesState[updatedMessagesState.length - 1]
+                : null;
+            const sender = selectedConversation?.participants?.find(
+              (p) => p.id === newLastMessage?.senderId
+            );
             const senderName =
               newLastMessage?.senderId === currentUser?.id
                 ? "Bạn"
-                : newLastMessage?.senderName ||
-                  selectedConversation?.participants?.find(
-                    (p) => p.id === newLastMessage?.senderId
-                  )?.name ||
-                  undefined;
-            setConversations((prev) =>
-              prev
-                .map((convo) =>
-                  convo.id === groupId
-                    ? {
-                        ...convo,
-                        message: newLastMessage
-                          ? newLastMessage.content ??
-                            `Đã gửi: ${newLastMessage.fileName || "File"}`
-                          : "Chưa có tin nhắn",
-                        sentAt: newLastMessage?.sentAt,
-                        lastMessageSenderId: newLastMessage?.senderId,
-                        lastMessageSenderName: senderName,
-                      }
-                    : convo
-                )
-                .sort(
-                  (a, b) =>
-                    (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
-                    (a.sentAt ? new Date(a.sentAt).getTime() : 0)
-                )
-            );
+                : sender?.name || newLastMessage?.senderName || undefined;
+            setConversations((prevList) => {
+              const idx = prevList.findIndex(
+                (c) => String(c.id) === String(groupId)
+              );
+              if (idx === -1) return prevList;
+              const updatedConvo = {
+                ...prevList[idx],
+                message: newLastMessage
+                  ? newLastMessage.content ??
+                    `Đã gửi: ${newLastMessage.fileName || "File"}`
+                  : "Chưa có tin nhắn",
+                sentAt: newLastMessage?.sentAt,
+                lastMessageSenderId: newLastMessage?.senderId,
+                lastMessageSenderName: senderName,
+              };
+              let newList = [...prevList];
+              newList.splice(idx, 1);
+              newList.unshift(updatedConvo);
+              return newList;
+            });
           }
         } else {
           throw new Error(data.message || "Delete failed.");
@@ -1098,13 +1154,8 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
         setIsProcessingAction(false);
       }
     },
-    [
-      currentUser,
-      selectedConversation?.id,
-      messages,
-      selectedConversation?.participants,
-    ]
-  );
+    [currentUser, selectedConversation?.id, selectedConversation?.participants]
+  ); // Bỏ messages khỏi dependency
   const confirmDeleteMessage = useCallback(
     (message: Message) => {
       if (!message || !currentUser || message.senderId !== currentUser.id)
@@ -1190,7 +1241,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     [fetchGroupChatDetails, fetchMessages]
   );
 
-  // *** useEffect để map senderName sau khi participants và messages được load ***
+  // useEffect để map senderName
   useEffect(() => {
     if (
       selectedConversation?.participants &&
@@ -1213,7 +1264,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             const sender = selectedConversation.participants?.find(
               (p) => p.id === msg.senderId
             );
-            // Sử dụng tên đã định dạng "Họ Tên" từ participants
             return { ...msg, senderName: sender?.name || "Unknown User" };
           })
         );
@@ -1221,34 +1271,42 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     }
   }, [selectedConversation?.participants, messages, currentUser?.id, viewMode]);
 
-  // --- Socket Effect ---
+  // --- Socket Effect (Chỉ dùng groupSocket) ---
   useEffect(() => {
     if (
       selectedConversation?.isGroup &&
-      selectedConversation.id &&
+      typeof selectedConversation.id === "string" &&
       viewMode === "detail"
     ) {
       const groupId = selectedConversation.id;
-      const currentGroupName = selectedConversation.name;
       const SOCKET_URL = "http://localhost:9099";
+
       if (
         groupSocket.current?.connected &&
-        groupSocket.current?.query?.groupId === groupId
+        groupSocket.current.io.opts.query?.groupId === groupId
       ) {
-        return;
+        console.log(
+          `GROUP_SOCKET: Already connected to ${groupId}.`
+        ); /* Vẫn gắn lại listener bên dưới */
+      } else {
+        console.log(`GROUP_SOCKET: Connecting for group ${groupId}`);
+        groupSocket.current?.disconnect();
+        groupSocket.current = io(SOCKET_URL, {
+          path: "/socket.io",
+          query: { groupId: groupId },
+          transports: ["websocket"],
+          reconnectionAttempts: 5,
+          reconnectionDelay: 3000,
+        });
       }
-      console.log(`GROUP_SOCKET: Connecting for group ${groupId}`);
-      groupSocket.current?.disconnect();
-      groupSocket.current = io(SOCKET_URL, {
-        path: "/socket.io",
-        query: { groupId: groupId },
-        transports: ["websocket"],
-      });
+
       const currentGroupSocket = groupSocket.current;
-      currentGroupSocket.on("connect", () => {
-        console.log(`GROUP_SOCKET: Connected ${groupId}`);
-      });
-      currentGroupSocket.on("disconnect", (reason) => {
+
+      const handleConnect = () =>
+        console.log(
+          `GROUP_SOCKET: Connected ${groupId}. Socket ID: ${currentGroupSocket.id}`
+        );
+      const handleDisconnect = (reason: Socket.DisconnectReason) => {
         console.log(`GROUP_SOCKET: Disconnected ${groupId}. R: ${reason}`);
         if (
           reason !== "io client disconnect" &&
@@ -1256,17 +1314,20 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           selectedConversation?.id === groupId
         )
           toast.error(`Chat disconnect (${reason})`);
-      });
-      currentGroupSocket.on("connect_error", (error) => {
+      };
+      const handleConnectError = (error: Error) => {
         console.error(`GROUP_SOCKET: Conn Error ${groupId}:`, error);
         if (viewMode === "detail" && selectedConversation?.id === groupId)
           toast.error(`Chat conn error: ${error.message}`);
-      });
+      };
 
-      currentGroupSocket.on("new_message", (newMessage: Message) => {
-        console.log("GROUP_SOCKET: Received new_message", newMessage);
+      const handleNewMessage = (newMessage: Message) => {
+        console.log(
+          `GROUP_SOCKET: Received new_message for ${groupId}`,
+          newMessage
+        );
+        // Cập nhật messages state (chỉ khi đang xem đúng group)
         if (selectedConversation?.id === groupId) {
-          // Cập nhật messages (detail view) - Cố gắng lấy senderName
           setMessages((prev) => {
             if (prev.some((m) => m.id === newMessage.id)) return prev;
             const sender = selectedConversation?.participants?.find(
@@ -1283,35 +1344,6 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             );
             return updated;
           });
-          // Cập nhật conversations (list view) - Cố gắng lấy senderName
-          setConversations((prev) => {
-            const idx = prev.findIndex((c) => c.id === groupId);
-            if (idx === -1) return prev;
-            const senderName =
-              newMessage.senderId === currentUser?.id
-                ? "Bạn"
-                : newMessage.senderName ||
-                  selectedConversation?.participants?.find(
-                    (p) => p.id === newMessage.senderId
-                  )?.name ||
-                  undefined;
-            const updated = {
-              ...prev[idx],
-              message:
-                newMessage.content ??
-                `Đã gửi: ${newMessage.fileName || "File"}`,
-              sentAt: newMessage.sentAt,
-              lastMessageSenderId: newMessage.senderId,
-              lastMessageSenderName: senderName,
-            };
-            let newList = [...prev];
-            newList[idx] = updated;
-            return newList.sort(
-              (a, b) =>
-                (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
-                (a.sentAt ? new Date(a.sentAt).getTime() : 0)
-            );
-          });
           if (showInfoPanel) {
             if (newMessage.type === "IMAGE" || newMessage.type === "VIDEO")
               fetchMediaMessages(groupId);
@@ -1319,99 +1351,162 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             else if (newMessage.type === "AUDIO") fetchAudioMessages(groupId);
           }
         }
-      });
+        // Cập nhật conversations state (cho list view) LUÔN LUÔN KHI SOCKET NHẬN ĐƯỢC
+        setConversations((prevList) => {
+          const idx = prevList.findIndex((c) => String(c.id) === groupId); // So sánh string để chắc chắn
+          if (idx === -1) {
+            console.warn(`Convo ${groupId} not found in list for new_message`);
+            return prevList;
+          }
+          // Lấy tên người gửi từ participants nếu có, nếu không thì từ payload, cuối cùng là undefined
+          const sender = selectedConversation?.participants?.find(
+            (p) => p.id === newMessage.senderId
+          ); // Dùng participants hiện tại nếu có
+          const senderName =
+            newMessage.senderId === currentUser?.id
+              ? "Bạn"
+              : sender?.name || newMessage.senderName || undefined;
+          const updatedConvo = {
+            ...prevList[idx],
+            message:
+              newMessage.content ?? `Đã gửi: ${newMessage.fileName || "File"}`,
+            sentAt: newMessage.sentAt,
+            lastMessageSenderId: newMessage.senderId,
+            lastMessageSenderName: senderName,
+          };
+          let newList = [...prevList];
+          newList.splice(idx, 1); // Xóa khỏi vị trí cũ
+          newList.unshift(updatedConvo); // Thêm vào đầu
+          return newList; // Trả về danh sách đã sắp xếp lại
+        });
+      };
 
-      currentGroupSocket.on(
-        "message_deleted",
-        (data: { messageId: string }) => {
-          console.log("GROUP_SOCKET: Received message_deleted", data);
-          if (data?.messageId && selectedConversation?.id === groupId) {
-            let newLastMessage: Message | null = null;
-            setMessages((prev) => {
-              const remaining = prev.filter((m) => m.id !== data.messageId);
-              if (remaining.length > 0) {
-                newLastMessage = remaining[remaining.length - 1];
-              }
-              return remaining;
-            });
-            setConversations((prev) => {
-              const idx = prev.findIndex((c) => c.id === groupId);
-              if (idx === -1) return prev;
-              const senderName =
-                newLastMessage?.senderId === currentUser?.id
-                  ? "Bạn"
-                  : newLastMessage?.senderName ||
-                    selectedConversation?.participants?.find(
-                      (p) => p.id === newLastMessage?.senderId
-                    )?.name ||
-                    undefined;
-              const updated = {
-                ...prev[idx],
-                message: newLastMessage
-                  ? newLastMessage.content ??
-                    `Đã gửi: ${newLastMessage.fileName || "File"}`
-                  : "Chưa có tin nhắn",
-                sentAt: newLastMessage?.sentAt,
-                lastMessageSenderId: newLastMessage?.senderId,
-                lastMessageSenderName: senderName,
-              };
-              let newList = [...prev];
-              newList[idx] = updated;
-              return newList.sort(
-                (a, b) =>
-                  (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
-                  (a.sentAt ? new Date(a.sentAt).getTime() : 0)
-              );
-            });
-            if (showInfoPanel) {
-              fetchMediaMessages(groupId);
-              fetchFileMessages(groupId);
-              fetchAudioMessages(groupId);
+      const handleMessageDeleted = (data: { messageId: string }) => {
+        console.log("GROUP_SOCKET: Received message_deleted", data);
+        if (data?.messageId && selectedConversation?.id === groupId) {
+          let newLastMessage: Message | null = null;
+          setMessages((prev) => {
+            const remaining = prev.filter((m) => m.id !== data.messageId);
+            if (remaining.length > 0) {
+              newLastMessage = remaining[remaining.length - 1];
             }
+            return remaining;
+          });
+          setConversations((prevList) => {
+            const idx = prevList.findIndex((c) => String(c.id) === groupId);
+            if (idx === -1) return prevList;
+            const sender = selectedConversation?.participants?.find(
+              (p) => p.id === newLastMessage?.senderId
+            );
+            const senderName =
+              newLastMessage?.senderId === currentUser?.id
+                ? "Bạn"
+                : sender?.name || newLastMessage?.senderName || undefined;
+            const updatedConvo = {
+              ...prevList[idx],
+              message: newLastMessage
+                ? newLastMessage.content ??
+                  `Đã gửi: ${newLastMessage.fileName || "File"}`
+                : "Chưa có tin nhắn",
+              sentAt: newLastMessage?.sentAt,
+              lastMessageSenderId: newLastMessage?.senderId,
+              lastMessageSenderName: senderName,
+            };
+            let newList = [...prevList];
+            newList.splice(idx, 1);
+            newList.unshift(updatedConvo);
+            return newList;
+          });
+          if (showInfoPanel) {
+            fetchMediaMessages(groupId);
+            fetchFileMessages(groupId);
+            fetchAudioMessages(groupId);
           }
         }
-      );
-
-      currentGroupSocket.on(
-        "member_removed",
-        (data: { removedUserId?: string }) => {
-          console.log("GROUP_SOCKET: member_removed", data);
-          if (selectedConversation?.id === groupId) {
-            toast.info("Thành viên đã bị xóa.");
-            fetchGroupChatDetails(groupId);
-            if (data?.removedUserId === currentUser?.id) {
-              toast.warn("Bạn đã bị xóa.");
-              handleGoBackToList();
-            }
-          }
+        // Cập nhật list ngay cả khi không ở detail view (nếu socket vẫn kết nối)
+        else if (data?.messageId) {
+          setConversations((prevList) => {
+            const idx = prevList.findIndex((c) => String(c.id) === groupId);
+            if (idx === -1) return prevList;
+            // Cần fetch lại tin nhắn cuối cùng cho group này vì không có context 'messages'
+            // Hoặc đơn giản là hiển thị "..." hoặc không làm gì cả nếu phức tạp
+            console.warn(
+              "Received message_deleted for non-active group, list update might be inaccurate without fetching last message."
+            );
+            // Tạm thời chỉ đưa lên đầu nếu muốn, không cập nhật message
+            let newList = [...prevList];
+            const currentConvo = newList.splice(idx, 1)[0];
+            if (currentConvo) newList.unshift(currentConvo); // Đưa lên đầu mà không đổi message
+            return newList;
+          });
         }
-      );
-      currentGroupSocket.on("member_left", (data: { userId?: string }) => {
+      };
+      const handleMemberRemoved = (data: { removedUserId?: string }) => {
+        console.log("GROUP_SOCKET: member_removed", data);
+        if (selectedConversation?.id === groupId) {
+          toast.info("Thành viên đã bị xóa.");
+          fetchGroupChatDetails(groupId);
+          if (data?.removedUserId === currentUser?.id) {
+            toast.warn("Bạn đã bị xóa.");
+            handleGoBackToList();
+          }
+        } else {
+          fetchConversations(); /* Cập nhật lại cả list nếu không ở detail view */
+        }
+      };
+      const handleMemberLeft = (data: { userId?: string }) => {
         console.log("GROUP_SOCKET: member_left", data);
         if (selectedConversation?.id === groupId) {
           toast.info("Thành viên đã rời đi.");
           fetchGroupChatDetails(groupId);
+        } else {
+          fetchConversations(); /* Cập nhật lại cả list */
         }
-      });
-      currentGroupSocket.on("group_deactivated", () => {
+      };
+      const handleGroupDeactivated = () => {
         const groupName = selectedConversation?.name || groupId;
         console.log("GROUP_SOCKET: group_deactivated");
         if (selectedConversation?.id === groupId) {
           toast.warn(`Nhóm ${groupName} đã bị giải tán.`);
           handleGoBackToList();
         }
-        setConversations((prev) => prev.filter((c) => c.id !== groupId));
-      });
+        setConversations((prev) =>
+          prev.filter((c) => String(c.id) !== groupId)
+        );
+      };
+
+      // Gắn listeners
+      currentGroupSocket.on("connect", handleConnect);
+      currentGroupSocket.on("disconnect", handleDisconnect);
+      currentGroupSocket.on("connect_error", handleConnectError);
+      currentGroupSocket.on("new_message", handleNewMessage);
+      currentGroupSocket.on("message_deleted", handleMessageDeleted);
+      currentGroupSocket.on("member_removed", handleMemberRemoved);
+      currentGroupSocket.on("member_left", handleMemberLeft);
+      currentGroupSocket.on("group_deactivated", handleGroupDeactivated);
+
+      // Cleanup Function
       return () => {
         if (currentGroupSocket) {
-          console.log(`GROUP_SOCKET: Disconnecting ${groupId}`);
-          currentGroupSocket.disconnect();
-          groupSocket.current = null;
+          console.log(`GROUP_SOCKET: Cleaning up listeners for ${groupId}`);
+          currentGroupSocket.off("connect", handleConnect);
+          currentGroupSocket.off("disconnect", handleDisconnect);
+          currentGroupSocket.off("connect_error", handleConnectError);
+          currentGroupSocket.off("new_message", handleNewMessage);
+          currentGroupSocket.off("message_deleted", handleMessageDeleted);
+          currentGroupSocket.off("member_removed", handleMemberRemoved);
+          currentGroupSocket.off("member_left", handleMemberLeft);
+          currentGroupSocket.off(
+            "group_deactivated",
+            handleGroupDeactivated
+          ); /* Không ngắt kết nối ở đây vội */
         }
       };
     } else {
       if (groupSocket.current) {
-        console.log("GROUP_SOCKET: Disconnecting ...");
+        console.log(
+          "GROUP_SOCKET: Disconnecting (view changed or no selection)..."
+        );
         groupSocket.current.disconnect();
         groupSocket.current = null;
       }
@@ -1422,12 +1517,12 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     currentUser?.id,
     showInfoPanel,
     selectedConversation?.participants,
-    messages,
     fetchGroupChatDetails,
     fetchMediaMessages,
     fetchFileMessages,
     fetchAudioMessages,
     handleGoBackToList,
+    /* Thêm setConversations vào dependency list của useEffect này */ setConversations,
   ]);
 
   // --- Rendering Functions ---
@@ -1437,14 +1532,16 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
     if (isLoadingDetails && !participantCount) {
       return (
         <p className="text-xs text-gray-500 truncate mt-0.5">
-          Đang tải thành viên...
+          {" "}
+          Đang tải thành viên...{" "}
         </p>
       );
     }
     if (!participantCount) {
       return (
         <p className="text-xs text-gray-500 truncate mt-0.5">
-          (Chưa có thông tin)
+          {" "}
+          (Chưa có thông tin){" "}
         </p>
       );
     }
@@ -1482,25 +1579,30 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
 
   const renderListView = () => (
     <div className="flex flex-col h-full">
+      {" "}
       <div className="p-3 border-b border-gray-200 flex-shrink-0">
+        {" "}
         <div className="relative">
+          {" "}
           <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
             {" "}
             <MagnifyingGlassIcon width="16" height="16" />{" "}
-          </span>
+          </span>{" "}
           <input
             type="text"
             placeholder="Tìm kiếm theo tên nhóm..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-      </div>
+          />{" "}
+        </div>{" "}
+      </div>{" "}
       <ul className="space-y-1 p-3 overflow-y-auto flex-1 bg-gray-50">
+        {" "}
         {isLoadingConversations && conversations.length === 0 ? (
           <p className="text-center text-gray-500 py-6 italic">
-            Đang tải danh sách...
+            {" "}
+            Đang tải danh sách...{" "}
           </p>
         ) : errorConversations ? (
           <p className="text-center text-red-500 py-6">{errorConversations}</p>
@@ -1519,6 +1621,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                   handleSelectConversation(conv);
               }}
             >
+              {" "}
               <img
                 src={
                   conv.avatar ||
@@ -1528,23 +1631,31 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                 }
                 alt={`Avatar của ${conv.name}`}
                 className="w-11 h-11 rounded-full object-cover flex-shrink-0 border"
-              />
+              />{" "}
               <div className="flex-1 overflow-hidden">
+                {" "}
                 <p className="font-semibold text-gray-800 text-sm truncate group-hover:text-blue-700">
                   {" "}
                   {conv.name}{" "}
-                </p>
+                </p>{" "}
                 <p className="text-xs text-gray-500 truncate group-hover:text-gray-700">
+                  {" "}
                   {conv.lastMessageSenderId && (
                     <span className="font-medium">
-                      {conv.lastMessageSenderName // Hiển thị tên đã lưu (Bạn hoặc Họ Tên)
+                      {" "}
+                      {conv.lastMessageSenderName
                         ? `${conv.lastMessageSenderName}: `
-                        : ""}
+                        : ""}{" "}
                     </span>
-                  )}
-                  {conv.message || "..."}
-                </p>
-              </div>
+                  )}{" "}
+                  {/* Thêm log message cho tôi */}
+
+                  {console.log("Message",conv.message )}
+                  
+                  
+                  {conv.message || "..."}{" "}
+                </p>{" "}
+              </div>{" "}
               {conv.sentAt && (
                 <span className="text-xs text-gray-400 self-start flex-shrink-0 ml-2">
                   {" "}
@@ -1553,7 +1664,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                     minute: "2-digit",
                   })}{" "}
                 </span>
-              )}
+              )}{" "}
             </li>
           ))
         ) : (
@@ -1563,11 +1674,10 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
               ? "Không tìm thấy nhóm chat nào."
               : "Không có nhóm chat nào."}{" "}
           </p>
-        )}
-      </ul>
+        )}{" "}
+      </ul>{" "}
     </div>
   );
-
   const renderDetailView = (conversation: MainConversationType) => {
     const isLeader =
       conversation.isGroup && currentUser?.id === conversation.groupLeaderId;
@@ -1586,11 +1696,13 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
         return displayName;
       }
     };
-
     return (
       <div className="flex-1 flex flex-col overflow-hidden relative h-full">
+        {" "}
         <div className="flex justify-between items-center p-3 md:p-4 border-b bg-gray-50 flex-shrink-0">
+          {" "}
           <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            {" "}
             <button
               onClick={handleGoBackToList}
               aria-label="Quay lại"
@@ -1598,7 +1710,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
             >
               {" "}
               <ChevronLeftIcon width="24" height="24" />{" "}
-            </button>
+            </button>{" "}
             <img
               src={
                 conversation.avatar ||
@@ -1610,15 +1722,16 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
               }
               alt={conversation.name}
               className="w-9 h-9 md:w-10 md:h-10 rounded-full object-cover border flex-shrink-0"
-            />
+            />{" "}
             <div className="flex-1 min-w-0">
               {" "}
               <h2 className="text-base md:text-lg font-semibold truncate">
-                {conversation.name}
+                {" "}
+                {conversation.name}{" "}
               </h2>{" "}
               {conversation.isGroup && getParticipantInfo(conversation)}{" "}
-            </div>
-          </div>
+            </div>{" "}
+          </div>{" "}
           <div className="flex items-center gap-1 md:gap-2">
             {" "}
             {conversation.isGroup && (
@@ -1656,25 +1769,30 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                 <InfoCircledIcon width="22" height="22" />{" "}
               </button>
             )}{" "}
-          </div>
-        </div>
+          </div>{" "}
+        </div>{" "}
         <div className="flex-1 flex overflow-hidden">
+          {" "}
           <div
             className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${
               showInfoPanel ? "w-full md:w-[calc(100%-350px)]" : "w-full"
             }`}
           >
+            {" "}
             <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-white">
+              {" "}
               {isLoadingMessages && messages.length === 0 && (
                 <div className="flex justify-center items-center h-full text-gray-500 italic">
-                  Đang tải tin nhắn...
+                  {" "}
+                  Đang tải tin nhắn...{" "}
                 </div>
-              )}
+              )}{" "}
               {!isLoadingMessages && errorMessages && (
                 <div className="flex justify-center items-center h-full text-red-500">
-                  {errorMessages}
+                  {" "}
+                  {errorMessages}{" "}
                 </div>
-              )}
+              )}{" "}
               {!isLoadingMessages &&
                 !errorMessages &&
                 messages.length === 0 && (
@@ -1688,15 +1806,16 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                       stroke="currentColor"
                       strokeWidth={1}
                     >
+                      {" "}
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                      />
+                      />{" "}
                     </svg>{" "}
                     Chưa có tin nhắn nào. <br /> Bắt đầu cuộc trò chuyện!{" "}
                   </div>
-                )}
+                )}{" "}
               {!isLoadingMessages &&
                 !errorMessages &&
                 messages.map((msg) => (
@@ -1708,6 +1827,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                         : "justify-start"
                     }`}
                   >
+                    {" "}
                     {msg.senderId === currentUser?.id && (
                       <button
                         onClick={() => confirmDeleteMessage(msg)}
@@ -1718,7 +1838,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                         {" "}
                         <TrashIcon width={14} height={14} />{" "}
                       </button>
-                    )}
+                    )}{" "}
                     {msg.senderId !== currentUser?.id && (
                       <img
                         src={
@@ -1734,7 +1854,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                         className="w-10 h-10 rounded-full object-cover border self-end mb-1 flex-shrink-0"
                         alt={msg.senderName || "Sender"}
                       />
-                    )}
+                    )}{" "}
                     <div
                       className={`${
                         msg.senderId === currentUser?.id
@@ -1742,17 +1862,20 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                           : "bg-gray-100 text-gray-800"
                       } p-2 md:p-3 rounded-lg max-w-[70%]`}
                     >
+                      {" "}
                       {conversation.isGroup &&
                         msg.senderId !== currentUser?.id && (
                           <span className="text-xs font-semibold text-purple-700 block mb-1">
-                            {msg.senderName || "Unknown User"}
+                            {" "}
+                            {msg.senderName || "Unknown User"}{" "}
                           </span>
-                        )}
+                        )}{" "}
                       {msg.type === "TEXT" && (
                         <p className="text-sm whitespace-pre-wrap break-words">
-                          {msg.content}
+                          {" "}
+                          {msg.content}{" "}
                         </p>
-                      )}
+                      )}{" "}
                       {msg.type === "IMAGE" && msg.fileUrl && (
                         <div className="relative group/image">
                           {" "}
@@ -1785,7 +1908,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             )}{" "}
                           </button>{" "}
                         </div>
-                      )}
+                      )}{" "}
                       {msg.type === "FILE" && (
                         <button
                           onClick={() =>
@@ -1801,10 +1924,11 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             <DownloadIcon className="w-4 h-4 flex-shrink-0 cursor-pointer" />
                           )}{" "}
                           <span className="text-sm font-medium truncate">
-                            {msg.fileName || "Tệp đính kèm"}
+                            {" "}
+                            {msg.fileName || "Tệp đính kèm"}{" "}
                           </span>{" "}
                         </button>
-                      )}
+                      )}{" "}
                       {msg.type === "VIDEO" && msg.fileUrl && (
                         <div className="relative group/video">
                           {" "}
@@ -1838,10 +1962,11 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             )}{" "}
                           </button>{" "}
                           <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
-                            {msg.fileName || "Video"}
+                            {" "}
+                            {msg.fileName || "Video"}{" "}
                           </span>{" "}
                         </div>
-                      )}
+                      )}{" "}
                       {msg.type === "AUDIO" && msg.fileUrl && (
                         <div className="flex items-center gap-2 p-2 bg-gray-200 rounded">
                           {" "}
@@ -1869,7 +1994,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             )}{" "}
                           </button>{" "}
                         </div>
-                      )}
+                      )}{" "}
                       <span
                         className={`text-xs mt-1 block text-right ${
                           msg.senderId === currentUser?.id
@@ -1877,26 +2002,29 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             : "text-gray-500 opacity-75"
                         }`}
                       >
+                        {" "}
                         {new Date(msg.sentAt).toLocaleTimeString("vi-VN", {
                           hour: "2-digit",
                           minute: "2-digit",
                           hour12: false,
-                        })}
-                      </span>
-                    </div>
+                        })}{" "}
+                      </span>{" "}
+                    </div>{" "}
                   </div>
-                ))}
-              <div ref={messagesEndRef} />
-            </div>
+                ))}{" "}
+              <div ref={messagesEndRef} />{" "}
+            </div>{" "}
             <div className="p-3 md:p-4 border-t bg-gray-50 flex-shrink-0 relative">
+              {" "}
               <div className="flex items-center gap-2">
+                {" "}
                 <input
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileChange}
                   className="hidden"
                   accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar"
-                />
+                />{" "}
                 <button
                   onClick={triggerFileInput}
                   disabled={isSendingMessage}
@@ -1905,7 +2033,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                 >
                   {" "}
                   <Link2Icon width="20" height="20" />{" "}
-                </button>
+                </button>{" "}
                 <input
                   ref={inputRef}
                   type="text"
@@ -1924,7 +2052,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                   }}
                   disabled={isSendingMessage}
                   className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
-                />
+                />{" "}
                 <button
                   ref={emojiButtonRef}
                   onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -1933,7 +2061,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                 >
                   {" "}
                   <FaceIcon width="20" height="20" />{" "}
-                </button>
+                </button>{" "}
                 <button
                   onClick={handleSendMessage}
                   disabled={!messageInput.trim() || isSendingMessage}
@@ -1950,8 +2078,8 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                   ) : (
                     <PaperPlaneIcon width="20" height="20" />
                   )}{" "}
-                </button>
-              </div>
+                </button>{" "}
+              </div>{" "}
               {showEmojiPicker && (
                 <div
                   ref={emojiPickerRef}
@@ -1965,15 +2093,16 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                     lazyLoadEmojis={true}
                   />{" "}
                 </div>
-              )}
-            </div>
-          </div>
+              )}{" "}
+            </div>{" "}
+          </div>{" "}
           {conversation.isGroup && (
             <div
               className={`absolute top-0 right-0 h-full bg-white border-l shadow-lg transition-transform duration-300 transform ${
                 showInfoPanel ? "translate-x-0" : "translate-x-full"
               } w-full md:w-[350px] flex flex-col`}
             >
+              {" "}
               <div className="flex justify-between items-center p-4 border-b flex-shrink-0">
                 {" "}
                 <h3 className="text-base font-semibold">Thông tin</h3>{" "}
@@ -1985,16 +2114,20 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                   {" "}
                   <Cross2Icon width="20" height="20" />{" "}
                 </button>{" "}
-              </div>
+              </div>{" "}
               <div className="flex-1 overflow-y-auto p-4 space-y-5 flex flex-col">
+                {" "}
                 {isLoadingDetails && !conversation.participants?.length ? (
                   <div className="flex justify-center items-center py-10 text-gray-500">
+                    {" "}
                     <span className="animate-spin mr-2">⏳</span> Đang tải chi
-                    tiết...
+                    tiết...{" "}
                   </div>
                 ) : (
                   <>
+                    {" "}
                     <div className="pb-4 border-b">
+                      {" "}
                       <div className="flex justify-between items-center mb-2">
                         {" "}
                         <h4 className="text-sm font-semibold text-gray-600">
@@ -2002,7 +2135,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                           <PersonIcon className="inline mr-1 mb-0.5" />{" "}
                           {filteredParticipants?.length || 0} Thành viên{" "}
                         </h4>{" "}
-                      </div>
+                      </div>{" "}
                       <div className="relative mb-3">
                         {" "}
                         <span className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400">
@@ -2018,7 +2151,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                           }
                           className="w-full pl-8 pr-2 py-1 border border-gray-200 rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 shadow-sm"
                         />{" "}
-                      </div>
+                      </div>{" "}
                       <ul className="space-y-2 max-h-40 overflow-y-auto pr-1">
                         {" "}
                         {filteredParticipants.length > 0 ? (
@@ -2041,7 +2174,8 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                                   className="w-7 h-7 rounded-full object-cover flex-shrink-0"
                                 />{" "}
                                 <span className="text-sm text-gray-700 truncate">
-                                  {getParticipantDisplayName(p)}
+                                  {" "}
+                                  {getParticipantDisplayName(p)}{" "}
                                 </span>{" "}
                               </div>{" "}
                               {isLeader && p.id !== currentUser?.id && (
@@ -2059,19 +2193,23 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                           ))
                         ) : (
                           <li className="text-center text-xs text-gray-400 italic py-4">
+                            {" "}
                             {participantSearchTerm
                               ? "Không tìm thấy thành viên."
-                              : "(Chưa có thành viên nào)"}
+                              : "(Chưa có thành viên nào)"}{" "}
                           </li>
                         )}{" "}
-                      </ul>
-                    </div>
+                      </ul>{" "}
+                    </div>{" "}
                     <div className="flex flex-col flex-1 min-h-0">
+                      {" "}
                       <div className="border-b border-gray-200 flex-shrink-0">
+                        {" "}
                         <nav
                           className="-mb-px flex space-x-4"
                           aria-label="Tabs"
                         >
+                          {" "}
                           <button
                             onClick={() => setActiveInfoTab("media")}
                             className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1 ${
@@ -2086,7 +2224,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             {" "}
                             <ImageIcon className="h-4 w-4" /> Media (
                             {isLoadingMedia ? "..." : mediaMessages.length}){" "}
-                          </button>
+                          </button>{" "}
                           <button
                             onClick={() => setActiveInfoTab("files")}
                             className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1 ${
@@ -2101,7 +2239,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             {" "}
                             <FileTextIcon className="h-4 w-4" /> Files (
                             {isLoadingFiles ? "..." : fileMessages.length}){" "}
-                          </button>
+                          </button>{" "}
                           <button
                             onClick={() => setActiveInfoTab("audio")}
                             className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1 ${
@@ -2116,23 +2254,27 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                             {" "}
                             <SpeakerLoudIcon className="h-4 w-4" /> Âm thanh (
                             {isLoadingAudio ? "..." : audioMessages.length}){" "}
-                          </button>
-                        </nav>
-                      </div>
+                          </button>{" "}
+                        </nav>{" "}
+                      </div>{" "}
                       <div className="pt-4 flex-1 overflow-y-auto">
+                        {" "}
                         {activeInfoTab === "media" && (
                           <div className="space-y-2">
                             {" "}
                             {isLoadingMedia ? (
                               <p className="text-xs text-gray-500 italic text-center py-4">
-                                Đang tải media...
+                                {" "}
+                                Đang tải media...{" "}
                               </p>
                             ) : errorMedia ? (
                               <p className="text-xs text-red-500 text-center py-4">
-                                {errorMedia}
+                                {" "}
+                                {errorMedia}{" "}
                               </p>
                             ) : mediaMessages.length > 0 ? (
                               <div className="grid grid-cols-3 gap-2">
+                                {" "}
                                 {mediaMessages.map((m) => (
                                   <a
                                     key={m.id}
@@ -2155,13 +2297,15 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                                     )}{" "}
                                     {m.type === "VIDEO" && (
                                       <div className="w-full h-full flex items-center justify-center bg-gray-700 text-white text-xs p-1">
+                                        {" "}
                                         <svg
                                           className="w-6 h-6 text-gray-300"
                                           fill="currentColor"
                                           viewBox="0 0 20 20"
                                         >
-                                          <path d="M2.94 15.06a.5.5 0 0 0 .7.7L7.5 12.07V14a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-1.93l3.86 3.69a.5.5 0 0 0 .7-.7L12.93 10l3.63-3.63a.5.5 0 0 0-.7-.7L12 9.93V8a.5.5 0 0 0-.5-.5h-4A.5.5 0 0 0 7 8v1.93L3.14 6.37a.5.5 0 0 0-.7.7L6.07 10 2.44 13.63z"></path>
-                                        </svg>
+                                          {" "}
+                                          <path d="M2.94 15.06a.5.5 0 0 0 .7.7L7.5 12.07V14a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-1.93l3.86 3.69a.5.5 0 0 0 .7-.7L12.93 10l3.63-3.63a.5.5 0 0 0-.7-.7L12 9.93V8a.5.5 0 0 0-.5-.5h-4A.5.5 0 0 0 7 8v1.93L3.14 6.37a.5.5 0 0 0-.7.7L6.07 10 2.44 13.63z"></path>{" "}
+                                        </svg>{" "}
                                       </div>
                                     )}{" "}
                                     <button
@@ -2188,21 +2332,24 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                               </div>
                             ) : (
                               <p className="text-xs text-gray-400 italic text-center py-4">
-                                Không có media.
+                                {" "}
+                                Không có media.{" "}
                               </p>
                             )}{" "}
                           </div>
-                        )}
+                        )}{" "}
                         {activeInfoTab === "files" && (
                           <div className="space-y-1">
                             {" "}
                             {isLoadingFiles ? (
                               <p className="text-xs text-gray-500 italic text-center py-4">
-                                Đang tải file...
+                                {" "}
+                                Đang tải file...{" "}
                               </p>
                             ) : errorFiles ? (
                               <p className="text-xs text-red-500 text-center py-4">
-                                {errorFiles}
+                                {" "}
+                                {errorFiles}{" "}
                               </p>
                             ) : fileMessages.length > 0 ? (
                               <ul className="space-y-1">
@@ -2224,7 +2371,9 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                                         <DownloadIcon className="w-3 h-3 flex-shrink-0" />
                                       )}{" "}
                                       <span className="truncate text-left">
-                                        {m.fileName || "Tài liệu không tên"}
+                                        {" "}
+                                        {m.fileName ||
+                                          "Tài liệu không tên"}{" "}
                                       </span>{" "}
                                     </button>{" "}
                                   </li>
@@ -2232,21 +2381,24 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                               </ul>
                             ) : (
                               <p className="text-xs text-gray-400 italic text-center py-4">
-                                Không có file nào.
+                                {" "}
+                                Không có file nào.{" "}
                               </p>
                             )}{" "}
                           </div>
-                        )}
+                        )}{" "}
                         {activeInfoTab === "audio" && (
                           <div className="space-y-1">
                             {" "}
                             {isLoadingAudio ? (
                               <p className="text-xs text-gray-500 italic text-center py-4">
-                                Đang tải âm thanh...
+                                {" "}
+                                Đang tải âm thanh...{" "}
                               </p>
                             ) : errorAudio ? (
                               <p className="text-xs text-red-500 text-center py-4">
-                                {errorAudio}
+                                {" "}
+                                {errorAudio}{" "}
                               </p>
                             ) : audioMessages.length > 0 ? (
                               <ul className="space-y-1">
@@ -2268,7 +2420,8 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                                         <DownloadIcon className="w-3 h-3 flex-shrink-0" />
                                       )}{" "}
                                       <span className="truncate text-left">
-                                        {m.fileName || "Audio không tên"}
+                                        {" "}
+                                        {m.fileName || "Audio không tên"}{" "}
                                       </span>{" "}
                                     </button>{" "}
                                   </li>
@@ -2276,13 +2429,14 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                               </ul>
                             ) : (
                               <p className="text-xs text-gray-400 italic text-center py-4">
-                                Không có file âm thanh.
+                                {" "}
+                                Không có file âm thanh.{" "}
                               </p>
                             )}{" "}
                           </div>
-                        )}
-                      </div>
-                    </div>
+                        )}{" "}
+                      </div>{" "}
+                    </div>{" "}
                     <div className="mt-auto pt-4">
                       {" "}
                       {!isLeader && conversation.isGroup && currentUser && (
@@ -2295,13 +2449,13 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                           <ExitIcon /> Rời khỏi nhóm{" "}
                         </button>
                       )}{" "}
-                    </div>
+                    </div>{" "}
                   </>
-                )}
-              </div>
+                )}{" "}
+              </div>{" "}
             </div>
-          )}
-        </div>
+          )}{" "}
+        </div>{" "}
         <ConfirmationDialog
           isOpen={removeConfirmationState.isOpen}
           title="Xác nhận xóa thành viên"
@@ -2321,7 +2475,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           confirmVariant="danger"
           onConfirm={removeConfirmationState.onConfirm || (() => {})}
           onCancel={removeConfirmationState.onCancel}
-        />
+        />{" "}
         <ConfirmationDialog
           isOpen={leaveConfirmationState.isOpen}
           title="Xác nhận rời nhóm"
@@ -2331,7 +2485,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           confirmVariant="danger"
           onConfirm={leaveConfirmationState.onConfirm || (() => {})}
           onCancel={leaveConfirmationState.onCancel}
-        />
+        />{" "}
         <ConfirmationDialog
           isOpen={deleteMessageConfirmationState.isOpen}
           title="Xác nhận xóa tin nhắn"
@@ -2341,11 +2495,12 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
           confirmVariant="danger"
           onConfirm={deleteMessageConfirmationState.onConfirm || (() => {})}
           onCancel={deleteMessageConfirmationState.onCancel}
-        />
+        />{" "}
       </div>
     );
   };
 
+  // Main Return
   return (
     <div className="flex flex-col h-full bg-white rounded-lg shadow overflow-hidden">
       <div className="flex justify-between items-center p-4 border-b flex-shrink-0">

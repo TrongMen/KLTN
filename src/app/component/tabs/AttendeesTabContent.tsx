@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
-import { User as MainUserType } from "../homeuser"; // Adjust import path if needed
+import { User as MainUserType } from "../homeuser";
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -12,17 +12,17 @@ import {
   PersonIcon,
   IdCardIcon,
   Link2Icon,
-  CalendarIcon, // Added CalendarIcon
+  CalendarIcon, 
 } from "@radix-ui/react-icons";
 
-// Interfaces
+
 interface ApprovedEvent {
   id: string;
   name: string;
-  time?: string; // Primary event date/time
+  time?: string; 
   location?: string;
   status?: string;
-  createdAt?: string; // Fallback creation date
+  createdAt?: string; 
 }
 
 interface Attendee {
@@ -53,7 +53,7 @@ interface ConfirmationDialogProps {
   confirmVariant?: "primary" | "danger";
 }
 
-// Confirmation Dialog
+
 function ConfirmationDialog({
   isOpen,
   title,
@@ -114,7 +114,7 @@ function ConfirmationDialog({
   );
 }
 
-// --- Date Helper Functions ---
+
 const isToday = (date: Date): boolean => {
   const today = new Date();
   return (

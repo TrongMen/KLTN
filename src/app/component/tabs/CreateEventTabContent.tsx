@@ -417,7 +417,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       {/* Phần Form Tạo/Sửa Sự kiện */}
       <div className="mb-8 p-6 bg-white rounded-lg shadow-md border border-gray-200">
         <h2 className="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">
-          {editingEventId ? "✏️ Chỉnh sửa Sự kiện" : "➕ Thêm Sự kiện Mới"}
+          {editingEventId ? "✏️ Chỉnh sửa Sự kiện" : "➕ Tạo sự kiện mới"}
         </h2>
         {isPageLoading ? (
           <div className="text-center py-10 text-gray-500">

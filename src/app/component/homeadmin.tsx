@@ -473,9 +473,9 @@ export default function HomeAdmin() {
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
           {[
             { id: "home", label: "🏠 Trang chủ Admin" },
-            { id: "approval", label: "📅 Phê duyệt sự kiện" },
+            { id: "approval", label: "📅 Phê duyệt " },
             { id: "attendees", label: "✅ Người tham gia" },
-            { id: "members", label: "👥 Thành viên CLB" },
+            { id: "members", label: "👥 Thành viên CLB" },  
             { id: "roles", label: "📌 Quản lý chức vụ" },
             { id: "chatList", label: "💬 Danh sách chat" },
           ].map((tab) => (

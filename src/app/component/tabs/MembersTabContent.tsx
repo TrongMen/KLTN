@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 
-// Định nghĩa tạm thời MainUserType nếu không có import
+
 type MainUserType = {
   id: string;
-  email?: string | null /* các trường khác */;
+  email?: string | null 
 } | null;
 
-// --- Component ConfirmDialog ---
+
 interface ConfirmDialogProps {
   isOpen: boolean;
   title: string;

@@ -513,9 +513,8 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
   };
 
   // Hàm xử lý submit form (Tạo mới / Cập nhật) - *** ĐÃ SỬA ***
-  // Hàm xử lý submit form (Tạo mới / Cập nhật) - *** ĐÃ SỬA + Thêm Logging Chi Tiết ***
   const handleNewsFormSubmit = useCallback(
-    async (formData: NewsFormData) => {
+    async (formData: NewsFormData) => { // newsId không cần truyền vào đây nữa, lấy từ editingNewsItem
       if (!currentUserId) {
         toast.error("Không thể thực hiện. Thiếu ID người dùng.");
         return;
@@ -523,7 +522,6 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
       setIsSubmittingNews(true);
       const isEditing = !!editingNewsItem;
       const toastId = toast.loading(isEditing ? "Đang cập nhật..." : "Đang tạo...");
-      let response: Response | null = null; // Khai báo response ở phạm vi rộng hơn
 
       try {
         const token = localStorage.getItem("authToken");
@@ -533,9 +531,12 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
         apiFormData.append("title", formData.title);
         apiFormData.append("content", formData.content);
 
+        // Thêm ảnh nếu có file mới được chọn
         if (formData.imageFile instanceof File) {
           apiFormData.append("coverImage", formData.imageFile);
         }
+
+        // Thêm eventId nếu có
         if (formData.eventId) {
           apiFormData.append("eventId", formData.eventId);
         }
@@ -544,87 +545,58 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
         let method = "POST";
 
         if (isEditing && editingNewsItem) {
+          // Cấu hình cho cập nhật (PUT)
           API_URL = `http://localhost:8080/identity/api/news/${editingNewsItem.id}?UserId=${currentUserId}`;
           method = "PUT";
+          // Các trường type, featured, pinned, createById không cần gửi khi PUT theo logic cũ
         } else {
-          apiFormData.append("type", "NEWS");
+          // Cấu hình cho tạo mới (POST)
+          apiFormData.append("type", "NEWS"); // Giá trị mặc định khi tạo mới
           apiFormData.append("featured", "false");
           apiFormData.append("pinned", "false");
-          apiFormData.append("createdById", currentUserId); // Đã sửa field name
+          // SỬA: Dùng createdById thay vì createById
+          apiFormData.append("createdById", currentUserId);
         }
 
         const headers: HeadersInit = { Authorization: `Bearer ${token}` };
+        // Không cần 'Content-Type': 'multipart/form-data', trình duyệt tự xử lý khi dùng FormData
 
-        response = await fetch(API_URL, { // Gán giá trị cho response
+        const response = await fetch(API_URL, {
           method: method,
           headers: headers,
           body: apiFormData,
         });
 
-        // --- KIỂM TRA LỖI CHI TIẾT HƠN ---
-        if (!response.ok) {
-          // Log status và statusText trước tiên
-          console.error(`Lỗi API: Status ${response.status} ${response.statusText}`);
-          let errorBodyText = "";
-          try {
-            // Cố gắng đọc nội dung lỗi dạng text thô
-            errorBodyText = await response.text();
-            console.error("Nội dung lỗi API (Text):", errorBodyText);
-          } catch (textError) {
-            console.error("Không thể đọc nội dung lỗi dạng text:", textError);
-          }
-
-          let responseData = {}; // Mặc định là đối tượng rỗng
-          try {
-            // Chỉ thử parse JSON nếu có nội dung text
-            if (errorBodyText) {
-                // Sử dụng JSON.parse vì response.json() có thể đã được sử dụng hoặc không an toàn khi gọi lại
-                responseData = JSON.parse(errorBodyText);
-            }
-          } catch (jsonError) {
-            console.error("Lỗi API: Nội dung response không phải JSON hợp lệ.", jsonError);
-            // Ném lỗi dựa trên status và text nếu parse JSON thất bại
-            throw new Error(`Lỗi ${isEditing ? 'cập nhật' : 'tạo'} (${response.status}): ${errorBodyText || response.statusText}`);
-          }
-
-          console.error("Dữ liệu lỗi API đã Parse (nếu có):", responseData);
-          // Ném lỗi, sử dụng message từ dữ liệu đã parse hoặc fallback
-          // @ts-ignore vì responseData có thể là {} nên cần bỏ qua kiểm tra type tạm thời
-          throw new Error(responseData?.message || `Lỗi ${isEditing ? 'cập nhật' : 'tạo'} (${response.status})`);
-        }
-        // --- KẾT THÚC KIỂM TRA LỖI CHI TIẾT ---
-
-        // Nếu response.ok, tiến hành parse JSON
         const responseData = await response.json();
 
-        // Kiểm tra mã lỗi ứng dụng ngay cả khi status là 2xx
-        if (responseData.code !== 1000) {
-           console.error("Lỗi logic API:", responseData);
-           throw new Error(responseData.message || `Lỗi ${isEditing ? 'cập nhật' : 'tạo'} (Code: ${responseData.code})`);
+        if (!response.ok || responseData.code !== 1000) {
+          console.error("API Error Response:", responseData);
+          throw new Error(
+            responseData.message || `Lỗi ${isEditing ? 'cập nhật' : 'tạo'} (${response.status})`
+          );
         }
 
-        // Xử lý khi thành công
         toast.success(
           responseData.message || (isEditing ? "Cập nhật thành công!" : "Tạo mới thành công!"),
           { id: toastId }
         );
-        handleNewsModalClose();
-        setRefreshMyNewsTrigger((prev) => prev + 1);
+        handleNewsModalClose(); // Đóng modal sau khi thành công
+        setRefreshMyNewsTrigger((prev) => prev + 1); // Trigger fetch lại data
+        // Chuyển sang tab 'pending' nếu vừa tạo mới
         if (!isEditing) {
-           setMyNewsTab("pending");
+             setMyNewsTab("pending");
         }
 
       } catch (error: any) {
-        // Bắt lỗi từ fetch hoặc các lỗi được throw ở trên
-        console.error(`Lỗi ${isEditing ? 'cập nhật' : 'tạo'} (bị bắt):`, error);
-        // Hiển thị thông báo lỗi đã được xây dựng hoặc thông báo chung
-        toast.error(`${isEditing ? 'Cập nhật' : 'Tạo'} thất bại: ${error.message || 'Lỗi không xác định'}`, { id: toastId });
+        console.error(`Lỗi ${isEditing ? 'cập nhật' : 'tạo'}:`, error);
+        toast.error(`${isEditing ? 'Cập nhật' : 'Tạo'} thất bại: ${error.message}`, { id: toastId });
       } finally {
         setIsSubmittingNews(false);
       }
     },
-    [currentUserId, editingNewsItem, handleNewsModalClose] // Giữ nguyên dependencies
+    [currentUserId, editingNewsItem, handleNewsModalClose] // Thêm handleNewsModalClose dependency
   );
+
 
   // Xóa tin tức (chuyển vào thùng rác)
   const executeDeleteNews = useCallback(

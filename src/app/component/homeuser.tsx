@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import UserMenu from "./menu";
@@ -16,6 +22,7 @@ import MyNewsTabContent from "./tabs/MyNewsTabContent";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
+import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
 
 interface Participant {
   id: string | number;
@@ -133,6 +140,16 @@ export default function UserHome() {
     confirmText?: string;
     cancelText?: string;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] =
+    useState<boolean>(false);
+  const [errorNotifications, setErrorNotifications] = useState<string | null>(
+    null
+  );
+  const [showNotificationDropdown, setShowNotificationDropdown] =
+    useState<boolean>(false);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
+  const notificationDropdownRef = useRef<HTMLDivElement>(null);
 
   const router = useRouter();
   const { refreshToken, isInitialized } = useRefreshToken();
@@ -197,6 +214,7 @@ export default function UserHome() {
       setIsLoadingNews(false);
     }
   }, [refreshToken]);
+
   const fetchAllEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     setErrorEvents(null);
@@ -255,6 +273,7 @@ export default function UserHome() {
       setIsLoadingEvents(false);
     }
   }, [refreshToken, router]);
+
   const fetchRegisteredEventIds = useCallback(
     async (userId: string, token: string | null) => {
       if (!userId || !token) {
@@ -300,6 +319,7 @@ export default function UserHome() {
     },
     [refreshToken, router]
   );
+
   const fetchUserCreatedEvents = useCallback(
     async (userId: string, token: string | null) => {
       if (!userId || !token) {
@@ -339,6 +359,65 @@ export default function UserHome() {
     },
     [refreshToken, router]
   );
+
+  const fetchNotifications = useCallback(
+    async (userId: string, token: string | null) => {
+      if (!userId || !token) {
+        setNotifications([]);
+        return;
+      }
+      setIsLoadingNotifications(true);
+      setErrorNotifications(null);
+      const limit = 10;
+      try {
+        const url = `http://localhost:8080/identity/api/notifications?userId=${userId}&limit=${limit}`;
+        let headers: HeadersInit = { Authorization: `Bearer ${token}` };
+        let res = await fetch(url, { headers, cache: "no-store" });
+        if (res.status === 401 || res.status === 403) {
+          const newToken = await refreshToken();
+          if (newToken) {
+            token = newToken;
+            headers["Authorization"] = `Bearer ${newToken}`;
+            res = await fetch(url, { headers, cache: "no-store" });
+          } else throw new Error("Unauthorized or Refresh Failed");
+        }
+        if (!res.ok) {
+          const status = res.status;
+          let msg = `HTTP error ${status}`;
+          try {
+            const errorData = await res.json();
+            msg = errorData.message || msg;
+          } catch (_) {}
+          throw new Error(msg);
+        }
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result)) {
+          const formattedNotifications: NotificationItem[] = data.result.map(
+            (item: any) => ({
+              id: item.id,
+              title: item.title,
+              content: item.content,
+              type: item.type,
+              read: item.read,
+              createdAt: item.createdAt,
+              relatedId: item.relatedId,
+              userId: item.userId,
+            })
+          );
+          setNotifications(formattedNotifications);
+        } else
+          throw new Error(data.message || "Lỗi định dạng dữ liệu thông báo");
+      } catch (error: any) {
+        console.error("Lỗi fetchNotifications:", error);
+        setErrorNotifications(error.message || "Lỗi tải thông báo.");
+        setNotifications([]);
+      } finally {
+        setIsLoadingNotifications(false);
+      }
+    },
+    [refreshToken]
+  );
+
   useEffect(() => {
     if (!isInitialized) return;
     let isMounted = true;
@@ -349,6 +428,7 @@ export default function UserHome() {
     setIsLoadingNews(true);
     const currentAuthToken = localStorage.getItem("authToken");
     let userIdForFetches: string | null = null;
+    let tokenForSubFetches: string | null = currentAuthToken;
     const loadInitialData = async () => {
       const eventsPromise = fetchAllEvents();
       const newsPromise = fetchNews();
@@ -361,25 +441,29 @@ export default function UserHome() {
           let userRes = await fetch(userInfoUrl, { headers });
           if (userRes.status === 401 || userRes.status === 403) {
             const nt = await refreshToken();
-            if (nt && isMounted)
+            if (nt && isMounted) {
+              tokenForSubFetches = nt;
               userRes = await fetch(userInfoUrl, {
                 headers: { Authorization: `Bearer ${nt}` },
               });
-            else if (isMounted)
+            } else if (isMounted)
               throw new Error("Unauthorized or Refresh Failed");
           }
-          if (!userRes.ok)
+          if (!userRes.ok && isMounted)
             throw new Error(`Workspace user info failed: ${userRes.status}`);
-          const userData = await userRes.json();
-          if (userData.code === 1000 && userData.result?.id) {
-            const fetchedUser: User = userData.result;
-            userIdForFetches = fetchedUser.id;
-            if (isMounted) setUser(fetchedUser);
-          } else throw new Error("Invalid user data");
+          if (isMounted) {
+            const userData = await userRes.json();
+            if (userData.code === 1000 && userData.result?.id) {
+              const fetchedUser: User = userData.result;
+              userIdForFetches = fetchedUser.id;
+              setUser(fetchedUser);
+            } else throw new Error("Invalid user data");
+          }
         } catch (error: any) {
           console.error("Lỗi fetch user info (UserHome):", error.message);
           if (isMounted) setUser(null);
           userIdForFetches = null;
+          tokenForSubFetches = null;
         } finally {
           if (isMounted) setIsLoadingUser(false);
         }
@@ -389,18 +473,20 @@ export default function UserHome() {
           setIsLoadingUser(false);
           setIsLoadingRegisteredIds(false);
           setIsLoadingCreatedEventIds(false);
+          setNotifications([]);
         }
       }
       await Promise.all([eventsPromise, newsPromise]);
-      if (userIdForFetches && isMounted) {
-        const tokenForSubFetches = localStorage.getItem("authToken");
+      if (userIdForFetches && tokenForSubFetches && isMounted) {
         await Promise.all([
           fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
           fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
+          fetchNotifications(userIdForFetches, tokenForSubFetches),
         ]);
       } else if (isMounted) {
         setIsLoadingRegisteredIds(false);
         setIsLoadingCreatedEventIds(false);
+        if (!userIdForFetches) setNotifications([]);
       }
     };
     loadInitialData();
@@ -413,8 +499,27 @@ export default function UserHome() {
     fetchRegisteredEventIds,
     fetchUserCreatedEvents,
     fetchNews,
+    fetchNotifications,
     refreshToken,
   ]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        notificationButtonRef.current &&
+        !notificationButtonRef.current.contains(event.target as Node) &&
+        notificationDropdownRef.current &&
+        !notificationDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowNotificationDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const executeRegistration = async (event: EventDisplayInfo) => {
     if (!user?.id || isRegistering) return;
     setIsRegistering(event.id);
@@ -466,6 +571,7 @@ export default function UserHome() {
       setIsRegistering(null);
     }
   };
+
   const handleRegister = (event: EventDisplayInfo) => {
     if (!user?.id) {
       toast.error("Đăng nhập để đăng ký.");
@@ -519,6 +625,7 @@ export default function UserHome() {
       cancelText: "Hủy",
     });
   };
+
   const handleRegistrationChange = useCallback(
     (eventId: string, registered: boolean) => {
       setRegisteredEventIds((prevIds) => {
@@ -530,12 +637,14 @@ export default function UserHome() {
     },
     []
   );
+
   const handleEventClick = (event: EventDisplayInfo) => {
     setSelectedEvent(event);
   };
   const handleBackToList = () => {
     setSelectedEvent(null);
   };
+
   const handleLogout = async () => {
     try {
       const t = localStorage.getItem("authToken");
@@ -556,86 +665,143 @@ export default function UserHome() {
       setUser(null);
       setRegisteredEventIds(new Set());
       setCreatedEventIds(new Set());
+      setNewsItems([]);
+      setNotifications([]);
+      setShowNotificationDropdown(false);
       setActiveTab("home");
       router.push("/login");
     }
   };
+
   const refreshNewsList = useCallback(() => {
     fetchNews();
   }, [fetchNews]);
+  const handleNotificationClick = () => {
+    setShowNotificationDropdown((prev) => !prev);
+  };
+
+  // --- Hàm xử lý đánh dấu đã đọc (Đã cập nhật API) ---
+  const handleMarkAsRead = async (notificationId: string) => {
+    let token = localStorage.getItem("authToken");
+    if (!token || !user?.id) {
+      toast.error("Vui lòng đăng nhập lại để thực hiện hành động này.");
+      return;
+    }
+
+    // Cập nhật local state ngay lập tức để cải thiện UX (optional)
+    // setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
+
+    try {
+      const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
+      let headers: HeadersInit = { Authorization: `Bearer ${token}` };
+      // Sử dụng PUT hoặc PATCH tùy theo thiết kế API, PUT thường dùng để thay thế trạng thái
+      let res = await fetch(url, { method: "PUT", headers: headers });
+
+      if (res.status === 401 || res.status === 403) {
+        const newToken = await refreshToken();
+        if (newToken) {
+          token = newToken; // Cập nhật token
+          headers["Authorization"] = `Bearer ${newToken}`;
+          res = await fetch(url, { method: "PUT", headers: headers }); // Thử lại với token mới
+        } else {
+          throw new Error("Không thể làm mới phiên đăng nhập.");
+        }
+      }
+
+      if (!res.ok) {
+        let errorMsg = `Lỗi ${res.status}`;
+        try {
+          const errorData = await res.json();
+          errorMsg = errorData.message || errorMsg;
+        } catch (_) {}
+        throw new Error(errorMsg);
+      }
+
+      // const data = await res.json(); // Có thể không cần parse nếu chỉ cần status 200 OK
+      // if (data.code === 1000) {
+      // Cập nhật thành công trên server, giờ cập nhật local state
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      );
+      toast.success("Đã đánh dấu thông báo là đã đọc.");
+      // } else {
+      //   throw new Error(data.message || "Lỗi không xác định từ server.");
+      // }
+    } catch (error: any) {
+      console.error("Lỗi đánh dấu thông báo đã đọc:", error);
+      toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
+      // Rollback local state update if needed (optional)
+      // setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: false } : n));
+    }
+  };
 
   const isPageLoading = !isInitialized || isLoadingUser;
   const getTabButtonClasses = (tabName: ActiveTab): string => {
-    const baseClasses =
+    const base =
       "cursor-pointer px-4 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition";
-    const activeClasses = "text-white";
-    const inactiveClasses = "hover:bg-opacity-80";
-    let specificBg = "";
-    let specificText = "";
-    let specificHoverBg = "";
+    const active = "text-white";
+    const inactive = "hover:bg-opacity-80";
+    let bg = "",
+      text = "",
+      hover = "";
     switch (tabName) {
       case "home":
-        specificBg = activeTab === tabName ? "bg-indigo-600" : "bg-indigo-100";
-        specificText = activeTab === tabName ? "" : "text-indigo-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-indigo-700" : "hover:bg-indigo-200";
+        bg = "bg-indigo-600";
+        text = "text-indigo-800";
+        hover = "hover:bg-indigo-700";
         break;
       case "news":
-        specificBg = activeTab === tabName ? "bg-orange-600" : "bg-orange-100";
-        specificText = activeTab === tabName ? "" : "text-orange-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-orange-700" : "hover:bg-orange-200";
+        bg = "bg-orange-600";
+        text = "text-orange-800";
+        hover = "hover:bg-orange-700";
         break;
       case "myNews":
-        specificBg = activeTab === tabName ? "bg-amber-600" : "bg-amber-100";
-        specificText = activeTab === tabName ? "" : "text-amber-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-amber-700" : "hover:bg-amber-200";
+        bg = "bg-amber-600";
+        text = "text-amber-800";
+        hover = "hover:bg-amber-700";
         break;
       case "createEvent":
-        specificBg = activeTab === tabName ? "bg-cyan-600" : "bg-cyan-100";
-        specificText = activeTab === tabName ? "" : "text-cyan-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-cyan-700" : "hover:bg-cyan-200";
+        bg = "bg-cyan-600";
+        text = "text-cyan-800";
+        hover = "hover:bg-cyan-700";
         break;
       case "myEvents":
-        specificBg = activeTab === tabName ? "bg-blue-600" : "bg-blue-100";
-        specificText = activeTab === tabName ? "" : "text-blue-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-blue-700" : "hover:bg-blue-200";
+        bg = "bg-blue-600";
+        text = "text-blue-800";
+        hover = "hover:bg-blue-700";
         break;
       case "attendees":
-        specificBg = activeTab === tabName ? "bg-teal-600" : "bg-teal-100";
-        specificText = activeTab === tabName ? "" : "text-teal-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-teal-700" : "hover:bg-teal-200";
+        bg = "bg-teal-600";
+        text = "text-teal-800";
+        hover = "hover:bg-teal-700";
         break;
       case "registeredEvents":
-        specificBg = activeTab === tabName ? "bg-green-600" : "bg-green-100";
-        specificText = activeTab === tabName ? "" : "text-green-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-green-700" : "hover:bg-green-200";
+        bg = "bg-green-600";
+        text = "text-green-800";
+        hover = "hover:bg-green-700";
         break;
       case "members":
-        specificBg = activeTab === tabName ? "bg-pink-600" : "bg-pink-100";
-        specificText = activeTab === tabName ? "" : "text-pink-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-pink-700" : "hover:bg-pink-200";
+        bg = "bg-pink-600";
+        text = "text-pink-800";
+        hover = "hover:bg-pink-700";
         break;
       case "chatList":
-        specificBg = activeTab === tabName ? "bg-purple-600" : "bg-purple-100";
-        specificText = activeTab === tabName ? "" : "text-purple-800";
-        specificHoverBg =
-          activeTab === tabName ? "hover:bg-purple-700" : "hover:bg-purple-200";
+        bg = "bg-purple-600";
+        text = "text-purple-800";
+        hover = "hover:bg-purple-700";
         break;
       default:
-        specificBg = "bg-gray-100";
-        specificText = "text-gray-800";
-        specificHoverBg = "hover:bg-gray-200";
+        bg = "bg-gray-100";
+        text = "text-gray-800";
+        hover = "hover:bg-gray-200";
     }
-    return `${baseClasses} ${specificBg} ${
-      activeTab === tabName ? activeClasses : specificText
-    } ${activeTab !== tabName ? inactiveClasses : ""} ${specificHoverBg}`;
+    const specificBg = activeTab === tabName ? bg : bg.replace(/-\d00/, "-100");
+    const specificText = activeTab === tabName ? "" : text;
+    const specificHover =
+      activeTab === tabName ? hover : hover.replace(/-\d00/, "-200");
+    return `${base} ${specificBg} ${
+      activeTab === tabName ? active : specificText
+    } ${activeTab !== tabName ? inactive : ""} ${specificHover}`;
   };
   const getActiveIndicatorColor = (tabName: ActiveTab): string => {
     switch (tabName) {
@@ -661,10 +827,13 @@ export default function UserHome() {
         return "border-t-gray-400";
     }
   };
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
   const tabs = [
     { id: "home", label: "🎉 Trang chủ", requiresAuth: false },
     // { id: "news", label: "📰 Tin tức", requiresAuth: false },
-
     { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
     { id: "myNews", label: "📝 Quản lý Tin tức", requiresAuth: true },
     { id: "myEvents", label: "🛠 Sự kiện & Đăng ký", requiresAuth: true },
@@ -677,58 +846,91 @@ export default function UserHome() {
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
       <Toaster toastOptions={{ duration: 3000 }} position="top-center" />
       <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6">
-        {" "}
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          {" "}
-          <div className="text-lg sm:text-xl font-bold">
-            Quản lý sự kiện
-          </div>{" "}
-          <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            {" "}
+          <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
+          <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base relative">
             <Link href="/about">
               <span className="cursor-pointer hover:text-gray-300">
                 Giới thiệu
               </span>
-            </Link>{" "}
+            </Link>
             <span
               className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
             >
               Liên hệ
-            </span>{" "}
+            </span>
+            {isInitialized && !isLoadingUser && user && (
+              <div className="relative" ref={notificationDropdownRef}>
+                <button
+                  ref={notificationButtonRef}
+                  onClick={handleNotificationClick}
+                  className="relative cursor-pointer text-gray-300 hover:text-white focus:outline-none justify-items-center"
+                  aria-label="Notifications"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4 sm:h-6 sm:w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341A6.002 6.002 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                    />
+                  </svg>
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center px-[0.4rem] py-[0.1rem] text-xs font-bold leading-none text-red-100 transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full cursor-pointer">
+                      {unreadNotificationCount > 9
+                        ? "9+"
+                        : unreadNotificationCount}
+                    </span>
+                  )}
+                </button>
+                {showNotificationDropdown && (
+                  <NotificationDropdown
+                    notifications={notifications}
+                    isLoading={isLoadingNotifications}
+                    error={errorNotifications}
+                    onMarkAsRead={handleMarkAsRead}
+                    onClose={() => setShowNotificationDropdown(false)}
+                  />
+                )}
+              </div>
+            )}
             {isInitialized && !isLoadingUser && (
               <UserMenu user={user} onLogout={handleLogout} />
-            )}{" "}
+            )}
             {(!isInitialized || isLoadingUser) && (
               <span className="text-gray-400">Đang tải...</span>
-            )}{" "}
+            )}
             {isInitialized && !isLoadingUser && !user && (
               <Link href="/login">
                 <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
                   Đăng nhập
                 </span>
               </Link>
-            )}{" "}
-          </div>{" "}
-        </div>{" "}
+            )}
+          </div>
+        </div>
       </nav>
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200">
-        {" "}
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
-          {" "}
           {tabs.map((tab) => {
             const showTab =
               !tab.requiresAuth || (tab.requiresAuth && isInitialized && user);
             if (!showTab) return null;
             return (
               <div key={tab.id} className="relative flex flex-col items-center">
-                {" "}
                 <button
                   onClick={() => setActiveTab(tab.id as ActiveTab)}
                   className={getTabButtonClasses(tab.id as ActiveTab)}
                 >
                   {tab.label}
-                </button>{" "}
+                </button>
                 {activeTab === tab.id && (
                   <div
                     className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
@@ -736,16 +938,16 @@ export default function UserHome() {
                     )} border-r-[6px] border-r-transparent`}
                     style={{ left: "50%", transform: "translateX(-50%)" }}
                   ></div>
-                )}{" "}
+                )}
               </div>
             );
-          })}{" "}
+          })}
           {isInitialized && !user && !isLoadingUser && (
             <span className="text-sm text-gray-500 italic p-2 self-center">
               Đăng nhập để xem các mục khác
             </span>
-          )}{" "}
-        </div>{" "}
+          )}
+        </div>
       </div>
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
         {isPageLoading ? (
@@ -790,14 +992,19 @@ export default function UserHome() {
                 onRefresh={refreshNewsList}
               />
             )}
-            {user && activeTab === "myNews" && <MyNewsTabContent user={user} />}
+            {user && activeTab === "myNews" && (
+              <MyNewsTabContent user={user} onNewsChange={refreshNewsList} />
+            )}
             {user && activeTab === "createEvent" && (
               <CreateEventTabContent
                 user={user}
                 onEventCreated={() => {
                   fetchAllEvents();
                   const t = localStorage.getItem("authToken");
-                  if (user?.id && t) fetchUserCreatedEvents(user.id, t);
+                  if (user?.id && t) {
+                    fetchUserCreatedEvents(user.id, t);
+                    fetchNotifications(user.id, t);
+                  }
                   setActiveTab("myEvents");
                   toast.success("Sự kiện đã được tạo và đang chờ duyệt!");
                 }}
@@ -824,10 +1031,10 @@ export default function UserHome() {
             {user && activeTab === "chatList" && (
               <ChatTabContent currentUser={user} />
             )}
-            {activeTab !== "home" &&
-              activeTab !== "news" &&
+            {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
               !user &&
-              isInitialized && (
+              isInitialized &&
+              !isLoadingUser && (
                 <p className="text-center text-red-500 py-6">
                   Vui lòng đăng nhập để truy cập mục này.
                 </p>

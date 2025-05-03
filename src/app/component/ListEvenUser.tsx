@@ -1,17 +1,16 @@
 "use client";
 
 import { toast } from "react-hot-toast";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect,useRef } from "react";
+import Image from "next/image";
 
-// --- Types (Cần thiết cho EventList) ---
-// (Lý tưởng nhất là tách các type này ra file riêng, ví dụ types/eventTypes.ts)
 export type ApiUser = {
   id: string;
   firstName: string | null;
   lastName: string | null;
   username: string | null;
   email?: string;
-  role?: string; // Cần để check quyền admin
+  role?: string;
 };
 
 export type EventMember = {
@@ -29,7 +28,7 @@ export type Event = {
   time: string;
   location: string;
   content: string;
-  createdBy?: string; // Có thể cần để check quyền sửa/xóa
+  createdBy?: string;
   organizers: EventMember[];
   participants: EventMember[];
   permissions: string[];
@@ -39,21 +38,16 @@ export type Event = {
   rejectionReason?: string | null;
   createdAt?: string;
 };
-// --- Hết Types ---
 
-// --- Props Interface ---
 interface EventListProps {
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
-  users: ApiUser[]; // Danh sách user để tra cứu tên
-  currentUser?: ApiUser; // User hiện tại để kiểm tra quyền và lấy ID khi xóa
+  users: ApiUser[];
+  currentUser?: ApiUser;
   setEditingEvent: (event: Event | null) => void;
-  refreshEvents: () => Promise<void>; // Hàm để tải lại danh sách sự kiện
+  refreshEvents: () => Promise<void>;
 }
-// --- Hết Props Interface ---
 
-// --- Helper Functions ---
-// (Có thể tách ra file utils)
 const getUserFullName = (
   userId: string | undefined,
   allUsers: ApiUser[]
@@ -88,10 +82,7 @@ const getMemberNames = (
   }
   return names.join(", ");
 };
-// --- Hết Helper Functions ---
 
-// --- Component ConfirmDialog ---
-// (Có thể tách ra file riêng)
 type ConfirmDialogProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -135,9 +126,7 @@ function ConfirmDialog({
     </div>
   );
 }
-// --- Hết ConfirmDialog ---
 
-// --- Component EventList Chính ---
 const EventList: React.FC<EventListProps> = ({
   events,
   setEvents,
@@ -148,6 +137,15 @@ const EventList: React.FC<EventListProps> = ({
 }) => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
+  const [viewingEventDetails, setViewingEventDetails] = useState<Event | null>(
+    null
+  );
+  const [qrCodeLink, setQrCodeLink] = useState<string | null>(null);
+  const [qrCodeImageSrc, setQrCodeImageSrc] = useState<string | null>(null);
+  const [isLoadingQrLink, setIsLoadingQrLink] = useState<boolean>(false);
+  const [isLoadingQrImage, setIsLoadingQrImage] = useState<boolean>(false);
+  const [qrCodeError, setQrCodeError] = useState<string | null>(null);
+  const currentBlobUrlRef = useRef<string | null>(null); // Ref để lưu blob URL hiện tại
 
   const handleDeleteClick = useCallback((event: Event) => {
     setEventToDelete(event);
@@ -159,7 +157,6 @@ const EventList: React.FC<EventListProps> = ({
     setEventToDelete(null);
   }, []);
 
-  // *** HÀM XÓA ĐÃ CẬP NHẬT API ***
   const confirmDelete = useCallback(async () => {
     if (!eventToDelete) return;
     if (!currentUser?.id) {
@@ -175,7 +172,7 @@ const EventList: React.FC<EventListProps> = ({
     const loadingToastId = toast.loading("Đang xóa sự kiện...");
     try {
       const token = localStorage.getItem("authToken");
-      const url = `http://localhost:8080/identity/api/events/${eventId}?deletedById=${deletedById}`; // URL API MỚI
+      const url = `http://localhost:8080/identity/api/events/${eventId}?deletedById=${deletedById}`;
       console.log("API Delete URL:", url);
 
       const response = await fetch(url, {
@@ -203,7 +200,6 @@ const EventList: React.FC<EventListProps> = ({
         toast.success(result.message || `Đã xóa "${eventName}".`, {
           id: loadingToastId,
         });
-        // await refreshEvents(); // Có thể gọi refresh ở đây nếu muốn load lại toàn bộ danh sách
       } else {
         console.error("Delete API returned non-1000 code:", result);
         throw new Error(
@@ -220,7 +216,7 @@ const EventList: React.FC<EventListProps> = ({
     closeConfirmDialog,
     currentUser,
     refreshEvents,
-  ]); // Thêm dependencies
+  ]);
 
   const handleApproveEvent = async (eventId: string, approved: boolean) => {
     const status = approved ? "APPROVED" : "REJECTED";
@@ -262,6 +258,336 @@ const EventList: React.FC<EventListProps> = ({
     setEditingEvent(event);
   };
 
+  const fetchQrCodeLink = useCallback(async (eventId: string) => {
+    setIsLoadingQrLink(true);
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+       setQrCodeError("Vui lòng đăng nhập để lấy link QR.");
+       setIsLoadingQrLink(false);
+       return;
+    }
+    try {
+        const response = await fetch(
+            `http://localhost:8080/identity/api/events/${eventId}/qr-code`, // API lấy link
+            {
+                method: "GET", // Method là GET
+                headers: { Authorization: `Bearer ${token}` },
+            }
+        );
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Lỗi lấy link QR: ${response.status}`);
+        }
+        const result = await response.json();
+        if (result.code === 1000 && result.result) {
+            setQrCodeLink(result.result);
+             // Nếu chưa có ảnh từ blob, dùng link này làm src ảnh luôn
+            if (!qrCodeImageSrc) {
+                setQrCodeImageSrc(result.result);
+            }
+        } else {
+            throw new Error(result.message || "Không thể lấy link QR.");
+        }
+    } catch (error: any) {
+        console.error("Error fetching QR code link:", error);
+        setQrCodeError(error.message || "Lỗi khi lấy link QR.");
+    } finally {
+       setIsLoadingQrLink(false);
+    }
+ }, [qrCodeImageSrc]); // Phụ thuộc qrCodeImageSrc để quyết định có set src ảnh không
+
+  const fetchQrCodeImage = useCallback(async (eventId: string) => {
+    setIsLoadingQrImage(true);
+    const token = localStorage.getItem("authToken");
+     if (!token) {
+       setQrCodeError("Vui lòng đăng nhập để lấy ảnh QR.");
+       setIsLoadingQrImage(false);
+       return;
+    }
+    try {
+        const response = await fetch(
+            `http://localhost:8080/identity/api/events/${eventId}/qr-code-image`, // API lấy ảnh
+            {
+                method: "GET", // Method là GET
+                headers: { Authorization: `Bearer ${token}` },
+            }
+        );
+        if (!response.ok) {
+             const errorText = await response.text().catch(()=>`Lỗi ${response.status}`);
+             throw new Error(`Lỗi lấy ảnh QR: ${errorText}`);
+        }
+        const blob = await response.blob();
+        if (blob.size === 0 || !blob.type.startsWith('image/')) {
+             throw new Error("Dữ liệu ảnh QR không hợp lệ.");
+        }
+        // Thu hồi blob URL cũ trước khi tạo mới
+        if (currentBlobUrlRef.current) {
+            URL.revokeObjectURL(currentBlobUrlRef.current);
+        }
+        const newBlobUrl = URL.createObjectURL(blob);
+        setQrCodeImageSrc(newBlobUrl); // Ưu tiên hiển thị ảnh từ blob
+        currentBlobUrlRef.current = newBlobUrl; // Lưu lại để thu hồi sau
+
+    } catch (error: any) {
+        console.error("Error fetching QR code image:", error);
+        // Chỉ set lỗi nếu chưa có lỗi từ việc fetch link
+        if(!qrCodeError) setQrCodeError(error.message || "Lỗi khi lấy ảnh QR.");
+        // Nếu fetch link thành công trước đó, giữ lại link làm fallback
+        if (!qrCodeLink) setQrCodeImageSrc(null);
+        else setQrCodeImageSrc(qrCodeLink);
+
+    } finally {
+        setIsLoadingQrImage(false);
+    }
+  }, [qrCodeError, qrCodeLink]); // Phụ thuộc qrCodeError và qrCodeLink
+
+  // Thu hồi Blob URL khi component unmount hoặc khi đổi ảnh
+  useEffect(() => {
+    const blobUrl = currentBlobUrlRef.current;
+    return () => {
+        if (blobUrl) {
+            console.log("Revoking Blob URL:", blobUrl);
+            URL.revokeObjectURL(blobUrl);
+            currentBlobUrlRef.current = null;
+        }
+    };
+  }, [qrCodeImageSrc]); // Chạy cleanup khi qrCodeImageSrc thay đổi
+
+  const handleViewDetails = useCallback(
+    (event: Event) => {
+      setViewingEventDetails(event);
+      setQrCodeLink(null);
+      setQrCodeImageSrc(null); // Reset cả src ảnh
+      setIsLoadingQrLink(false); // Reset loading states
+      setIsLoadingQrImage(false);
+      setQrCodeError(null);
+
+      if (event.status === "APPROVED") {
+        fetchQrCodeLink(event.id); // Gọi API lấy link
+        fetchQrCodeImage(event.id); // Gọi API lấy ảnh
+      } else {
+        setQrCodeError("Chỉ có thể xem QR cho sự kiện đã được duyệt.");
+      }
+    },
+    [fetchQrCodeLink, fetchQrCodeImage]
+  );
+
+ const handleBackToList = useCallback(() => {
+    // Thu hồi blob URL nếu có trước khi đóng modal
+    if (currentBlobUrlRef.current) {
+        URL.revokeObjectURL(currentBlobUrlRef.current);
+        currentBlobUrlRef.current = null;
+    }
+    setViewingEventDetails(null);
+    setQrCodeLink(null);
+    setQrCodeImageSrc(null);
+    setIsLoadingQrLink(false);
+    setIsLoadingQrImage(false);
+    setQrCodeError(null);
+  }, []);
+
+  const renderStatusBadge = (status?: string) => {
+    const s = status?.toUpperCase();
+    let bgColor = "bg-gray-100";
+    let textColor = "text-gray-700";
+    let text = status || "Không rõ";
+
+    if (s === "APPROVED") {
+      bgColor = "bg-green-100";
+      textColor = "text-green-700";
+      text = "Đã duyệt";
+    } else if (s === "PENDING") {
+      bgColor = "bg-yellow-100";
+      textColor = "text-yellow-700";
+      text = "Chờ duyệt";
+    } else if (s === "REJECTED") {
+      bgColor = "bg-red-100";
+      textColor = "text-red-700";
+      text = "Từ chối";
+    }
+    return (
+      <span
+        className={`px-2 py-0.5 rounded-full text-xs font-semibold ${bgColor} ${textColor}`}
+      >
+        {text}
+      </span>
+    );
+  };
+
+  const renderEventDetailsModal = () => {
+    if (!viewingEventDetails) return null;
+
+    const isLoading = isLoadingQrLink || isLoadingQrImage;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+          <div className="flex justify-between items-center p-4 border-b">
+            <h3 className="text-lg font-semibold text-gray-800">
+              {viewingEventDetails.name}
+            </h3>
+            <button
+              onClick={handleBackToList}
+              className="text-gray-500 hover:text-gray-700 text-2xl"
+            >
+              &times;
+            </button>
+          </div>
+          <div className="p-5 overflow-y-auto space-y-3 text-sm">
+            <p>
+              <strong className="font-medium text-gray-700 w-24 inline-block">
+                Trạng thái:
+              </strong>{" "}
+              {renderStatusBadge(viewingEventDetails.status)}
+            </p>
+            {viewingEventDetails.status === "REJECTED" &&
+              viewingEventDetails.rejectionReason && (
+                <p className="text-red-600">
+                  <strong className="font-medium text-red-800 w-24 inline-block">
+                    Lý do từ chối:
+                  </strong>{" "}
+                  {viewingEventDetails.rejectionReason}
+                </p>
+              )}
+            <p>
+              <strong className="font-medium text-gray-700 w-24 inline-block">
+                Thời gian:
+              </strong>{" "}
+              {viewingEventDetails.time
+                ? new Date(viewingEventDetails.time).toLocaleString("vi-VN")
+                : "N/A"}
+            </p>
+            <p>
+              <strong className="font-medium text-gray-700 w-24 inline-block">
+                Địa điểm:
+              </strong>{" "}
+              {viewingEventDetails.location || "N/A"}
+            </p>
+            <p>
+              <strong className="font-medium text-gray-700 w-24 inline-block">
+                Mục đích:
+              </strong>{" "}
+              {viewingEventDetails.purpose || "N/A"}
+            </p>
+            <p>
+              <strong className="font-medium text-gray-700 w-24 inline-block align-top">
+                Nội dung:
+              </strong>{" "}
+              <span className="inline-block whitespace-pre-wrap max-w-[calc(100%-6rem)]">
+                {viewingEventDetails.content || "N/A"}
+              </span>
+            </p>
+            <p>
+              <strong className="font-medium text-gray-700 w-24 inline-block">
+                Đối tượng:
+              </strong>{" "}
+              {(viewingEventDetails.permissions || []).join(", ") || "N/A"}
+            </p>
+            <p>
+              <strong className="font-medium text-gray-700 w-24 inline-block">
+                Người tạo:
+              </strong>{" "}
+              {getUserFullName(viewingEventDetails.createdBy, users)}
+            </p>
+            <div>
+              <strong className="font-medium text-gray-700 mb-1 block">
+                Ban tổ chức:
+              </strong>
+              {viewingEventDetails.organizers &&
+              viewingEventDetails.organizers.length > 0 ? (
+                <ul className="list-disc list-inside pl-4 text-gray-600">
+                  {viewingEventDetails.organizers.map((org) => (
+                    <li key={org.userId}>
+                      {getUserFullName(org.userId, users)}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="text-gray-500 italic">Không có</span>
+              )}
+            </div>
+            <div>
+              <strong className="font-medium text-gray-700 mb-1 block">
+                Người tham gia (vai trò):
+              </strong>
+              {viewingEventDetails.participants &&
+              viewingEventDetails.participants.length > 0 ? (
+                <ul className="list-disc list-inside pl-4 text-gray-600">
+                  {viewingEventDetails.participants.map((p) => (
+                    <li key={p.userId}>
+                      {getUserFullName(p.userId, users)}
+                      {p.roleName && ` - ${p.roleName}`}
+                      {p.positionName && ` (${p.positionName})`}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="text-gray-500 italic">Không có</span>
+              )}
+            </div>
+
+            {viewingEventDetails.status === "APPROVED" && (
+              <div className="mt-4 pt-4 border-t text-center">
+                <h4 className="text-md font-semibold mb-2 text-gray-700">
+                  Mã QR Sự kiện
+                </h4>
+                {isLoading && (
+                  <p className="text-gray-500 italic">Đang tải mã QR...</p>
+                )}
+                {qrCodeError && !isLoading && (
+                  <p className="text-red-500 italic">{qrCodeError}</p>
+                )}
+                {!isLoading && !qrCodeError && (qrCodeImageSrc || qrCodeLink) && (
+                  <div className="flex flex-col items-center gap-3">
+                    {qrCodeImageSrc && (
+                         <Image
+                            src={qrCodeImageSrc}
+                            alt={`Mã QR cho sự kiện ${viewingEventDetails.name}`}
+                            className="w-40 h-40 object-contain border p-1 bg-white shadow-sm"
+                            width={160}
+                            height={160}
+                            priority
+                          />
+                    )}
+                     {qrCodeLink && (
+                         <a
+                             href={qrCodeLink}
+                             target="_blank"
+                             rel="noopener noreferrer"
+                             className="text-blue-600 hover:text-blue-800 text-xs underline break-all"
+                          >
+                              {qrCodeLink}
+                         </a>
+                     )}
+                     {!qrCodeImageSrc && !qrCodeLink && (
+                         <p className="text-gray-500 italic">Không thể tải mã QR.</p>
+                     )}
+                  </div>
+                )}
+              </div>
+            )}
+            {viewingEventDetails.status !== "APPROVED" && qrCodeError && (
+                 <div className="mt-4 pt-4 border-t text-center">
+                     <h4 className="text-md font-semibold mb-2 text-gray-700">
+                        Mã QR Sự kiện
+                     </h4>
+                     <p className="text-red-500 italic">{qrCodeError}</p>
+                 </div>
+             )}
+          </div>
+          <div className="p-4 border-t flex justify-end">
+            <button
+              onClick={handleBackToList}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 cursor-pointer text-sm"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <section className="mt-8">
       <h2 className="text-xl font-semibold mb-4 text-gray-800">
@@ -282,7 +608,6 @@ const EventList: React.FC<EventListProps> = ({
               className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col border border-gray-200 hover:shadow-lg transition-shadow duration-200"
             >
               <div className="p-4 flex-grow flex flex-col justify-between">
-                {/* Phần hiển thị thông tin sự kiện */}
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="text-lg font-semibold text-gray-800 flex-1 mr-2">
@@ -382,8 +707,14 @@ const EventList: React.FC<EventListProps> = ({
                     {event.content}{" "}
                   </p>
                 </div>
-                {/* Phần nút bấm action */}
                 <div className="flex justify-between items-center gap-2 pt-3 border-t border-gray-100 mt-auto">
+                  <button
+                    onClick={() => handleViewDetails(event)}
+                    title="Xem chi tiết"
+                    className="flex-1 text-center py-1 bg-gray-50 text-gray-600 text-sm rounded hover:bg-gray-100 transition-colors"
+                  >
+                    👁️ Chi tiết
+                  </button>
                   {(currentUser?.id === event.createdBy ||
                     currentUser?.role === "ADMIN") && (
                     <button
@@ -431,7 +762,8 @@ const EventList: React.FC<EventListProps> = ({
         </div>
       )}
 
-      {/* Dialog Xác nhận Xóa */}
+      {renderEventDetailsModal()}
+
       <ConfirmDialog
         isOpen={isConfirmOpen}
         onClose={closeConfirmDialog}
@@ -452,4 +784,4 @@ const EventList: React.FC<EventListProps> = ({
   );
 };
 
-export default EventList; // Export EventList làm default cho file này
+export default EventList;

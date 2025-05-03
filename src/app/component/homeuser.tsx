@@ -680,7 +680,6 @@ export default function UserHome() {
     setShowNotificationDropdown((prev) => !prev);
   };
 
-  // --- Hàm xử lý đánh dấu đã đọc (Đã cập nhật API) ---
   const handleMarkAsRead = async (notificationId: string) => {
     let token = localStorage.getItem("authToken");
     if (!token || !user?.id) {
@@ -688,21 +687,17 @@ export default function UserHome() {
       return;
     }
 
-    // Cập nhật local state ngay lập tức để cải thiện UX (optional)
-    // setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
-
     try {
       const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
       let headers: HeadersInit = { Authorization: `Bearer ${token}` };
-      // Sử dụng PUT hoặc PATCH tùy theo thiết kế API, PUT thường dùng để thay thế trạng thái
       let res = await fetch(url, { method: "PUT", headers: headers });
 
       if (res.status === 401 || res.status === 403) {
         const newToken = await refreshToken();
         if (newToken) {
-          token = newToken; // Cập nhật token
+          token = newToken;
           headers["Authorization"] = `Bearer ${newToken}`;
-          res = await fetch(url, { method: "PUT", headers: headers }); // Thử lại với token mới
+          res = await fetch(url, { method: "PUT", headers: headers });
         } else {
           throw new Error("Không thể làm mới phiên đăng nhập.");
         }
@@ -717,21 +712,13 @@ export default function UserHome() {
         throw new Error(errorMsg);
       }
 
-      // const data = await res.json(); // Có thể không cần parse nếu chỉ cần status 200 OK
-      // if (data.code === 1000) {
-      // Cập nhật thành công trên server, giờ cập nhật local state
       setNotifications((prev) =>
         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
       );
       toast.success("Đã đánh dấu thông báo là đã đọc.");
-      // } else {
-      //   throw new Error(data.message || "Lỗi không xác định từ server.");
-      // }
     } catch (error: any) {
       console.error("Lỗi đánh dấu thông báo đã đọc:", error);
       toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
-      // Rollback local state update if needed (optional)
-      // setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: false } : n));
     }
   };
 

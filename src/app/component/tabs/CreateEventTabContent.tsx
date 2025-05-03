@@ -7,25 +7,22 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-// import { useRouter } from "next/navigation"; // Bỏ nếu không dùng
-import { toast } from "react-hot-toast"; // Chỉ cần toast ở đây nếu EventList không dùng (nhưng EventList đang dùng)
-import { BTCSection, type BTCSectionHandle } from "../BTCSection"; // Giả định đường dẫn đúng
+import { toast } from "react-hot-toast";
+import { BTCSection, type BTCSectionHandle } from "../BTCSection";
 import {
   ParticipantSection,
   type ParticipantSectionHandle,
-} from "../ParticipantSection"; // Giả định đường dẫn đúng
-import EventList from "../ListEvenUser"; // *** IMPORT EventList từ file riêng ***
-import { User as MainUserType } from "../homeuser"; // Giả định đường dẫn đúng
+} from "../ParticipantSection";
+import EventList from "../ListEvenUser"; // Component này sẽ chứa logic QR
+import { User as MainUserType } from "../homeuser";
 
-// --- Types (Cần thiết cho CreateEventTabContent) ---
-// (Lý tưởng nhất là tách các type này ra file riêng, ví dụ types/eventTypes.ts)
 export type ApiUser = {
   id: string;
   firstName: string | null;
   lastName: string | null;
   username: string | null;
   email?: string;
-  role?: string; // Cần cho EventList để check quyền
+  role?: string;
 };
 
 export type EventMember = {
@@ -59,7 +56,6 @@ export type EventMemberInput = {
   roleId: string;
   positionId: string;
 };
-// --- Hết Types ---
 
 const INITIAL_EVENT_STATE: Omit<Event, "id"> & { id?: string } = {
   name: "",
@@ -123,7 +119,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         const headers = { Authorization: `Bearer ${token}` };
         const auRes = await fetch("http://localhost:8080/identity/users", {
           headers,
-        }); // API lấy full user list
+        });
         if (!auRes.ok) {
           const d = await auRes.json().catch(() => {});
           throw new Error(d?.message || "Lỗi lấy danh sách người dùng");
@@ -132,7 +128,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         if (auData?.code !== 1000) {
           throw new Error(auData?.message || "Lỗi API Users");
         }
-        // Giả định API này trả về cấu trúc ApiUser cần thiết (bao gồm cả position, organizerRole nếu ParticipantSection cần)
+
         setAllUsers(auData?.result || []);
       } catch (error: any) {
         console.error("Lỗi tải dữ liệu người dùng:", error);
@@ -267,7 +263,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     const participantsFromSection: EventMemberInput[] =
       participantSectionRef.current?.getMembersData() ?? [];
 
-    // Validation (Giữ nguyên)
     const requiredFields: (keyof Omit<
       Event,
       | "id"
@@ -311,7 +306,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       setIsLoading(false);
       return;
     }
-    // Hết Validation
 
     const isEditing = !!editingEventId;
     const url = isEditing
@@ -319,7 +313,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       : "http://localhost:8080/identity/api/events";
     const method = isEditing ? "PUT" : "POST";
 
-    // Format dữ liệu gửi đi (Giữ nguyên)
     const formattedOrganizers = organizersFromSection.map((org) => ({
       userId: org.userId,
     }));
@@ -414,7 +407,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
 
   return (
     <div>
-      {/* Phần Form Tạo/Sửa Sự kiện */}
       <div className="mb-8 p-6 bg-white rounded-lg shadow-md border border-gray-200">
         <h2 className="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">
           {editingEventId ? "✏️ Chỉnh sửa Sự kiện" : "➕ Tạo sự kiện mới"}
@@ -426,9 +418,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
           </div>
         ) : (
           <form onSubmit={handleSubmitEvent} className="space-y-6">
-            {/* Input Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Các input name, time, location, createdBy */}
               <div>
                 <label
                   htmlFor="name"
@@ -497,7 +487,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   className="w-full p-2 border border-gray-300 rounded bg-gray-100 cursor-not-allowed"
                 />
               </div>
-              {/* Textareas purpose, content */}
               <div className="md:col-span-2">
                 <label
                   htmlFor="purpose"
@@ -534,7 +523,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   required
                 />
               </div>
-              {/* Checkboxes Permissions */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {" "}
@@ -565,23 +553,20 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
               </div>
             </div>
 
-            {/* Sections thêm BTC và Người tham dự */}
             <BTCSection
               ref={btcSectionRef}
-              // allUsers={allUsers} // Bỏ prop này nếu BTCSection không dùng nữa
               existingOrganizers={
                 editingEventId ? currentEventData.organizers : []
               }
             />
             <ParticipantSection
               ref={participantSectionRef}
-              allUsers={allUsers} // Truyền allUsers đầy đủ vào đây
+              allUsers={allUsers}
               existingParticipants={
                 editingEventId ? currentEventData.participants : []
               }
             />
 
-            {/* Nút Submit và Cancel */}
             <div className="flex justify-end gap-3 mt-6 border-t pt-4">
               {editingEventId && (
                 <button
@@ -639,7 +624,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         )}
       </div>
 
-      {/* Phần Danh sách Sự kiện */}
       <div className="mt-12">
         <h2 className="text-xl font-semibold mb-4 text-gray-700">
           Danh sách sự kiện đã tạo
@@ -655,7 +639,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
             users={allUsers}
             currentUser={user as ApiUser | undefined}
             setEditingEvent={handleSetEditingEvent}
-            refreshEvents={fetchEvents} // Truyền hàm refresh
+            refreshEvents={fetchEvents}
           />
         )}
       </div>

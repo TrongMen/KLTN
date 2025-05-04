@@ -1697,7 +1697,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
       }
     };
     return (
-      <div className="flex-1 flex flex-col overflow-hidden relative h-full">
+      <div className="flex-1 flex flex-col overflow-hidden relative h-150">
         {" "}
         <div className="flex justify-between items-center p-3 md:p-4 border-b bg-gray-50 flex-shrink-0">
           {" "}

@@ -23,6 +23,7 @@ import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
 import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
+import { BellIcon } from "@radix-ui/react-icons";
 
 interface Participant {
   id: string | number;
@@ -37,23 +38,33 @@ export interface Conversation {
   message: string;
   avatar?: string;
 }
+
 export interface EventDisplayInfo {
   id: string;
   title: string;
+  name?: string;
   date: string;
+  time?: string;
   location: string;
   description: string;
+  content?: string;
+  purpose?: string;
   speaker?: string;
   image?: string;
-  time?: string;
+  avatarUrl?: string | null;
   status?: string;
-  purpose?: string;
-  name?: string;
-  content?: string;
   createdBy?: string;
-  attendees?: any[];
-  organizers?: any[];
+  organizers?: { userId: string; roleName?: string; positionName?: string }[];
+  participants?: { userId: string; roleName?: string; positionName?: string }[];
+  attendees?: {
+    userId: string;
+    fullName?: string;
+    studentCode?: string;
+    checkedInAt?: string | null;
+    attending?: boolean;
+  }[];
 }
+
 export interface Role {
   name: string;
   description?: string;
@@ -149,7 +160,8 @@ export default function UserHome() {
   const [showNotificationDropdown, setShowNotificationDropdown] =
     useState<boolean>(false);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
-  const notificationDropdownRef = useRef<HTMLDivElement>(null);
+  // Ref này giờ sẽ cho container của FAB để xử lý click outside dropdown
+  const notificationContainerRef = useRef<HTMLDivElement>(null);
 
   const router = useRouter();
   const { refreshToken, isInitialized } = useRefreshToken();
@@ -171,8 +183,9 @@ export default function UserHome() {
         const nt = await refreshToken();
         if (nt) {
           currentToken = nt;
+          localStorage.setItem("authToken", nt);
           headers["Authorization"] = `Bearer ${currentToken}`;
-          res = await fetch(url, { headers });
+          res = await fetch(url, { headers, cache: "no-store" });
         } else throw new Error("Unauthorized or Refresh Failed");
       }
       if (!res.ok) {
@@ -223,7 +236,7 @@ export default function UserHome() {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
       const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
-      let res = await fetch(url, { headers });
+      let res = await fetch(url, { headers, cache: "no-store" });
       if (
         (res.status === 401 || res.status === 403) &&
         currentToken &&
@@ -232,8 +245,9 @@ export default function UserHome() {
         const nt = await refreshToken();
         if (nt) {
           currentToken = nt;
+           localStorage.setItem("authToken", nt);
           headers["Authorization"] = `Bearer ${currentToken}`;
-          res = await fetch(url, { headers });
+          res = await fetch(url, { headers, cache: "no-store" });
         } else throw new Error("Unauthorized or Refresh Failed");
       }
       if (!res.ok) {
@@ -247,21 +261,25 @@ export default function UserHome() {
       }
       const d = await res.json();
       if (d.code === 1000 && Array.isArray(d.result)) {
-        const fmt: EventDisplayInfo[] = d.result.map((e: any) => ({
-          id: e.id,
-          title: e.name || "N/A",
-          name: e.name,
-          date: e.time || "",
-          location: e.location || "N/A",
-          description: e.content || e.purpose || "",
-          time: e.time,
-          status: e.status,
-          purpose: e.purpose,
-          content: e.content,
-          createdBy: e.createdBy,
-          attendees: e.attendees,
-          organizers: e.organizers,
-        }));
+        const fmt: EventDisplayInfo[] = d.result
+          .filter((e: any) => !e.deleted)
+          .map((e: any) => ({
+            id: e.id,
+            title: e.name || "N/A",
+            name: e.name,
+            date: e.time || e.createdAt || "",
+            time: e.time,
+            location: e.location || "N/A",
+            description: e.content || e.purpose || "",
+            content: e.content,
+            purpose: e.purpose,
+            avatarUrl: e.avatarUrl || null,
+            status: e.status,
+            createdBy: e.createdBy,
+            organizers: e.organizers || [],
+            participants: e.participants || [],
+            attendees: e.attendees || [],
+          }));
         setAllEvents(fmt);
       } else throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
     } catch (e: any) {
@@ -282,17 +300,23 @@ export default function UserHome() {
         return;
       }
       setIsLoadingRegisteredIds(true);
+      let currentToken = token;
       try {
         const url = `http://localhost:8080/identity/api/events/attendee/${userId}`;
         let res = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${currentToken}` },
+          cache: "no-store",
         });
         if (res.status === 401 || res.status === 403) {
           const nt = await refreshToken();
-          if (nt)
+          if (nt) {
+            currentToken = nt;
+             localStorage.setItem("authToken", nt);
             res = await fetch(url, {
-              headers: { Authorization: `Bearer ${nt}` },
+              headers: { Authorization: `Bearer ${currentToken}` },
+              cache: "no-store",
             });
+          }
           else throw new Error("Unauthorized or Refresh Failed");
         }
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -328,17 +352,23 @@ export default function UserHome() {
         return;
       }
       setIsLoadingCreatedEventIds(true);
+       let currentToken = token;
       try {
         const url = `http://localhost:8080/identity/api/events/creator/${userId}`;
         let res = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${currentToken}` },
+          cache: "no-store",
         });
         if (res.status === 401 || res.status === 403) {
           const nt = await refreshToken();
-          if (nt)
+          if (nt){
+             currentToken = nt;
+              localStorage.setItem("authToken", nt);
             res = await fetch(url, {
-              headers: { Authorization: `Bearer ${nt}` },
+              headers: { Authorization: `Bearer ${currentToken}` },
+              cache: "no-store",
             });
+          }
           else throw new Error("Unauthorized or Refresh Failed");
         }
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -360,7 +390,7 @@ export default function UserHome() {
     [refreshToken, router]
   );
 
-  const fetchNotifications = useCallback(
+ const fetchNotifications = useCallback(
     async (userId: string, token: string | null) => {
       if (!userId || !token) {
         setNotifications([]);
@@ -369,14 +399,16 @@ export default function UserHome() {
       setIsLoadingNotifications(true);
       setErrorNotifications(null);
       const limit = 10;
+       let currentToken = token;
       try {
         const url = `http://localhost:8080/identity/api/notifications?userId=${userId}&limit=${limit}`;
-        let headers: HeadersInit = { Authorization: `Bearer ${token}` };
+        let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers, cache: "no-store" });
         if (res.status === 401 || res.status === 403) {
           const newToken = await refreshToken();
           if (newToken) {
-            token = newToken;
+            currentToken = newToken;
+            localStorage.setItem("authToken", newToken);
             headers["Authorization"] = `Bearer ${newToken}`;
             res = await fetch(url, { headers, cache: "no-store" });
           } else throw new Error("Unauthorized or Refresh Failed");
@@ -411,89 +443,113 @@ export default function UserHome() {
         console.error("Lỗi fetchNotifications:", error);
         setErrorNotifications(error.message || "Lỗi tải thông báo.");
         setNotifications([]);
+         if (error.message?.includes("Unauthorized"))
+          router.push("/login?sessionExpired=true");
       } finally {
         setIsLoadingNotifications(false);
       }
     },
-    [refreshToken]
+    [refreshToken, router]
   );
+
 
   useEffect(() => {
     if (!isInitialized) return;
     let isMounted = true;
+
     setIsLoadingUser(true);
     setIsLoadingEvents(true);
     setIsLoadingRegisteredIds(true);
     setIsLoadingCreatedEventIds(true);
     setIsLoadingNews(true);
+
     const currentAuthToken = localStorage.getItem("authToken");
     let userIdForFetches: string | null = null;
     let tokenForSubFetches: string | null = currentAuthToken;
+
     const loadInitialData = async () => {
-      const eventsPromise = fetchAllEvents();
-      const newsPromise = fetchNews();
-      if (currentAuthToken) {
-        try {
-          const headers: HeadersInit = {
-            Authorization: `Bearer ${currentAuthToken}`,
-          };
-          const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
-          let userRes = await fetch(userInfoUrl, { headers });
-          if (userRes.status === 401 || userRes.status === 403) {
-            const nt = await refreshToken();
-            if (nt && isMounted) {
-              tokenForSubFetches = nt;
-              userRes = await fetch(userInfoUrl, {
-                headers: { Authorization: `Bearer ${nt}` },
-              });
-            } else if (isMounted)
-              throw new Error("Unauthorized or Refresh Failed");
-          }
-          if (!userRes.ok && isMounted)
-            throw new Error(`Workspace user info failed: ${userRes.status}`);
-          if (isMounted) {
-            const userData = await userRes.json();
-            if (userData.code === 1000 && userData.result?.id) {
-              const fetchedUser: User = userData.result;
-              userIdForFetches = fetchedUser.id;
-              setUser(fetchedUser);
-            } else throw new Error("Invalid user data");
-          }
-        } catch (error: any) {
-          console.error("Lỗi fetch user info (UserHome):", error.message);
-          if (isMounted) setUser(null);
-          userIdForFetches = null;
-          tokenForSubFetches = null;
-        } finally {
-          if (isMounted) setIsLoadingUser(false);
+        const eventsPromise = fetchAllEvents();
+        const newsPromise = fetchNews();
+
+        if (currentAuthToken) {
+            try {
+                const headers: HeadersInit = { Authorization: `Bearer ${currentAuthToken}` };
+                const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
+                let userRes = await fetch(userInfoUrl, { headers, cache: 'no-store' });
+
+                if (userRes.status === 401 || userRes.status === 403) {
+                    console.log("Token expired or invalid, attempting refresh for user info...");
+                    const nt = await refreshToken();
+                    if (nt && isMounted) {
+                        tokenForSubFetches = nt;
+                        localStorage.setItem("authToken", nt);
+                        console.log("Retrying user info fetch with new token...");
+                        userRes = await fetch(userInfoUrl, {
+                            headers: { Authorization: `Bearer ${nt}` },
+                            cache: 'no-store'
+                        });
+                    } else if (isMounted) {
+                         throw new Error("Unauthorized or Refresh Failed during user fetch");
+                    }
+                }
+
+                if (!userRes.ok && isMounted) {
+                     throw new Error(`Workspace user info failed: ${userRes.status}`);
+                }
+
+                if(isMounted) {
+                    const userData = await userRes.json();
+                    if (userData.code === 1000 && userData.result?.id) {
+                        const fetchedUser: User = userData.result;
+                        userIdForFetches = fetchedUser.id;
+                        setUser(fetchedUser);
+                    } else {
+                        throw new Error("Invalid user data received");
+                    }
+                }
+
+            } catch (error: any) {
+                console.error("Lỗi fetch user info (UserHome):", error.message);
+                 if (isMounted) setUser(null);
+                 userIdForFetches = null;
+                 tokenForSubFetches = null;
+                 if (!error.message?.includes("Invalid user data")) {
+                      router.push('/login?sessionExpired=true');
+                 }
+            } finally {
+                 if (isMounted) setIsLoadingUser(false);
+            }
+        } else {
+            if (isMounted) {
+                setUser(null);
+                setIsLoadingUser(false);
+                setIsLoadingRegisteredIds(false);
+                setIsLoadingCreatedEventIds(false);
+                setNotifications([]);
+            }
         }
-      } else {
-        if (isMounted) {
-          setUser(null);
-          setIsLoadingUser(false);
-          setIsLoadingRegisteredIds(false);
-          setIsLoadingCreatedEventIds(false);
-          setNotifications([]);
+
+        await Promise.all([eventsPromise, newsPromise]);
+
+        if (userIdForFetches && tokenForSubFetches && isMounted) {
+             await Promise.all([
+                fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
+                fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
+                fetchNotifications(userIdForFetches, tokenForSubFetches)
+             ]);
+        } else if (isMounted) {
+            setIsLoadingRegisteredIds(false);
+            setIsLoadingCreatedEventIds(false);
+            if (!userIdForFetches) setNotifications([]);
         }
-      }
-      await Promise.all([eventsPromise, newsPromise]);
-      if (userIdForFetches && tokenForSubFetches && isMounted) {
-        await Promise.all([
-          fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
-          fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
-          fetchNotifications(userIdForFetches, tokenForSubFetches),
-        ]);
-      } else if (isMounted) {
-        setIsLoadingRegisteredIds(false);
-        setIsLoadingCreatedEventIds(false);
-        if (!userIdForFetches) setNotifications([]);
-      }
     };
+
     loadInitialData();
+
     return () => {
-      isMounted = false;
+        isMounted = false;
     };
-  }, [
+}, [
     isInitialized,
     fetchAllEvents,
     fetchRegisteredEventIds,
@@ -501,15 +557,16 @@ export default function UserHome() {
     fetchNews,
     fetchNotifications,
     refreshToken,
-  ]);
+    router
+]);
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      // Kiểm tra click có nằm ngoài cả nút và dropdown không
       if (
-        notificationButtonRef.current &&
-        !notificationButtonRef.current.contains(event.target as Node) &&
-        notificationDropdownRef.current &&
-        !notificationDropdownRef.current.contains(event.target as Node)
+        notificationContainerRef.current && // Sử dụng ref mới của container
+        !notificationContainerRef.current.contains(event.target as Node)
       ) {
         setShowNotificationDropdown(false);
       }
@@ -518,7 +575,7 @@ export default function UserHome() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, []); // Dependency rỗng vì ref không thay đổi
 
   const executeRegistration = async (event: EventDisplayInfo) => {
     if (!user?.id || isRegistering) return;
@@ -531,7 +588,7 @@ export default function UserHome() {
       return;
     }
     try {
-      const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
+       const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
       let res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -540,6 +597,7 @@ export default function UserHome() {
         const nt = await refreshToken();
         if (nt) {
           token = nt;
+           localStorage.setItem("authToken", nt);
           res = await fetch(url, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
@@ -567,6 +625,8 @@ export default function UserHome() {
     } catch (err: any) {
       console.error("Lỗi đăng ký:", err);
       toast.error(`${err.message || "Đăng ký thất bại."}`);
+       if (err.message?.includes("Unauthorized"))
+          router.push("/login?sessionExpired=true");
     } finally {
       setIsRegistering(null);
     }
@@ -605,21 +665,10 @@ export default function UserHome() {
         </>
       ),
       onConfirm: () => {
-        setConfirmationState({
-          isOpen: false,
-          title: "",
-          message: "",
-          onConfirm: null,
-        });
+        // Không cần set state ở đây nữa nếu onCancel đã làm
         executeRegistration(event);
       },
-      onCancel: () =>
-        setConfirmationState({
-          isOpen: false,
-          title: "",
-          message: "",
-          onConfirm: null,
-        }),
+      onCancel: () => setConfirmationState(prev => ({...prev, isOpen: false })),
       confirmVariant: "primary",
       confirmText: "Đăng ký",
       cancelText: "Hủy",
@@ -637,7 +686,6 @@ export default function UserHome() {
     },
     []
   );
-
   const handleEventClick = (event: EventDisplayInfo) => {
     setSelectedEvent(event);
   };
@@ -657,11 +705,7 @@ export default function UserHome() {
     } catch (e) {
       console.error("Lỗi gọi API logout:", e);
     } finally {
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem("authenticated");
-      localStorage.removeItem("role");
-      localStorage.removeItem("user");
+      localStorage.clear();
       setUser(null);
       setRegisteredEventIds(new Set());
       setCreatedEventIds(new Set());
@@ -676,6 +720,7 @@ export default function UserHome() {
   const refreshNewsList = useCallback(() => {
     fetchNews();
   }, [fetchNews]);
+
   const handleNotificationClick = () => {
     setShowNotificationDropdown((prev) => !prev);
   };
@@ -683,26 +728,25 @@ export default function UserHome() {
   const handleMarkAsRead = async (notificationId: string) => {
     let token = localStorage.getItem("authToken");
     if (!token || !user?.id) {
-      toast.error("Vui lòng đăng nhập lại để thực hiện hành động này.");
+      toast.error("Vui lòng đăng nhập lại.");
       return;
     }
-
+     let currentToken = token;
     try {
       const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
-      let headers: HeadersInit = { Authorization: `Bearer ${token}` };
+      let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
       let res = await fetch(url, { method: "PUT", headers: headers });
-
       if (res.status === 401 || res.status === 403) {
         const newToken = await refreshToken();
         if (newToken) {
-          token = newToken;
+          currentToken = newToken;
+          localStorage.setItem("authToken", newToken);
           headers["Authorization"] = `Bearer ${newToken}`;
           res = await fetch(url, { method: "PUT", headers: headers });
         } else {
           throw new Error("Không thể làm mới phiên đăng nhập.");
         }
       }
-
       if (!res.ok) {
         let errorMsg = `Lỗi ${res.status}`;
         try {
@@ -711,16 +755,19 @@ export default function UserHome() {
         } catch (_) {}
         throw new Error(errorMsg);
       }
-
       setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-      );
-      toast.success("Đã đánh dấu thông báo là đã đọc.");
+         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+       );
+      // Không cần toast ở đây nữa vì nó đã được hiển thị trong dropdown
+      // toast.success("Đã đánh dấu đã đọc.");
     } catch (error: any) {
       console.error("Lỗi đánh dấu thông báo đã đọc:", error);
       toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
+       if (error.message?.includes("Unauthorized"))
+          router.push("/login?sessionExpired=true");
     }
   };
+
 
   const isPageLoading = !isInitialized || isLoadingUser;
   const getTabButtonClasses = (tabName: ActiveTab): string => {
@@ -820,9 +867,8 @@ export default function UserHome() {
   );
   const tabs = [
     { id: "home", label: "🎉 Trang chủ", requiresAuth: false },
-    // { id: "news", label: "📰 Tin tức", requiresAuth: false },
     { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
-    { id: "myNews", label: "📝 Quản lý Tin tức", requiresAuth: true },
+    { id: "myNews", label: "📝 Tin tức của tôi", requiresAuth: true },
     { id: "myEvents", label: "🛠 Sự kiện & Đăng ký", requiresAuth: true },
     { id: "attendees", label: "✅ Người tham gia", requiresAuth: true },
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
@@ -830,12 +876,12 @@ export default function UserHome() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative"> {/* Thêm relative để định vị FAB */}
       <Toaster toastOptions={{ duration: 3000 }} position="top-center" />
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6">
+      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40"> {/* Làm sticky navbar nếu muốn */}
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
-          <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base relative">
+          <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
             <Link href="/about">
               <span className="cursor-pointer hover:text-gray-300">
                 Giới thiệu
@@ -847,47 +893,7 @@ export default function UserHome() {
             >
               Liên hệ
             </span>
-            {isInitialized && !isLoadingUser && user && (
-              <div className="relative" ref={notificationDropdownRef}>
-                <button
-                  ref={notificationButtonRef}
-                  onClick={handleNotificationClick}
-                  className="relative cursor-pointer text-gray-300 hover:text-white focus:outline-none justify-items-center"
-                  aria-label="Notifications"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4 sm:h-6 sm:w-6"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341A6.002 6.002 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                    />
-                  </svg>
-                  {unreadNotificationCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center px-[0.4rem] py-[0.1rem] text-xs font-bold leading-none text-red-100 transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full cursor-pointer">
-                      {unreadNotificationCount > 9
-                        ? "9+"
-                        : unreadNotificationCount}
-                    </span>
-                  )}
-                </button>
-                {showNotificationDropdown && (
-                  <NotificationDropdown
-                    notifications={notifications}
-                    isLoading={isLoadingNotifications}
-                    error={errorNotifications}
-                    onMarkAsRead={handleMarkAsRead}
-                    onClose={() => setShowNotificationDropdown(false)}
-                  />
-                )}
-              </div>
-            )}
+             {/* Nút thông báo ĐÃ ĐƯỢC DI CHUYỂN ra ngoài nav */}
             {isInitialized && !isLoadingUser && (
               <UserMenu user={user} onLogout={handleLogout} />
             )}
@@ -1003,20 +1009,28 @@ export default function UserHome() {
                 initialRegisteredEventIds={registeredEventIds}
                 isLoadingRegisteredIds={isLoadingRegisteredIds}
                 onRegistrationChange={handleRegistrationChange}
+                onEventUpdatedOrDeleted={() => {
+                   fetchAllEvents();
+                   const t = localStorage.getItem("authToken");
+                   if (user?.id && t) {
+                     fetchUserCreatedEvents(user.id, t);
+                     fetchRegisteredEventIds(user.id, t);
+                   }
+                }}
               />
             )}
-            {user && activeTab === "attendees" && (
-              <AttendeesTabContent user={user} />
+             {user && activeTab === "attendees" && (
+                <AttendeesTabContent user={user} />
             )}
-            {user && activeTab === "members" && (
+             {user && activeTab === "members" && (
               <MembersTabContent
                 user={user}
                 userRole={user.roles?.[0]?.name?.toUpperCase() || "UNKNOWN"}
                 currentUserEmail={user.email || null}
               />
             )}
-            {user && activeTab === "chatList" && (
-              <ChatTabContent currentUser={user} />
+             {user && activeTab === "chatList" && (
+                <ChatTabContent currentUser={user} />
             )}
             {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
               !user &&
@@ -1029,6 +1043,47 @@ export default function UserHome() {
           </>
         )}
       </div>
+
+      {/* --- START: Notification FAB --- */}
+      {isInitialized && !isLoadingUser && user && (
+        <div
+          className="fixed bottom-6 right-6 z-50 group" // Thêm group để xử lý dropdown tốt hơn nếu cần
+          ref={notificationContainerRef} // Ref cho container để xử lý click outside
+        >
+          <button
+            ref={notificationButtonRef} // Ref riêng cho nút bấm nếu cần focus hoặc tương tác đặc biệt
+            onClick={handleNotificationClick}
+            className="relative flex items-center justify-center h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150"
+            aria-label="Thông báo"
+            aria-haspopup="true" // Cho biết nút này mở một popup/dropdown
+            aria-expanded={showNotificationDropdown} // Trạng thái mở/đóng của dropdown
+          >
+            <span className="sr-only">Xem thông báo</span>
+            <BellIcon className="h-6 w-6" aria-hidden="true" />
+            {unreadNotificationCount > 0 && (
+              <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white transform translate-x-1/4 -translate-y-1/4 ring-2 ring-white pointer-events-none">
+                 {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+              </span>
+            )}
+          </button>
+
+          {/* Dropdown được định vị tuyệt đối so với container fixed */}
+          {showNotificationDropdown && (
+             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96"> {/* Định vị dropdown phía trên nút */}
+               <NotificationDropdown
+                 notifications={notifications}
+                 isLoading={isLoadingNotifications}
+                 error={errorNotifications}
+                 onMarkAsRead={handleMarkAsRead}
+                 onClose={() => setShowNotificationDropdown(false)}
+               />
+             </div>
+          )}
+        </div>
+      )}
+       {/* --- END: Notification FAB --- */}
+
+
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
         title={confirmationState.title}
@@ -1038,20 +1093,10 @@ export default function UserHome() {
         cancelText={confirmationState.cancelText}
         onConfirm={() => {
           if (confirmationState.onConfirm) confirmationState.onConfirm();
-          setConfirmationState({
-            isOpen: false,
-            title: "",
-            message: "",
-            onConfirm: null,
-          });
+          // Đã bao gồm reset state trong hàm gọi onConfirm và onCancel của handleRegister
         }}
         onCancel={() =>
-          setConfirmationState({
-            isOpen: false,
-            title: "",
-            message: "",
-            onConfirm: null,
-          })
+           setConfirmationState(prev => ({...prev, isOpen: false })) // Chỉ cần đóng modal
         }
       />
       {showContactModal && (

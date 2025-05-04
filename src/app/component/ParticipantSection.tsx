@@ -55,9 +55,7 @@ const getUserDisplay = (user: ApiUser | null | undefined): string => {
   // Ưu tiên họ tên, sau đó đến username
   return fullName || user.username || "";
 };
-// --- END: Hàm Helper ---
 
-// --- START: Định nghĩa SearchableUserDropdown component (Nội bộ) ---
 type SearchableUserDropdownProps = {
   users: ApiUser[]; // Danh sách user đã được lọc
   selectedUserId: string | null;
@@ -189,9 +187,7 @@ function SearchableUserDropdown({
     </div>
   );
 }
-// --- END: Định nghĩa SearchableUserDropdown ---
 
-// --- START: Component ParticipantSection ---
 export const ParticipantSection = forwardRef<
   ParticipantSectionHandle,
   ParticipantSectionProps
@@ -210,7 +206,7 @@ export const ParticipantSection = forwardRef<
     [existingParticipants]
   );
 
-  // Lọc danh sách user chỉ lấy những người có position != null
+
   const usersForDropdown = useMemo(() => {
     return allUsers.filter((user) => user.position != null);
   }, [allUsers]);
@@ -228,7 +224,7 @@ export const ParticipantSection = forwardRef<
         const rRes = await fetch(
           "http://localhost:8080/identity/api/organizerrole",
           { headers }
-        ); // Endpoint này cần trả về danh sách các role có thể chọn
+        ); 
         if (!rRes.ok) throw new Error(`Lỗi tải vai trò`);
         const rData = await rRes.json();
         // Kiểm tra cấu trúc trả về của API roles
@@ -333,14 +329,14 @@ export const ParticipantSection = forwardRef<
           existingParticipants?.map((p) => p.userId) ?? []
         );
         const newMembers = participantForms
-          // Điều kiện: có userId, có roleId (dù là tự chọn hay có sẵn) và chưa tồn tại
+        
           .filter(
             (form) =>
               form.userId && form.roleId && !existingIds.has(form.userId)
           )
           .map((form) => ({
             userId: form.userId,
-            positionId: form.positionId, // Luôn lấy từ user đã chọn
+            positionId: form.positionId,
             roleId: form.roleId,
           }));
         const uniqueNewMembersMap = new Map<string, ParticipantData>();
@@ -356,7 +352,7 @@ export const ParticipantSection = forwardRef<
       },
     }),
     [participantForms, existingParticipants]
-  ); // Thêm existingParticipants
+  ); 
 
   return (
     <div className="mt-6 border-t pt-4">
@@ -397,20 +393,19 @@ export const ParticipantSection = forwardRef<
               />
             </div>
 
-            {/* Hiển thị Position Name */}
+        
             <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
               <span className="font-medium mr-1 ">Vị trí:</span>
               <span className="font-medium mr-1 " title={form.positionName || ""}>
                 {form.positionName || "—"}{" "}
-                {/* Hiển thị placeholder nếu chưa chọn user */}
+                
               </span>
             </div>
 
-            {/* Hiển thị Role Name hoặc Select Role */}
+          
             <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
               {" "}
-              {/* Đảm bảo chiều cao tối thiểu */}
-              {/* Chỉ hiển thị nội dung nếu đã chọn user */}
+           
               {form.userId ? (
                 form.canSelectRole ? (
                   <select
@@ -430,13 +425,13 @@ export const ParticipantSection = forwardRef<
                 ) : (
                   <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
                     {" "}
-                    {/* Set height */}
+                    
                     <span className="font-medium mr-1 ">
                       Vai trò:
                     </span>
                     <span className="font-medium mr-1 " title={form.roleName || ""}>
                       {form.roleName || "Không có"}{" "}
-                      {/* Hiển thị "Không có" nếu giá trị là rỗng/null */}
+                      
                     </span>
                   </div>
                 )

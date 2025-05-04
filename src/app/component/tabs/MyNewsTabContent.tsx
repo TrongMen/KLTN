@@ -489,12 +489,10 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
       setDeletedNewsError("");
       setDeletedNewsPagination({ page: 0, size: 10, totalPages: 0, totalElements: 0 });
     }
-    // Chạy lại khi mainTab, user, hoặc trang thay đổi
+
   }, [mainTab, currentUserId, fetchDeletedNews, deletedNewsPagination.page, deletedNewsPagination.size]);
 
-  // --- Action Handlers ---
 
-  // Mở modal (tạo mới hoặc chỉnh sửa)
   const handleOpenCreateModal = (itemToEdit: NewsItem | null = null) => {
       if (!user) {
           toast.error("Vui lòng đăng nhập để thực hiện.");
@@ -1380,8 +1378,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
         initialData={editingNewsItem} // Dữ liệu ban đầu cho form sửa
       />
 
-      {/* Toaster */}
-      <Toaster position="bottom-right" reverseOrder={false} />
+    
     </div>
   );
 };

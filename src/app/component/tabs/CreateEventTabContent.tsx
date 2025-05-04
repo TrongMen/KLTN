@@ -8,12 +8,13 @@ import React, {
   useMemo,
 } from "react";
 import { toast } from "react-hot-toast";
+import Image from "next/image";
 import { BTCSection, type BTCSectionHandle } from "../BTCSection";
 import {
   ParticipantSection,
   type ParticipantSectionHandle,
 } from "../ParticipantSection";
-import EventList from "../ListEvenUser"; // Component này sẽ chứa logic QR
+import EventList from "../ListEvenUser";
 import { User as MainUserType } from "../homeuser";
 
 export type ApiUser = {
@@ -46,9 +47,15 @@ export type Event = {
   permissions: string[];
   status?: "PENDING" | "APPROVED" | "REJECTED";
   image?: string;
+  avatarUrl?: string | null;
   attendees?: any[];
   rejectionReason?: string | null;
   createdAt?: string;
+  deleted?: boolean;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  progressStatus?: string;
+  qrCodeUrl?: string | null;
 };
 
 export type EventMemberInput = {
@@ -66,6 +73,7 @@ const INITIAL_EVENT_STATE: Omit<Event, "id"> & { id?: string } = {
   organizers: [],
   participants: [],
   permissions: [],
+  avatarUrl: null,
 };
 
 interface CreateEventTabContentProps {
@@ -86,6 +94,9 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
   const [allUsers, setAllUsers] = useState<ApiUser[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingUsers, setIsFetchingUsers] = useState(true);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [availablePermissions] = useState([
     "Giảng viên",
     "Sinh viên",
@@ -121,14 +132,13 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
           headers,
         });
         if (!auRes.ok) {
-          const d = await auRes.json().catch(() => {});
+          const d = await auRes.json().catch(() => ({}));
           throw new Error(d?.message || "Lỗi lấy danh sách người dùng");
         }
         const auData = await auRes.json();
         if (auData?.code !== 1000) {
           throw new Error(auData?.message || "Lỗi API Users");
         }
-
         setAllUsers(auData?.result || []);
       } catch (error: any) {
         console.error("Lỗi tải dữ liệu người dùng:", error);
@@ -166,10 +176,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       if (data.code === 1000 && Array.isArray(data.result)) {
         setEvents(data.result);
       } else {
-        console.error(
-          "API lấy danh sách sự kiện trả về lỗi hoặc sai định dạng:",
-          data
-        );
+        console.error("API lấy danh sách sự kiện lỗi:", data);
         setEvents([]);
       }
     } catch (error: any) {
@@ -202,6 +209,26 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     setCurrentEventData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAvatarFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setAvatarPreviewUrl(previewUrl);
+    } else {
+      setAvatarFile(null);
+      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      setAvatarPreviewUrl(null);
+    }
+  };
+
+  useEffect(() => {
+    const currentPreviewUrl = avatarPreviewUrl;
+    return () => {
+      if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+    };
+  }, [avatarPreviewUrl]);
+
   const handlePermissionChange = (permission: string) => {
     setCurrentEventData((prev) => {
       const ps = prev.permissions || [];
@@ -214,8 +241,22 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     });
   };
 
+  const resetFormState = useCallback(() => {
+    setCurrentEventData({ ...INITIAL_EVENT_STATE, createdBy: user?.id || "" });
+    setEditingEventId(null);
+    setAvatarFile(null);
+    if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+    setAvatarPreviewUrl(null);
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
+    btcSectionRef.current?.resetForms();
+    participantSectionRef.current?.resetForms();
+  }, [user, avatarPreviewUrl]);
+
   const handleSetEditingEvent = useCallback(
     (eventToEdit: Event | null) => {
+      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      setAvatarPreviewUrl(null);
+
       if (eventToEdit) {
         const timeForInput = eventToEdit.time
           ? eventToEdit.time.slice(0, 16)
@@ -227,27 +268,89 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
           organizers: eventToEdit.organizers || [],
           participants: eventToEdit.participants || [],
           permissions: eventToEdit.permissions || [],
+          avatarUrl: eventToEdit.avatarUrl || null,
         };
         setCurrentEventData(eventDataForForm);
         setEditingEventId(eventToEdit.id);
+        setAvatarFile(null);
+        if (avatarInputRef.current) avatarInputRef.current.value = "";
         btcSectionRef.current?.resetForms();
         participantSectionRef.current?.resetForms();
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
-        setCurrentEventData({
-          ...INITIAL_EVENT_STATE,
-          createdBy: user?.id || "",
-        });
-        setEditingEventId(null);
-        btcSectionRef.current?.resetForms();
-        participantSectionRef.current?.resetForms();
+        resetFormState();
       }
     },
-    [user]
+    [user, resetFormState, avatarPreviewUrl]
   );
 
   const cancelEdit = () => handleSetEditingEvent(null);
 
+  const uploadAvatar = async (eventId: string, token: string) => {
+    if (!avatarFile) return;
+    const formData = new FormData();
+    formData.append("file", avatarFile);
+    const avatarApiUrl = `http://localhost:8080/identity/api/events/${eventId}/avatar`;
+    console.log(`[PATCH] Uploading avatar to ${avatarApiUrl}`);
+
+    try {
+      const avatarResponse = await fetch(avatarApiUrl, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!avatarResponse.ok) {
+        let errorMsg = `Lỗi upload avatar (${avatarResponse.status} ${avatarResponse.statusText})`;
+        let errorDetails = "";
+        try {
+          const errorText = await avatarResponse.text();
+          console.error("Avatar Upload Server Raw Error Text:", errorText);
+          errorDetails = errorText.trim();
+          if (errorDetails.startsWith("{") || errorDetails.startsWith("[")) {
+            try {
+              const jsonData = JSON.parse(errorDetails);
+              if (jsonData && jsonData.message) errorMsg = jsonData.message;
+              else if (errorDetails)
+                errorMsg = `${errorMsg}: ${errorDetails.slice(0, 200)}`;
+              console.error(
+                "Avatar Upload Server Parsed Error JSON:",
+                jsonData
+              );
+            } catch (jsonParseError) {
+              console.warn("Failed to parse error response as JSON.");
+              if (errorDetails)
+                errorMsg = `${errorMsg}: ${errorDetails.slice(0, 200)}`;
+            }
+          } else if (errorDetails) {
+            errorMsg = `${errorMsg}: ${errorDetails.slice(0, 200)}`;
+          }
+        } catch (readError) {
+          console.error("Could not read error response body:", readError);
+        }
+        throw new Error(errorMsg);
+      }
+      const avatarResult = await avatarResponse.json();
+      if (avatarResult.code === 1000 && avatarResult.result?.avatarUrl) {
+        toast.success("Upload avatar thành công!");
+      } else {
+        console.error(
+          "Avatar Upload Success Response Unexpected Format:",
+          avatarResult
+        );
+        throw new Error(
+          avatarResult.message ||
+            "Upload thành công nhưng dữ liệu trả về không đúng định dạng."
+        );
+      }
+    } catch (error: any) {
+      console.error("Avatar upload error caught:", error);
+      toast.error(
+        `Upload avatar thất bại: ${error.message || "Lỗi không xác định"}`
+      );
+    }
+  };
+
+  // ******** CẬP NHẬT LOGIC TRONG HÀM NÀY ********
   const handleSubmitEvent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -269,11 +372,17 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       | "createdBy"
       | "status"
       | "image"
+      | "avatarUrl"
       | "organizers"
       | "participants"
       | "attendees"
       | "rejectionReason"
       | "createdAt"
+      | "deleted"
+      | "deletedAt"
+      | "deletedBy"
+      | "progressStatus"
+      | "qrCodeUrl"
     >)[] = ["name", "purpose", "time", "location", "content", "permissions"];
     const missingFields = requiredFields.filter((field) => {
       if (field === "permissions")
@@ -308,10 +417,10 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     }
 
     const isEditing = !!editingEventId;
-    const url = isEditing
+    const method = isEditing ? "PUT" : "POST";
+    let url = isEditing
       ? `http://localhost:8080/identity/api/events/${editingEventId}`
       : "http://localhost:8080/identity/api/events";
-    const method = isEditing ? "PUT" : "POST";
 
     const formattedOrganizers = organizersFromSection.map((org) => ({
       userId: org.userId,
@@ -331,28 +440,28 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       location: currentEventData.location,
       content: currentEventData.content,
       permissions: currentEventData.permissions || [],
+      organizers: formattedOrganizers, // Gửi danh sách mới/đã cập nhật
+      participants: formattedParticipants, // Gửi danh sách mới/đã cập nhật
     };
 
     if (!isEditing) {
+      // --- Logic Tạo mới ---
       requestBodyBase.createdBy = user?.id;
-      requestBodyBase.organizers = formattedOrganizers;
-      requestBodyBase.participants = formattedParticipants;
-      requestBodyBase.attendees = [];
+      // organizers, participants đã thêm ở trên
+      requestBodyBase.attendees = []; // Thêm mảng rỗng khi tạo mới
     } else {
-      requestBodyBase = {
-        id: editingEventId,
-        name: currentEventData.name,
-        purpose: currentEventData.purpose,
-        time: currentEventData.time
-          ? new Date(currentEventData.time).toISOString()
-          : null,
-        location: currentEventData.location,
-        content: currentEventData.content,
-        organizers: formattedOrganizers,
-        participants: formattedParticipants,
-        permissions: currentEventData.permissions || [],
-        status: currentEventData.status,
-      };
+      // --- Logic Chỉnh sửa (PUT) ---
+      requestBodyBase.id = editingEventId; // Body của PUT cần ID
+      // Luôn đặt status là PENDING khi cập nhật
+      requestBodyBase.status = "PENDING";
+      // Thêm updatedByUserId vào query params của URL
+      if (user?.id) {
+        url = `${url}?updatedByUserId=${user.id}`;
+      } else {
+        toast.error("Không tìm thấy ID người dùng để cập nhật.");
+        setIsLoading(false);
+        return;
+      }
     }
 
     console.log(`[${method}] Request to ${url}`);
@@ -382,9 +491,23 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         }
         throw new Error(msg);
       }
+
       const result = await response.json();
+
       if (result.code === 1000) {
-        toast.success(`${isEditing ? "Cập nhật" : "Thêm"} thành công!`);
+        const eventIdForResult = isEditing ? editingEventId : result.result?.id;
+        // Hiển thị message từ API nếu có, nếu không thì báo thành công chung
+        toast.success(
+          result.message ||
+            `${isEditing ? "Cập nhật" : "Thêm"} sự kiện thành công!`
+        );
+
+        if (eventIdForResult && avatarFile) {
+          await uploadAvatar(eventIdForResult, token);
+        } else if (!eventIdForResult && avatarFile) {
+          console.warn("Không thể upload avatar vì không có eventId.");
+        }
+
         handleSetEditingEvent(null);
         await fetchEvents();
         onEventCreated();
@@ -402,6 +525,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       setIsLoading(false);
     }
   };
+  // ******** KẾT THÚC CẬP NHẬT ********
 
   const isPageLoading = isFetchingUsers;
 
@@ -414,11 +538,11 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         {isPageLoading ? (
           <div className="text-center py-10 text-gray-500">
             {" "}
-            Đang tải dữ liệu cần thiết...{" "}
+            Đang tải dữ liệu...{" "}
           </div>
         ) : (
           <form onSubmit={handleSubmitEvent} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label
                   htmlFor="name"
@@ -436,6 +560,41 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="avatar"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  {" "}
+                  Avatar sự kiện
+                </label>
+                <div className="flex items-center space-x-4">
+                  {(avatarPreviewUrl ||
+                    (editingEventId && currentEventData.avatarUrl)) && (
+                    <Image
+                      src={avatarPreviewUrl || currentEventData.avatarUrl || ""}
+                      alt="Xem trước avatar"
+                      width={80}
+                      height={80}
+                      className="rounded-lg object-cover border bg-gray-100"
+                    />
+                  )}
+                  <input
+                    id="avatar"
+                    type="file"
+                    name="avatar"
+                    ref={avatarInputRef}
+                    accept="image/png, image/jpeg, image/gif"
+                    onChange={handleAvatarChange}
+                    className="block w-full text-sm text-gray-500 border border-gray-300 rounded cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-l file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                {avatarFile && !avatarPreviewUrl && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    Đã chọn: {avatarFile.name}
+                  </p>
+                )}
               </div>
               <div>
                 <label
@@ -475,7 +634,8 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Người tạo
+                  {" "}
+                  Người tạo{" "}
                 </label>
                 <input
                   type="text"
@@ -534,12 +694,13 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                       key={p}
                       className="inline-flex items-center cursor-pointer"
                     >
+                      {" "}
                       <input
                         type="checkbox"
                         checked={currentEventData.permissions?.includes(p)}
                         onChange={() => handlePermissionChange(p)}
                         className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
+                      />{" "}
                       <span className="ml-2 text-sm text-gray-700">{p}</span>
                     </label>
                   ))}
@@ -552,12 +713,13 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                 )}
               </div>
             </div>
-
             <BTCSection
               ref={btcSectionRef}
               existingOrganizers={
                 editingEventId ? currentEventData.organizers : []
               }
+              allUsers={allUsers}
+              getUserFullName={getUserFullName}
             />
             <ParticipantSection
               ref={participantSectionRef}
@@ -565,8 +727,8 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
               existingParticipants={
                 editingEventId ? currentEventData.participants : []
               }
+              getUserFullName={getUserFullName}
             />
-
             <div className="flex justify-end gap-3 mt-6 border-t pt-4">
               {editingEventId && (
                 <button
@@ -589,14 +751,12 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
               >
                 {isLoading ? (
                   <span className="flex items-center">
-                    {" "}
                     <svg
                       className="animate-spin mr-2 h-4 w-4 text-white"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
                       viewBox="0 0 24 24"
                     >
-                      {" "}
                       <circle
                         cx="12"
                         cy="12"
@@ -604,14 +764,14 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                         stroke="currentColor"
                         strokeWidth="4"
                         className="opacity-25"
-                      ></circle>{" "}
+                      ></circle>
                       <path
                         fill="currentColor"
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         className="opacity-75"
-                      ></path>{" "}
-                    </svg>{" "}
-                    Đang xử lý...{" "}
+                      ></path>
+                    </svg>
+                    Đang xử lý...
                   </span>
                 ) : editingEventId ? (
                   "Cập nhật sự kiện"
@@ -623,13 +783,14 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
           </form>
         )}
       </div>
-
       <div className="mt-12">
         <h2 className="text-xl font-semibold mb-4 text-gray-700">
-          Danh sách sự kiện đã tạo
+          {" "}
+          Danh sách sự kiện đã tạo{" "}
         </h2>
         {isFetchingEvents ? (
           <div className="text-center py-10 text-gray-500">
+            {" "}
             Đang tải danh sách...
           </div>
         ) : (
@@ -640,6 +801,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
             currentUser={user as ApiUser | undefined}
             setEditingEvent={handleSetEditingEvent}
             refreshEvents={fetchEvents}
+            getUserFullName={getUserFullName}
           />
         )}
       </div>

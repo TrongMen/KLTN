@@ -49,13 +49,13 @@ export default function Register() {
     }
   
     const requestBody = {
-      username: studentId,  // Mã sinh viên
-      password,  // Mật khẩu
-      firstName, // Tên
-      lastName,  // Họ
-      dob,       // Ngày sinh
-      email,     // Email nhập từ người dùng
-      gender: gender === "male", // Giới tính: true cho Nam, false cho Nữ
+      username: studentId, 
+      password, 
+      firstName, 
+      lastName, 
+      dob,       
+      email,    
+      gender: gender === "male", 
     };
   
     try {

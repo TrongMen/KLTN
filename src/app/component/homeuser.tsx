@@ -17,8 +17,10 @@ import AttendeesTabContent from "./tabs/AttendeesTabContent";
 import MembersTabContent from "./tabs/MembersTabContent";
 import ChatTabContent from "./tabs/ChatTabContent";
 import CreateEventTabContent from "./tabs/CreateEventTabContent";
-import NewsTabContent from "./tabs/NewsTabContent";
+// import NewsTabContent from "./tabs/NewsTabContent"; // No longer used directly for 'news' tab
 import MyNewsTabContent from "./tabs/MyNewsTabContent";
+import NewsFeedSection from "./tabs/NewsFeedSection"; // Import NewsFeedSection
+import CreateNewsModal, { NewsFormData } from "./tabs/CreateNewsModal"; // Import modal
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
@@ -160,8 +162,11 @@ export default function UserHome() {
   const [showNotificationDropdown, setShowNotificationDropdown] =
     useState<boolean>(false);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
-  // Ref này giờ sẽ cho container của FAB để xử lý click outside dropdown
   const notificationContainerRef = useRef<HTMLDivElement>(null);
+
+  const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
+  const [isSubmittingNews, setIsSubmittingNews] = useState(false);
+  const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
 
   const router = useRouter();
   const { refreshToken, isInitialized } = useRefreshToken();
@@ -245,7 +250,7 @@ export default function UserHome() {
         const nt = await refreshToken();
         if (nt) {
           currentToken = nt;
-           localStorage.setItem("authToken", nt);
+            localStorage.setItem("authToken", nt);
           headers["Authorization"] = `Bearer ${currentToken}`;
           res = await fetch(url, { headers, cache: "no-store" });
         } else throw new Error("Unauthorized or Refresh Failed");
@@ -453,7 +458,7 @@ export default function UserHome() {
   );
 
 
-  useEffect(() => {
+ useEffect(() => {
     if (!isInitialized) return;
     let isMounted = true;
 
@@ -468,86 +473,86 @@ export default function UserHome() {
     let tokenForSubFetches: string | null = currentAuthToken;
 
     const loadInitialData = async () => {
-        const eventsPromise = fetchAllEvents();
-        const newsPromise = fetchNews();
+       const eventsPromise = fetchAllEvents();
+       const newsPromise = fetchNews();
 
-        if (currentAuthToken) {
-            try {
-                const headers: HeadersInit = { Authorization: `Bearer ${currentAuthToken}` };
-                const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
-                let userRes = await fetch(userInfoUrl, { headers, cache: 'no-store' });
+       if (currentAuthToken) {
+           try {
+               const headers: HeadersInit = { Authorization: `Bearer ${currentAuthToken}` };
+               const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
+               let userRes = await fetch(userInfoUrl, { headers, cache: 'no-store' });
 
-                if (userRes.status === 401 || userRes.status === 403) {
-                    console.log("Token expired or invalid, attempting refresh for user info...");
-                    const nt = await refreshToken();
-                    if (nt && isMounted) {
-                        tokenForSubFetches = nt;
-                        localStorage.setItem("authToken", nt);
-                        console.log("Retrying user info fetch with new token...");
-                        userRes = await fetch(userInfoUrl, {
-                            headers: { Authorization: `Bearer ${nt}` },
-                            cache: 'no-store'
-                        });
-                    } else if (isMounted) {
-                         throw new Error("Unauthorized or Refresh Failed during user fetch");
-                    }
+               if (userRes.status === 401 || userRes.status === 403) {
+                   console.log("Token expired or invalid, attempting refresh for user info...");
+                   const nt = await refreshToken();
+                   if (nt && isMounted) {
+                       tokenForSubFetches = nt;
+                       localStorage.setItem("authToken", nt);
+                       console.log("Retrying user info fetch with new token...");
+                       userRes = await fetch(userInfoUrl, {
+                           headers: { Authorization: `Bearer ${nt}` },
+                           cache: 'no-store'
+                       });
+                   } else if (isMounted) {
+                       throw new Error("Unauthorized or Refresh Failed during user fetch");
+                   }
+               }
+
+               if (!userRes.ok && isMounted) {
+                    throw new Error(`Workspace user info failed: ${userRes.status}`);
+               }
+
+               if(isMounted) {
+                   const userData = await userRes.json();
+                   if (userData.code === 1000 && userData.result?.id) {
+                       const fetchedUser: User = userData.result;
+                       userIdForFetches = fetchedUser.id;
+                       setUser(fetchedUser);
+                   } else {
+                       throw new Error("Invalid user data received");
+                   }
+               }
+
+           } catch (error: any) {
+               console.error("Lỗi fetch user info (UserHome):", error.message);
+                if (isMounted) setUser(null);
+                userIdForFetches = null;
+                tokenForSubFetches = null;
+                if (!error.message?.includes("Invalid user data")) {
+                     router.push('/login?sessionExpired=true');
                 }
+           } finally {
+                if (isMounted) setIsLoadingUser(false);
+           }
+       } else {
+           if (isMounted) {
+               setUser(null);
+               setIsLoadingUser(false);
+               setIsLoadingRegisteredIds(false);
+               setIsLoadingCreatedEventIds(false);
+               setNotifications([]);
+           }
+       }
 
-                if (!userRes.ok && isMounted) {
-                     throw new Error(`Workspace user info failed: ${userRes.status}`);
-                }
+       await Promise.all([eventsPromise, newsPromise]);
 
-                if(isMounted) {
-                    const userData = await userRes.json();
-                    if (userData.code === 1000 && userData.result?.id) {
-                        const fetchedUser: User = userData.result;
-                        userIdForFetches = fetchedUser.id;
-                        setUser(fetchedUser);
-                    } else {
-                        throw new Error("Invalid user data received");
-                    }
-                }
-
-            } catch (error: any) {
-                console.error("Lỗi fetch user info (UserHome):", error.message);
-                 if (isMounted) setUser(null);
-                 userIdForFetches = null;
-                 tokenForSubFetches = null;
-                 if (!error.message?.includes("Invalid user data")) {
-                      router.push('/login?sessionExpired=true');
-                 }
-            } finally {
-                 if (isMounted) setIsLoadingUser(false);
-            }
-        } else {
-            if (isMounted) {
-                setUser(null);
-                setIsLoadingUser(false);
-                setIsLoadingRegisteredIds(false);
-                setIsLoadingCreatedEventIds(false);
-                setNotifications([]);
-            }
-        }
-
-        await Promise.all([eventsPromise, newsPromise]);
-
-        if (userIdForFetches && tokenForSubFetches && isMounted) {
-             await Promise.all([
-                fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
-                fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
-                fetchNotifications(userIdForFetches, tokenForSubFetches)
-             ]);
-        } else if (isMounted) {
-            setIsLoadingRegisteredIds(false);
-            setIsLoadingCreatedEventIds(false);
-            if (!userIdForFetches) setNotifications([]);
-        }
+       if (userIdForFetches && tokenForSubFetches && isMounted) {
+            await Promise.all([
+              fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
+              fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
+              fetchNotifications(userIdForFetches, tokenForSubFetches)
+            ]);
+       } else if (isMounted) {
+           setIsLoadingRegisteredIds(false);
+           setIsLoadingCreatedEventIds(false);
+           if (!userIdForFetches) setNotifications([]);
+       }
     };
 
     loadInitialData();
 
     return () => {
-        isMounted = false;
+       isMounted = false;
     };
 }, [
     isInitialized,
@@ -563,9 +568,8 @@ export default function UserHome() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // Kiểm tra click có nằm ngoài cả nút và dropdown không
       if (
-        notificationContainerRef.current && // Sử dụng ref mới của container
+        notificationContainerRef.current &&
         !notificationContainerRef.current.contains(event.target as Node)
       ) {
         setShowNotificationDropdown(false);
@@ -575,7 +579,7 @@ export default function UserHome() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []); // Dependency rỗng vì ref không thay đổi
+  }, []);
 
   const executeRegistration = async (event: EventDisplayInfo) => {
     if (!user?.id || isRegistering) return;
@@ -626,7 +630,7 @@ export default function UserHome() {
       console.error("Lỗi đăng ký:", err);
       toast.error(`${err.message || "Đăng ký thất bại."}`);
        if (err.message?.includes("Unauthorized"))
-          router.push("/login?sessionExpired=true");
+         router.push("/login?sessionExpired=true");
     } finally {
       setIsRegistering(null);
     }
@@ -665,8 +669,8 @@ export default function UserHome() {
         </>
       ),
       onConfirm: () => {
-        // Không cần set state ở đây nữa nếu onCancel đã làm
         executeRegistration(event);
+         setConfirmationState(prev => ({...prev, isOpen: false }));
       },
       onCancel: () => setConfirmationState(prev => ({...prev, isOpen: false })),
       confirmVariant: "primary",
@@ -758,15 +762,130 @@ export default function UserHome() {
       setNotifications((prev) =>
          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
        );
-      // Không cần toast ở đây nữa vì nó đã được hiển thị trong dropdown
-      // toast.success("Đã đánh dấu đã đọc.");
     } catch (error: any) {
       console.error("Lỗi đánh dấu thông báo đã đọc:", error);
       toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
        if (error.message?.includes("Unauthorized"))
-          router.push("/login?sessionExpired=true");
+         router.push("/login?sessionExpired=true");
     }
   };
+
+    const handleNewsFormSubmit = async (
+      formData: NewsFormData,
+      newsId?: string
+    ) => {
+      if (!user) {
+        toast.error("Vui lòng đăng nhập để thực hiện.");
+        return;
+      }
+      setIsSubmittingNews(true);
+      const apiFormData = new FormData();
+      apiFormData.append("title", formData.title);
+      apiFormData.append("content", formData.content);
+      if (formData.eventId) {
+        apiFormData.append("eventId", formData.eventId);
+      }
+
+      let API_URL = "http://localhost:8080/identity/api/news";
+      let method = "POST";
+      let currentToken = localStorage.getItem("authToken");
+
+      if (newsId) {
+        API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
+        method = "PUT";
+        if (formData.imageFile) {
+          apiFormData.append("coverImage", formData.imageFile);
+        }
+      } else {
+        apiFormData.append("type", "NEWS");
+        apiFormData.append("featured", "false");
+        apiFormData.append("pinned", "false");
+        apiFormData.append("createdById", user.id);
+        if (formData.imageFile) {
+          apiFormData.append("coverImage", formData.imageFile);
+        }
+      }
+
+      try {
+        let headers: HeadersInit = {};
+        if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
+
+        let response = await fetch(API_URL, {
+          method: method,
+          headers: headers,
+          body: apiFormData,
+        });
+
+        if (
+          (response.status === 401 || response.status === 403) &&
+          currentToken &&
+          refreshToken
+        ) {
+          console.log("Token expired or invalid, attempting refresh...");
+          const newToken = await refreshToken();
+          if (newToken) {
+            currentToken = newToken;
+            localStorage.setItem("authToken", newToken);
+            headers["Authorization"] = `Bearer ${currentToken}`;
+            console.log("Retrying API call with new token...");
+            response = await fetch(API_URL, {
+              method: method,
+              headers: headers,
+              body: apiFormData,
+            });
+          } else {
+            throw new Error("Refresh token failed or missing.");
+          }
+        }
+
+        const result = await response.json();
+
+        if (response.ok && result.code === 1000) {
+          toast.success(
+            result.message ||
+              (newsId ? "Cập nhật thành công!" : "Tạo mới thành công!")
+          );
+          refreshNewsList();
+          setIsNewsModalOpen(false);
+          setEditingNewsItem(null);
+        } else {
+          toast.error(
+            result.message ||
+              (newsId ? "Cập nhật thất bại." : "Tạo mới thất bại.")
+          );
+          console.error("API Error:", result);
+        }
+      } catch (error: any) {
+        console.error("Error submitting news form:", error);
+        if (error.message?.includes("Refresh token failed")) {
+          toast.error("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
+          router.push("/login?sessionExpired=true");
+        } else {
+          toast.error("Lỗi khi gửi yêu cầu: " + error.message);
+        }
+      } finally {
+        setIsSubmittingNews(false);
+      }
+    };
+
+    const handleOpenCreateModal = () => {
+      if (!user) {
+        toast.error("Vui lòng đăng nhập để tạo tin tức.");
+        return;
+      }
+      setEditingNewsItem(null);
+      setIsNewsModalOpen(true);
+    };
+    const handleOpenEditModal = (newsItem: NewsItem) => {
+      setEditingNewsItem(newsItem);
+      setIsNewsModalOpen(true);
+    };
+    const handleCloseModal = () => {
+      if (!isSubmittingNews) {
+        setIsNewsModalOpen(false);
+        setEditingNewsItem(null);
+      }
+    };
 
 
   const isPageLoading = !isInitialized || isLoadingUser;
@@ -785,9 +904,9 @@ export default function UserHome() {
         hover = "hover:bg-indigo-700";
         break;
       case "news":
-        bg = "bg-orange-600";
-        text = "text-orange-800";
-        hover = "hover:bg-orange-700";
+        bg = "bg-green-600"; // Changed color for Bảng tin
+        text = "text-green-800";
+        hover = "hover:bg-green-700";
         break;
       case "myNews":
         bg = "bg-amber-600";
@@ -842,7 +961,7 @@ export default function UserHome() {
       case "home":
         return "border-t-indigo-600";
       case "news":
-        return "border-t-orange-600";
+        return "border-t-green-600"; // Changed color for Bảng tin
       case "myNews":
         return "border-t-amber-600";
       case "createEvent":
@@ -867,18 +986,19 @@ export default function UserHome() {
   );
   const tabs = [
     { id: "home", label: "🎉 Trang chủ", requiresAuth: false },
+    { id: "news", label: "📰 Bảng tin", requiresAuth: false }, // Added News Feed tab
     { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
     { id: "myNews", label: "📝 Tin tức của tôi", requiresAuth: true },
     { id: "myEvents", label: "🛠 Sự kiện & Đăng ký", requiresAuth: true },
     { id: "attendees", label: "✅ Người tham gia", requiresAuth: true },
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
-    { id: "chatList", label: "💬 Danh sách chat", requiresAuth: true },
+    { id: "chatList", label: "💬  Chat", requiresAuth: true },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative"> {/* Thêm relative để định vị FAB */}
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
       <Toaster toastOptions={{ duration: 3000 }} position="top-center" />
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40"> {/* Làm sticky navbar nếu muốn */}
+      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
@@ -893,8 +1013,7 @@ export default function UserHome() {
             >
               Liên hệ
             </span>
-             {/* Nút thông báo ĐÃ ĐƯỢC DI CHUYỂN ra ngoài nav */}
-            {isInitialized && !isLoadingUser && (
+             {isInitialized && !isLoadingUser && (
               <UserMenu user={user} onLogout={handleLogout} />
             )}
             {(!isInitialized || isLoadingUser) && (
@@ -970,19 +1089,19 @@ export default function UserHome() {
                 setSortOption={setSortOption}
                 timeFilterOption={timeFilterOption}
                 setTimeFilterOption={setTimeFilterOption}
-                newsItems={newsItems}
-                isLoadingNews={isLoadingNews}
-                errorNews={errorNews}
-                refreshNewsList={refreshNewsList}
                 refreshToken={refreshToken}
               />
             )}
             {activeTab === "news" && (
-              <NewsTabContent
-                newsItems={newsItems}
-                isLoading={isLoadingNews}
-                error={errorNews}
-                onRefresh={refreshNewsList}
+              <NewsFeedSection
+                 newsItems={newsItems}
+                 isLoading={isLoadingNews}
+                 error={errorNews}
+                 user={user}
+                 onOpenCreateModal={handleOpenCreateModal}
+                 onOpenEditModal={handleOpenEditModal}
+                 onNewsDeleted={refreshNewsList}
+                 refreshToken={refreshToken}
               />
             )}
             {user && activeTab === "myNews" && (
@@ -1020,7 +1139,7 @@ export default function UserHome() {
               />
             )}
              {user && activeTab === "attendees" && (
-                <AttendeesTabContent user={user} />
+               <AttendeesTabContent user={user} />
             )}
              {user && activeTab === "members" && (
               <MembersTabContent
@@ -1030,7 +1149,7 @@ export default function UserHome() {
               />
             )}
              {user && activeTab === "chatList" && (
-                <ChatTabContent currentUser={user} />
+               <ChatTabContent currentUser={user} />
             )}
             {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
               !user &&
@@ -1044,19 +1163,18 @@ export default function UserHome() {
         )}
       </div>
 
-      {/* --- START: Notification FAB --- */}
       {isInitialized && !isLoadingUser && user && (
         <div
-          className="fixed bottom-6 right-6 z-50 group" // Thêm group để xử lý dropdown tốt hơn nếu cần
-          ref={notificationContainerRef} // Ref cho container để xử lý click outside
+          className="fixed bottom-6 right-6 z-50 group"
+          ref={notificationContainerRef}
         >
           <button
-            ref={notificationButtonRef} // Ref riêng cho nút bấm nếu cần focus hoặc tương tác đặc biệt
+            ref={notificationButtonRef}
             onClick={handleNotificationClick}
             className="relative flex items-center justify-center h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150"
             aria-label="Thông báo"
-            aria-haspopup="true" // Cho biết nút này mở một popup/dropdown
-            aria-expanded={showNotificationDropdown} // Trạng thái mở/đóng của dropdown
+            aria-haspopup="true"
+            aria-expanded={showNotificationDropdown}
           >
             <span className="sr-only">Xem thông báo</span>
             <BellIcon className="h-6 w-6" aria-hidden="true" />
@@ -1067,9 +1185,8 @@ export default function UserHome() {
             )}
           </button>
 
-          {/* Dropdown được định vị tuyệt đối so với container fixed */}
           {showNotificationDropdown && (
-             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96"> {/* Định vị dropdown phía trên nút */}
+             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96">
                <NotificationDropdown
                  notifications={notifications}
                  isLoading={isLoadingNotifications}
@@ -1081,7 +1198,6 @@ export default function UserHome() {
           )}
         </div>
       )}
-       {/* --- END: Notification FAB --- */}
 
 
       <ConfirmationDialog
@@ -1093,15 +1209,22 @@ export default function UserHome() {
         cancelText={confirmationState.cancelText}
         onConfirm={() => {
           if (confirmationState.onConfirm) confirmationState.onConfirm();
-          // Đã bao gồm reset state trong hàm gọi onConfirm và onCancel của handleRegister
         }}
         onCancel={() =>
-           setConfirmationState(prev => ({...prev, isOpen: false })) // Chỉ cần đóng modal
+           setConfirmationState(prev => ({...prev, isOpen: false }))
         }
       />
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
+       <CreateNewsModal
+         isOpen={isNewsModalOpen}
+         onClose={handleCloseModal}
+         onSubmit={handleNewsFormSubmit}
+         isSubmitting={isSubmittingNews}
+         editMode={!!editingNewsItem}
+         initialData={editingNewsItem}
+       />
     </div>
   );
 }

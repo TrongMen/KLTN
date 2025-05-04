@@ -3,9 +3,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "react-hot-toast";
-import { EventDisplayInfo, User, NewsItem } from "../homeuser"; // Giả sử đường dẫn đúng
-import CreateNewsModal, { NewsFormData } from "./CreateNewsModal";
-import NewsFeedSection from "./NewsFeedSection";
+import { EventDisplayInfo, User } from "../homeuser";
 import { useRefreshToken } from "../../../hooks/useRefreshToken";
 import {
   PersonIcon,
@@ -16,6 +14,7 @@ import {
   Pencil1Icon,
   CheckCircledIcon,
 } from "@radix-ui/react-icons";
+
 
 interface HomeTabContentProps {
   allEvents: EventDisplayInfo[];
@@ -37,11 +36,7 @@ interface HomeTabContentProps {
   setSortOption: (value: string) => void;
   timeFilterOption: string;
   setTimeFilterOption: (value: string) => void;
-  newsItems: NewsItem[];
-  isLoadingNews: boolean;
-  errorNews: string | null;
-  refreshNewsList: () => void;
-  refreshToken?: () => Promise<string | null>; // Đảm bảo refreshToken được truyền nếu cần
+  refreshToken?: () => Promise<string | null>;
 }
 
 const getWeekRange = (
@@ -88,18 +83,11 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   setSortOption,
   timeFilterOption,
   setTimeFilterOption,
-  newsItems,
-  isLoadingNews,
-  errorNews,
-  refreshNewsList,
-  refreshToken, // Nhận refreshToken
+  refreshToken,
 }) => {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [startDateFilter, setStartDateFilter] = useState<string>("");
   const [endDateFilter, setEndDateFilter] = useState<string>("");
-  const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
-  const [isSubmittingNews, setIsSubmittingNews] = useState(false);
-  const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
 
   const processedEvents = useMemo(() => {
     let evts = [...allEvents];
@@ -175,7 +163,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         b.title.localeCompare(a.title, "vi", { sensitivity: "base" })
       );
     } else {
-      // Default to 'az' or any other value
       evts.sort((a, b) =>
         a.title.localeCompare(b.title, "vi", { sensitivity: "base" })
       );
@@ -207,141 +194,14 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     }
   };
 
-  const handleNewsFormSubmit = async (
-    formData: NewsFormData,
-    newsId?: string
-  ) => {
-    if (!user) {
-      toast.error("Vui lòng đăng nhập để thực hiện.");
-      return;
-    }
-    setIsSubmittingNews(true);
-    const apiFormData = new FormData();
-    apiFormData.append("title", formData.title);
-    apiFormData.append("content", formData.content); // Luôn gửi content
-    if (formData.eventId) {
-      apiFormData.append("eventId", formData.eventId);
-    }
-
-    let API_URL = "http://localhost:8080/identity/api/news";
-    let method = "POST";
-    let currentToken = localStorage.getItem("authToken");
-
-    // Logic xử lý khi chỉnh sửa (PUT)
-    if (newsId) {
-      API_URL = `http://localhost:8080/identity/api/news/${newsId}`; // Chỉ cần ID tin tức
-      method = "PUT";
-      // Chỉ gửi ảnh nếu người dùng chọn ảnh mới
-      if (formData.imageFile) {
-        apiFormData.append("coverImage", formData.imageFile);
-      }
-      // Không gửi createdById khi PUT
-    }
-    // Logic xử lý khi tạo mới (POST)
-    else {
-      apiFormData.append("type", "NEWS"); // Mặc định hoặc tùy chỉnh nếu cần
-      apiFormData.append("featured", "false");
-      apiFormData.append("pinned", "false");
-      apiFormData.append("createdById", user.id); // ID người dùng hiện tại
-      if (formData.imageFile) {
-        apiFormData.append("coverImage", formData.imageFile);
-      }
-      // eventId đã được thêm ở trên nếu có
-    }
-
-    try {
-      let headers: HeadersInit = {};
-      if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-
-      let response = await fetch(API_URL, {
-        method: method,
-        headers: headers, // Không set 'Content-Type' khi dùng FormData, browser tự làm
-        body: apiFormData,
-      });
-
-      // Xử lý Refresh Token nếu cần (401/403)
-      if (
-        (response.status === 401 || response.status === 403) &&
-        currentToken &&
-        refreshToken
-      ) {
-        console.log("Token expired or invalid, attempting refresh...");
-        const newToken = await refreshToken();
-        if (newToken) {
-          currentToken = newToken;
-          localStorage.setItem("authToken", newToken); // Cập nhật token mới
-          headers["Authorization"] = `Bearer ${currentToken}`;
-          console.log("Retrying API call with new token...");
-          response = await fetch(API_URL, {
-            // Gọi lại API với token mới
-            method: method,
-            headers: headers,
-            body: apiFormData,
-          });
-        } else {
-          throw new Error("Refresh token failed or missing.");
-        }
-      }
-
-      const result = await response.json();
-
-      if (response.ok && result.code === 1000) {
-        toast.success(
-          result.message ||
-            (newsId ? "Cập nhật thành công!" : "Tạo mới thành công!")
-        );
-        refreshNewsList(); // Gọi hàm để tải lại danh sách tin tức
-        setIsNewsModalOpen(false); // Đóng modal
-        setEditingNewsItem(null); // Reset trạng thái chỉnh sửa
-      } else {
-        toast.error(
-          result.message ||
-            (newsId ? "Cập nhật thất bại." : "Tạo mới thất bại.")
-        );
-        console.error("API Error:", result);
-      }
-    } catch (error: any) {
-      console.error("Error submitting news form:", error);
-      if (error.message?.includes("Refresh token failed")) {
-        toast.error("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
-        // Có thể thêm logic chuyển hướng đăng nhập ở đây
-      } else {
-        toast.error("Lỗi khi gửi yêu cầu: " + error.message);
-      }
-    } finally {
-      setIsSubmittingNews(false);
-    }
-  };
-
-  const handleOpenCreateModal = () => {
-    if (!user) {
-      toast.error("Vui lòng đăng nhập để tạo tin tức.");
-      return;
-    }
-    setEditingNewsItem(null); // Đảm bảo không ở chế độ edit
-    setIsNewsModalOpen(true);
-  };
-  const handleOpenEditModal = (newsItem: NewsItem) => {
-    setEditingNewsItem(newsItem);
-    setIsNewsModalOpen(true);
-  };
-  const handleCloseModal = () => {
-    if (!isSubmittingNews) {
-      // Chỉ đóng nếu không đang gửi
-      setIsNewsModalOpen(false);
-      setEditingNewsItem(null); // Reset khi đóng
-    }
-  };
-
-  if (isLoadingEvents && isLoadingNews) {
-    // Chờ cả hai load xong ban đầu
+  if (isLoadingEvents) {
     return (
       <p className="text-center text-gray-500 italic py-6">
-        Đang tải dữ liệu trang chủ...
+        Đang tải sự kiện...
       </p>
     );
   }
-  // Hiển thị lỗi nếu có
+
   if (errorEvents) {
     return (
       <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
@@ -349,21 +209,16 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       </p>
     );
   }
-  // Không chặn toàn bộ trang nếu chỉ lỗi news, NewsFeedSection sẽ tự xử lý lỗi của nó
-  // if (errorNews) {
-  //    return <p className="text-center text-red-500">Lỗi tải tin tức: {errorNews}</p>;
-  // }
+
 
   return (
     <div>
-      {/* Thanh Filters và Search */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600">
           {" "}
           🎉 Trang chủ{" "}
         </h1>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-center">
-          {/* Các select box và button xem */}
           <div className="flex-1 sm:flex-none">
             <label htmlFor="sortOptionGuest" className="sr-only">
               {" "}
@@ -448,7 +303,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           </div>
         </div>
       </div>
-      {/* Date Range Filter Inputs */}
       {timeFilterOption === "dateRange" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
           <div>
@@ -487,7 +341,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           </div>
         </div>
       )}
-      {/* Search Input */}
       <div className="relative w-full mb-6">
         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
           {" "}
@@ -503,7 +356,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         />
       </div>
 
-      {/* Event List/Details */}
       {isLoadingEvents ? (
         <p className="text-center text-gray-500 italic py-6">
           {" "}
@@ -533,7 +385,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             Quay lại
           </button>
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
-            {/* Cột Avatar */}
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
               {selectedEvent.avatarUrl ? (
                 <Image
@@ -549,7 +400,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                 </div>
               )}
             </div>
-            {/* Cột Thông tin */}
             <div className="flex-grow space-y-4">
               <h2 className="text-xl md:text-2xl font-bold text-gray-800">
                 {" "}
@@ -624,7 +474,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                       "Không có nội dung chi tiết."}{" "}
                   </p>{" "}
                 </div>
-                {/* Hiển thị Ban Tổ chức */}
                 <div>
                   {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
@@ -650,7 +499,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
                   )}{" "}
                 </div>
-                {/* Hiển thị Người tham gia (Participants) */}
                 <div>
                   {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
@@ -676,7 +524,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
                   )}{" "}
                 </div>
-                {/* Hiển thị Người tham dự (Attendees) */}
                 <div>
                   {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
@@ -700,7 +547,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   )}{" "}
                 </div>
               </div>
-              {/* Nút đăng ký trong chi tiết */}
               <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
                 {(() => {
                   const isCreated = createdEventIds.has(selectedEvent.id);
@@ -810,7 +656,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         <div className="mt-1 mb-6">
           {processedEvents.length > 0 ? (
             viewMode === "card" ? (
-              // Card View
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {processedEvents.map((event) => {
                   const isRegistered = registeredEventIds.has(event.id);
@@ -828,7 +673,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                       key={event.id}
                       className="bg-white shadow-md rounded-xl overflow-hidden transform transition hover:scale-[1.02] hover:shadow-lg flex flex-col border border-gray-200 hover:border-indigo-300"
                     >
-                      {/* Image/Placeholder */}
                       {event.avatarUrl ? (
                         <div
                           className="w-full h-40 bg-gray-200 relative cursor-pointer"
@@ -863,7 +707,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           {event.title?.charAt(0).toUpperCase() || "?"}{" "}
                         </div>
                       )}
-                      {/* Content */}
                       <div className="p-4 flex flex-col flex-grow justify-between">
                         <div
                           onClick={() => onEventClick(event)}
@@ -893,7 +736,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             )}
                           </div>
                         </div>
-                        {/* Button Area */}
                         <div className="mt-auto">
                           {isCreatedByUser ? (
                             <button
@@ -1001,7 +843,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                 })}
               </div>
             ) : (
-              // List View
               <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
                 <ul className="divide-y divide-gray-200">
                   {processedEvents.map((event) => {
@@ -1218,28 +1059,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           )}
         </div>
       )}
-
-      {/* News Feed Section */}
-      <NewsFeedSection
-        newsItems={newsItems || []}
-        isLoading={isLoadingNews}
-        error={errorNews}
-        user={user}
-        onOpenCreateModal={handleOpenCreateModal}
-        onOpenEditModal={handleOpenEditModal}
-        onNewsDeleted={refreshNewsList} // Truyền hàm refresh vào
-        refreshToken={refreshToken} // Truyền hàm refreshToken vào
-      />
-
-      {/* Create/Edit News Modal */}
-      <CreateNewsModal
-        isOpen={isNewsModalOpen}
-        onClose={handleCloseModal}
-        onSubmit={handleNewsFormSubmit} // Truyền hàm xử lý submit
-        isSubmitting={isSubmittingNews}
-        editMode={!!editingNewsItem}
-        initialData={editingNewsItem}
-      />
     </div>
   );
 };

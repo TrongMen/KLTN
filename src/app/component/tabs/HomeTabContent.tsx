@@ -13,8 +13,14 @@ import {
   ReloadIcon,
   Pencil1Icon,
   CheckCircledIcon,
+  ClockIcon, // For status
+  CalendarIcon, // For date
+  PinTopIcon, // For upcoming (or use ClockIcon)
+  CheckBadgeIcon, // For ongoing (or use CheckCircledIcon)
+  ArchiveIcon, // For ended
+  ListBulletIcon, // For list view
+  GridIcon // For card view (using Radix GridIcon)
 } from "@radix-ui/react-icons";
-
 
 interface HomeTabContentProps {
   allEvents: EventDisplayInfo[];
@@ -38,6 +44,72 @@ interface HomeTabContentProps {
   setTimeFilterOption: (value: string) => void;
   refreshToken?: () => Promise<string | null>;
 }
+
+// --- Helper Function to Get Event Status ---
+type EventStatus = "upcoming" | "ongoing" | "ended";
+
+const getEventStatus = (eventDateStr: string): EventStatus => {
+    if (!eventDateStr) return "upcoming"; // Default if date is missing
+
+    try {
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Midnight today
+
+        const eventDate = new Date(eventDateStr);
+        if (isNaN(eventDate.getTime())) {
+            // console.warn(`Invalid date string received for status check: ${eventDateStr}`);
+            return 'upcoming'; // Fallback for invalid date
+        }
+        const eventDateStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate()); // Midnight of event day
+
+
+        if (eventDateStart < todayStart) {
+            return 'ended';
+        } else if (eventDateStart > todayStart) {
+            return 'upcoming';
+        } else {
+            // Event is today
+            return 'ongoing';
+        }
+    } catch (e) {
+         console.error("Error parsing event date for status:", e);
+         return 'upcoming'; // Fallback on error
+    }
+};
+
+// --- Helper Function for Status Badge Styling ---
+const getStatusBadgeClasses = (status: EventStatus): string => {
+    const base = "px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1";
+    switch (status) {
+        case 'ongoing':
+            return `${base} bg-green-100 text-green-800`; // Green for ongoing
+        case 'upcoming':
+            return `${base} bg-blue-100 text-blue-800`;   // Blue for upcoming
+        case 'ended':
+            return `${base} bg-gray-100 text-gray-700`;   // Gray for ended
+        default:
+            return `${base} bg-gray-100 text-gray-600`;
+    }
+};
+
+const getStatusText = (status: EventStatus): string => {
+    switch (status) {
+        case 'ongoing': return 'Đang diễn ra';
+        case 'upcoming': return 'Sắp diễn ra';
+        case 'ended': return 'Đã kết thúc';
+        default: return '';
+    }
+};
+
+const getStatusIcon = (status: EventStatus) => {
+    switch (status) {
+        case 'ongoing': return <CheckCircledIcon className="w-3 h-3" />;
+        case 'upcoming': return <ClockIcon className="w-3 h-3" />;
+        case 'ended': return <ArchiveIcon className="w-3 h-3" />;
+        default: return null;
+    }
+}
+
 
 const getWeekRange = (
   refDate: Date
@@ -91,19 +163,20 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
 
   const processedEvents = useMemo(() => {
     let evts = [...allEvents];
-    if (search) {
-      const l = search.toLowerCase();
-      evts = evts.filter(
-        (e) =>
-          e.title.toLowerCase().includes(l) ||
-          (e.location && e.location.toLowerCase().includes(l))
-      );
-    }
+
+    // Apply Time Filter first
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
-    if (timeFilterOption === "today") {
+
+    if (timeFilterOption === 'upcoming') {
+        evts = evts.filter(e => getEventStatus(e.date) === 'upcoming');
+    } else if (timeFilterOption === 'ongoing') {
+        evts = evts.filter(e => getEventStatus(e.date) === 'ongoing');
+    } else if (timeFilterOption === 'ended') {
+        evts = evts.filter(e => getEventStatus(e.date) === 'ended');
+    } else if (timeFilterOption === "today") {
       evts = evts.filter((e) => {
         try {
           const d = new Date(e.date);
@@ -158,14 +231,52 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         console.error("Error parsing date range:", e);
       }
     }
+    // else timeFilterOption is 'all' or unrecognized, no time filter applied
+
+    // Apply Search Filter
+    if (search) {
+      const l = search.toLowerCase();
+      evts = evts.filter(
+        (e) =>
+          e.title.toLowerCase().includes(l) ||
+          (e.location && e.location.toLowerCase().includes(l))
+      );
+    }
+
+    // Apply Sort
     if (sortOption === "za") {
       evts.sort((a, b) =>
         b.title.localeCompare(a.title, "vi", { sensitivity: "base" })
       );
-    } else {
-      evts.sort((a, b) =>
-        a.title.localeCompare(b.title, "vi", { sensitivity: "base" })
-      );
+    } else if (sortOption === 'az'){
+         evts.sort((a, b) =>
+            a.title.localeCompare(b.title, "vi", { sensitivity: "base" })
+        );
+    } else { // Default sort is 'date' (newest first)
+       evts.sort((a, b) => {
+            try {
+                // Prioritize ongoing/upcoming over ended if dates are the same day
+                const statusA = getEventStatus(a.date);
+                const statusB = getEventStatus(b.date);
+                const dateA = new Date(a.date).getTime();
+                const dateB = new Date(b.date).getTime();
+
+                if (isNaN(dateA) || isNaN(dateB)) return 0;
+
+                if (dateB !== dateA) return dateB - dateA;
+
+                // If same date, prioritize ongoing > upcoming > ended
+                if (statusB === 'ongoing' && statusA !== 'ongoing') return 1;
+                if (statusA === 'ongoing' && statusB !== 'ongoing') return -1;
+                if (statusB === 'upcoming' && statusA === 'ended') return 1;
+                if (statusA === 'upcoming' && statusB === 'ended') return -1;
+
+                return 0; // Keep original order if same date and status (or both invalid)
+
+            } catch {
+                return 0; // Keep original order if dates are invalid
+            }
+        });
     }
     return evts;
   }, [
@@ -210,7 +321,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     );
   }
 
-
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -230,6 +340,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               onChange={(e) => setSortOption(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
+              {/* <option value="date">📅 Gần nhất</option> Default to date */}
               <option value="az">🔤 A - Z</option>{" "}
               <option value="za">🔤 Z - A</option>
             </select>
@@ -246,6 +357,9 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
               <option value="all">♾️ Tất cả</option>{" "}
+              <option value="upcoming">☀️ Sắp diễn ra</option>
+              <option value="ongoing">🟢 Đang diễn ra</option>
+              <option value="ended">🏁 Đã kết thúc</option>
               <option value="today">📅 Hôm nay</option>{" "}
               <option value="thisWeek">🗓️ Tuần này</option>{" "}
               <option value="thisMonth">🗓️ Tháng này</option>{" "}
@@ -262,20 +376,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
               }`}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                {" "}
-                <path
-                  d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v10H5V5z"
-                  clipRule="evenodd"
-                  fillRule="evenodd"
-                />{" "}
-                <path d="M7 7h6v2H7V7zm0 4h6v2H7v-2z" />{" "}
-              </svg>
+              <GridIcon className="h-5 w-5" />
             </button>
             <button
               onClick={() => setViewMode("list")}
@@ -286,19 +387,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
               }`}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                {" "}
-                <path
-                  fillRule="evenodd"
-                  d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                  clipRule="evenodd"
-                />{" "}
-              </svg>
+              <ListBulletIcon className="h-5 w-5" />
             </button>
           </div>
         </div>
@@ -362,6 +451,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           Đang tải sự kiện...{" "}
         </p>
       ) : selectedEvent ? (
+          // --- Event Details View ---
         <div className="p-6 border rounded-lg shadow-lg bg-gray-50 mb-6">
           <button
             onClick={onBackToList}
@@ -401,10 +491,22 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               )}
             </div>
             <div className="flex-grow space-y-4">
-              <h2 className="text-xl md:text-2xl font-bold text-gray-800">
-                {" "}
-                {selectedEvent.title}{" "}
-              </h2>
+                 {/* Title and Status */}
+                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex-1">
+                        {selectedEvent.title}
+                    </h2>
+                    {(() => {
+                        const status = getEventStatus(selectedEvent.date);
+                        return (
+                            <span className={`${getStatusBadgeClasses(status)} mt-1 sm:mt-0 flex-shrink-0`}>
+                                {getStatusIcon(status)}
+                                {getStatusText(status)}
+                            </span>
+                        );
+                    })()}
+                 </div>
+
               <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
                 <p>
                   {" "}
@@ -552,12 +654,9 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   const isCreated = createdEventIds.has(selectedEvent.id);
                   const isRegistered = registeredEventIds.has(selectedEvent.id);
                   const processing = isRegistering === selectedEvent.id;
-                  const isEventUpcoming =
-                    new Date(selectedEvent.date) >=
-                    new Date(new Date().setHours(0, 0, 0, 0));
-                  const showRegisterBtn = user && !isCreated && isEventUpcoming;
-                  const canClick =
-                    showRegisterBtn && !isRegistered && !processing;
+                  const status = getEventStatus(selectedEvent.date);
+                  const showRegisterBtn = user && !isCreated && status !== 'ended';
+                  const canClick = showRegisterBtn && !isRegistered && !processing;
 
                   if (isCreated) {
                     return (
@@ -610,7 +709,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         )}{" "}
                       </button>
                     );
-                  } else if (user && !isEventUpcoming && !isCreated) {
+                  } else if (status === 'ended') {
                     return (
                       <button
                         className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
@@ -620,7 +719,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         Đã kết thúc{" "}
                       </button>
                     );
-                  } else if (!user && isEventUpcoming) {
+                  } else if (!user && status !== 'ended') {
                     return (
                       <button
                         onClick={(e) => {
@@ -635,17 +734,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         Đăng nhập để đăng ký{" "}
                       </button>
                     );
-                  } else if (!user && !isEventUpcoming) {
-                    return (
-                      <button
-                        className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
-                        disabled
-                      >
-                        {" "}
-                        Đã kết thúc{" "}
-                      </button>
-                    );
-                  }
+                   }
                   return null;
                 })()}
               </div>
@@ -653,80 +742,70 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           </div>
         </div>
       ) : (
+          // --- Event List/Grid View ---
         <div className="mt-1 mb-6">
           {processedEvents.length > 0 ? (
             viewMode === "card" ? (
+                // --- Card View ---
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {processedEvents.map((event) => {
                   const isRegistered = registeredEventIds.has(event.id);
                   const isCreatedByUser = createdEventIds.has(event.id);
                   const processing = isRegistering === event.id;
-                  const isEventUpcoming =
-                    new Date(event.date) >=
-                    new Date(new Date().setHours(0, 0, 0, 0));
-                  const showRegisterButton =
-                    user && !isCreatedByUser && isEventUpcoming;
-                  const canClickRegister =
-                    showRegisterButton && !isRegistered && !processing;
+                  const status = getEventStatus(event.date);
+                  const showRegisterButton = user && !isCreatedByUser && status !== 'ended';
+                  const canClickRegister = showRegisterButton && !isRegistered && !processing;
                   return (
                     <div
                       key={event.id}
                       className="bg-white shadow-md rounded-xl overflow-hidden transform transition hover:scale-[1.02] hover:shadow-lg flex flex-col border border-gray-200 hover:border-indigo-300"
                     >
-                      {event.avatarUrl ? (
-                        <div
-                          className="w-full h-40 bg-gray-200 relative cursor-pointer"
-                          onClick={() => onEventClick(event)}
-                        >
-                          {" "}
-                          <Image
-                            src={event.avatarUrl}
-                            alt={`Avatar for ${event.title}`}
-                            layout="fill"
-                            objectFit="cover"
-                            className="transition-opacity duration-300 ease-in-out opacity-0"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.opacity =
-                                "0";
-                              (
-                                e.target as HTMLImageElement
-                              ).parentElement?.classList.add("bg-gray-300");
-                            }}
-                            onLoad={(e) => {
-                              (e.target as HTMLImageElement).style.opacity =
-                                "1";
-                            }}
-                          />{" "}
-                        </div>
-                      ) : (
-                        <div
-                          className="w-full h-40 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold cursor-pointer"
-                          onClick={() => onEventClick(event)}
-                        >
-                          {" "}
-                          {event.title?.charAt(0).toUpperCase() || "?"}{" "}
-                        </div>
-                      )}
-                      <div className="p-4 flex flex-col flex-grow justify-between">
+                       {/* Image/Placeholder Container */}
+                      <div className="w-full h-40 bg-gray-200 relative cursor-pointer" onClick={() => onEventClick(event)}>
+                          {event.avatarUrl ? (
+                              <Image
+                                  src={event.avatarUrl}
+                                  alt={`Avatar for ${event.title}`}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="transition-opacity duration-300 ease-in-out"
+                                   onError={(e) => { const target = e.target as HTMLImageElement; target.style.opacity = '0'; if (target.parentElement) target.parentElement.classList.add('bg-gray-300'); }}
+                                   onLoad={(e) => { (e.target as HTMLImageElement).style.opacity = '1'; }}
+                              />
+                          ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
+                                  {event.title?.charAt(0).toUpperCase() || "?"}
+                              </div>
+                          )}
+                           {/* Status Badge on Image */}
+                           <span className={`absolute top-2 right-2 ${getStatusBadgeClasses(status)} shadow-sm`}>
+                               {getStatusIcon(status)}
+                               {getStatusText(status)}
+                           </span>
+                      </div>
+
+                      {/* Content Below Image */}
+                      <div className="p-4 flex flex-col flex-grow">
                         <div
                           onClick={() => onEventClick(event)}
-                          className="cursor-pointer flex-grow mb-3"
+                          className="cursor-pointer mb-3"
                         >
                           <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
                             {" "}
                             {event.title}{" "}
                           </h2>
-                          <p className="text-sm text-gray-600">
-                            {" "}
-                            📅{" "}
-                            {new Date(event.date).toLocaleDateString(
-                              "vi-VN"
-                            )}{" "}
-                          </p>
-                          <p className="text-sm text-gray-600 mb-2">
-                            {" "}
-                            📍 {event.location}{" "}
-                          </p>
+                           {/* Date and Location */}
+                           <div className="space-y-0.5 mb-2">
+                                <p className="text-sm text-gray-600 flex items-center gap-1">
+                                    <CalendarIcon className="w-3.5 h-3.5 text-gray-400"/>
+                                    {new Date(event.date).toLocaleDateString("vi-VN")}
+                                </p>
+                                <p className="text-sm text-gray-600 flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}> <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /> <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    {event.location}
+                                </p>
+                           </div>
+                          {/* Counts */}
                           <div className="text-xs text-gray-500 flex items-center gap-x-3 mt-1">
                             {event.organizers && (
                               <span>👥 BTC: {event.organizers.length}</span>
@@ -736,7 +815,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             )}
                           </div>
                         </div>
-                        <div className="mt-auto">
+                        {/* Spacer to push button down */}
+                        <div className="flex-grow"></div>
+                        {/* Button Area */}
+                        <div className="mt-auto pt-3 border-t border-gray-100">
                           {isCreatedByUser ? (
                             <button
                               className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-600 cursor-not-allowed text-sm font-medium"
@@ -771,71 +853,28 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               ) : processing ? (
                                 <>
                                   {" "}
-                                  <svg
-                                    className="animate-spin -ml-1 mr-2 h-4 w-4"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    {" "}
-                                    <circle
-                                      cx="12"
-                                      cy="12"
-                                      r="10"
-                                      stroke="currentColor"
-                                      strokeWidth="4"
-                                      className="opacity-25"
-                                    ></circle>{" "}
-                                    <path
-                                      fill="currentColor"
-                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                      className="opacity-75"
-                                    ></path>{" "}
-                                  </svg>{" "}
+                                  <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4"/>
                                   ...{" "}
                                 </>
                               ) : (
                                 <span>📝 Đăng ký</span>
                               )}{" "}
                             </button>
-                          ) : (
-                            <>
-                              {" "}
-                              {user && !isEventUpcoming && !isCreatedByUser && (
+                           ) : status === 'ended' ? (
                                 <button
-                                  className="w-full px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
-                                  disabled
+                                    className="w-full px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
+                                    disabled
                                 >
-                                  {" "}
-                                  Đã kết thúc{" "}
+                                    Đã kết thúc
                                 </button>
-                              )}{" "}
-                              {!user && isEventUpcoming && (
+                           ) : !user && status !== 'ended' ? (
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toast(
-                                      "Vui lòng đăng nhập để đăng ký sự kiện.",
-                                      { icon: "🔒" }
-                                    );
-                                  }}
-                                  className="w-full px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
+                                    onClick={(e) => { e.stopPropagation(); toast("Vui lòng đăng nhập để đăng ký.", { icon: "🔒" }); }}
+                                    className="w-full px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
                                 >
-                                  {" "}
-                                  Đăng nhập để đăng ký{" "}
+                                    Đăng nhập để đăng ký
                                 </button>
-                              )}{" "}
-                              {!user && !isEventUpcoming && (
-                                <button
-                                  className="w-full px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
-                                  disabled
-                                >
-                                  {" "}
-                                  Đã kết thúc{" "}
-                                </button>
-                              )}{" "}
-                            </>
-                          )}
+                          ) : null }
                         </div>
                       </div>
                     </div>
@@ -843,19 +882,16 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                 })}
               </div>
             ) : (
+                 // --- List View ---
               <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
                 <ul className="divide-y divide-gray-200">
                   {processedEvents.map((event) => {
                     const isRegistered = registeredEventIds.has(event.id);
                     const isCreatedByUser = createdEventIds.has(event.id);
                     const processing = isRegistering === event.id;
-                    const isEventUpcoming =
-                      new Date(event.date) >=
-                      new Date(new Date().setHours(0, 0, 0, 0));
-                    const showRegisterButton =
-                      user && !isCreatedByUser && isEventUpcoming;
-                    const canClickRegister =
-                      showRegisterButton && !isRegistered && !processing;
+                    const status = getEventStatus(event.date);
+                    const showRegisterButton = user && !isCreatedByUser && status !== 'ended';
+                    const canClickRegister = showRegisterButton && !isRegistered && !processing;
                     return (
                       <li
                         key={event.id}
@@ -885,49 +921,19 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               {event.title}{" "}
                             </p>
                             <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              <span className="inline-flex items-center gap-1">
-                                {" "}
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-3.5 w-3.5 text-gray-400"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                >
-                                  {" "}
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                  />{" "}
-                                </svg>{" "}
-                                {new Date(event.date).toLocaleDateString(
-                                  "vi-VN"
-                                )}{" "}
+                               {/* Status Badge in List View */}
+                              <span className={getStatusBadgeClasses(status)}>
+                                  {getStatusIcon(status)}
+                                  {getStatusText(status)}
                               </span>
                               <span className="inline-flex items-center gap-1">
                                 {" "}
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-3.5 w-3.5 text-gray-400"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                >
-                                  {" "}
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                  />{" "}
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                  />{" "}
-                                </svg>{" "}
+                                <CalendarIcon className="w-3.5 h-3.5 text-gray-400"/>
+                                {new Date(event.date).toLocaleDateString( "vi-VN")}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                {" "}
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}> <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /> <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /> </svg>
                                 {event.location}{" "}
                               </span>
                               {event.organizers && (
@@ -980,71 +986,28 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               ) : processing ? (
                                 <>
                                   {" "}
-                                  <svg
-                                    className="animate-spin -ml-1 mr-1.5 h-3 w-3"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    {" "}
-                                    <circle
-                                      cx="12"
-                                      cy="12"
-                                      r="10"
-                                      stroke="currentColor"
-                                      strokeWidth="4"
-                                      className="opacity-25"
-                                    ></circle>{" "}
-                                    <path
-                                      fill="currentColor"
-                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                      className="opacity-75"
-                                    ></path>{" "}
-                                  </svg>{" "}
+                                   <ReloadIcon className="animate-spin -ml-1 mr-1.5 h-3 w-3"/>
                                   ...{" "}
                                 </>
                               ) : (
                                 <span>📝 Đăng ký</span>
                               )}{" "}
                             </button>
-                          ) : (
-                            <>
-                              {" "}
-                              {user && !isEventUpcoming && !isCreatedByUser && (
+                            ) : status === 'ended' ? (
                                 <button
-                                  className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs font-medium"
-                                  disabled
+                                    className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs font-medium"
+                                    disabled
                                 >
-                                  {" "}
-                                  Đã kết thúc{" "}
+                                    Đã kết thúc
                                 </button>
-                              )}{" "}
-                              {!user && isEventUpcoming && (
+                           ) : !user && status !== 'ended' ? (
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toast(
-                                      "Vui lòng đăng nhập để đăng ký sự kiện.",
-                                      { icon: "🔒" }
-                                    );
-                                  }}
-                                  className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-xs font-medium"
+                                    onClick={(e) => { e.stopPropagation(); toast("Vui lòng đăng nhập để đăng ký.", { icon: "🔒" }); }}
+                                    className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-xs font-medium"
                                 >
-                                  {" "}
-                                  Đăng nhập để đăng ký{" "}
+                                    Đăng nhập để đăng ký
                                 </button>
-                              )}{" "}
-                              {!user && !isEventUpcoming && (
-                                <button
-                                  className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs font-medium"
-                                  disabled
-                                >
-                                  {" "}
-                                  Đã kết thúc{" "}
-                                </button>
-                              )}{" "}
-                            </>
-                          )}
+                          ) : null }
                         </div>
                       </li>
                     );

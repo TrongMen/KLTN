@@ -75,7 +75,7 @@ const getUserDisplay = (user: ApiUserWithDetails | ApiUser | null | undefined): 
     if (!user) return "";
     const fullName = `${user.lastName || ""} ${user.firstName || ""}`.trim();
     // Sử dụng toán tử ?? để xử lý null cho username
-    return fullName || user.username ?? "";
+    return fullName || (user.username ?? "");
 };
 
 

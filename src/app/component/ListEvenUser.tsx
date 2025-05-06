@@ -332,7 +332,7 @@ const EventList: React.FC<EventListProps> = ({
                 <strong className="font-medium text-gray-700 mb-1 block">Người tham gia (vai trò):</strong>
                 {viewingEventDetails.participants?.length > 0 ? (<ul className="list-disc list-inside pl-4 text-gray-600">{viewingEventDetails.participants.map(p => <li key={p.userId}>{getUserFullName(p.userId, users)}{p.roleName && ` - ${p.roleName}`}{p.positionName && ` (${p.positionName})`}</li>)}</ul>) : (<span className="text-gray-500 italic">Không có</span>)}
               </div>
-              {(viewingEventDetails.status === "APPROVED" || qrCodeError) && (
+              {/* {(viewingEventDetails.status === "APPROVED" || qrCodeError) && (
                 <div className="mt-4 pt-4 border-t">
                   <h4 className="text-md font-semibold mb-2 text-gray-700">Mã QR Sự kiện</h4>
                   {isLoadingQr && <p className="text-gray-500 italic">Đang tải mã QR...</p>}
@@ -345,7 +345,7 @@ const EventList: React.FC<EventListProps> = ({
                   )}
                   {!isLoadingQr && !qrCodeError && !qrCodeImageSrc && !qrCodeLink && viewingEventDetails.status === "APPROVED" && (<p className="text-gray-500 italic">Không thể tải mã QR.</p> )}
                 </div>
-              )}
+              )} */}
             </div>
           </div>
           <div className="p-4 border-t flex justify-end sticky bottom-0 bg-gray-50">
@@ -359,7 +359,7 @@ const EventList: React.FC<EventListProps> = ({
   return (
     <section className="mt-8">
       <h2 className="text-xl font-semibold mb-4 text-gray-800">📅 Danh sách Sự kiện ({events?.length ?? 0})</h2>
-      {!events || events.length === 0 ? (<div className="text-center py-12 bg-gray-50 rounded-lg border"><p className="text-gray-500 mb-2">Chưa có sự kiện nào được tạo.</p><p className="text-gray-400 text-sm">Sử dụng form ở trên để thêm sự kiện mới.</p></div>) : (
+      {!events || events.length === 0 ? (<div className="text-center py-12 bg-gray-50 rounded-lg border"><p className="text-gray-500 mb-2">Chưa có sự kiện nào được tạo.</p><p className="text-gray-400 text-sm"></p></div>) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {events.map((event) => (
             <article key={event.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col border border-gray-200 hover:shadow-lg transition-shadow duration-200">

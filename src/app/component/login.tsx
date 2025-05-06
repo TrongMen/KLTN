@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [captchaInput, setCaptchaInput] = useState("");
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false); // Thêm state loading
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const generateCaptcha = () => {
@@ -35,23 +35,18 @@ export default function LoginPage() {
     setError("");
   };
 
-  const handleLogin = async (e) => {
-    e?.preventDefault();
-    setLoading(true); // Bắt đầu loading
-    setError(""); // Xóa lỗi cũ
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
     if (captchaInput.trim().toUpperCase() !== captcha) {
       setError("Mã captcha không đúng. Vui lòng thử lại.");
       setCaptcha(generateCaptcha());
       setCaptchaInput("");
-      setLoading(false); // Kết thúc loading nếu captcha sai
+      setLoading(false);
       return;
     }
-
-    const loginData = {
-      username,
-      password,
-    };
 
     try {
       const authResponse = await fetch(
@@ -64,7 +59,8 @@ export default function LoginPage() {
       );
 
       const authData = await authResponse.json();
-      if (!authResponse.ok) {
+      if (!authResponse.ok || authData.code !== 1000) {
+        // Giả sử API trả về code 1000 khi thành công, điều chỉnh nếu cần
         throw new Error(authData.message || "Đăng nhập thất bại");
       }
 
@@ -80,8 +76,9 @@ export default function LoginPage() {
       );
 
       const userInfo = await userInfoResponse.json();
-      if (!userInfoResponse.ok) {
-        localStorage.removeItem("authToken"); // Xóa token nếu không lấy được thông tin user
+      if (!userInfoResponse.ok || userInfo.code !== 1000) {
+        // Giả sử API trả về code 1000 khi thành công, điều chỉnh nếu cần
+        localStorage.removeItem("authToken");
         throw new Error(userInfo.message || "Lỗi khi lấy thông tin user");
       }
 
@@ -89,40 +86,53 @@ export default function LoginPage() {
 
       toast.success("Đăng nhập thành công!");
 
-      switch (roleName) {
-        case "ADMIN":
-          router.push("/admin");
-          break;
-        case "GUEST":
-          router.push("/guest");
-          break;
-        case "USER":
-          router.push("/user");
-          break;
-        default:
-          // Có thể xử lý trường hợp role không xác định hoặc đẩy về trang mặc định
-           localStorage.removeItem("authToken"); // Xóa token nếu role không hợp lệ
-           toast.error(`Role "${roleName}" không được hỗ trợ hoặc không tồn tại.`);
-           router.push("/"); // Chuyển về trang chủ hoặc trang login
-           handleRefreshCaptcha();
-           setPassword("");
-          break;
-      }
-    } catch (error) {
+      // Delay nhẹ trước khi chuyển trang để user kịp thấy toast
+      setTimeout(() => {
+        switch (roleName) {
+          case "ADMIN":
+            router.push("/admin");
+            break;
+          case "GUEST":
+            router.push("/guest");
+            break;
+          case "USER":
+            router.push("/user");
+            break;
+          default:
+            localStorage.removeItem("authToken");
+            toast.error(
+              `Role "${roleName}" không được hỗ trợ hoặc không tồn tại.`
+            );
+            router.push("/");
+            handleRefreshCaptcha();
+            setPassword("");
+            setLoading(false); // Đảm bảo setLoading false ở đây
+            break; // Thêm break để tránh chạy vào finally quá sớm nếu switch không khớp
+        }
+        // Không cần setLoading(false) ở đây nữa vì đã có trong finally
+      }, 500); // 500ms delay
+    } catch (error: any) {
       console.error("Đăng nhập thất bại:", error);
       toast.error("Đăng nhập thất bại: " + error.message);
       handleRefreshCaptcha();
       setPassword("");
+      setLoading(false); // Đảm bảo setLoading false khi có lỗi
     } finally {
-      setLoading(false); // Kết thúc loading dù thành công hay thất bại
+      // setLoading(false) sẽ được gọi sau khi try/catch hoàn tất,
+      // nhưng nếu có chuyển trang thì nó có thể không cần thiết
+      // Tuy nhiên, để chắc chắn nếu không chuyển trang hoặc có lỗi trước khi chuyển, nên giữ lại
+      // Hoặc chỉ gọi setLoading(false) trong các trường hợp lỗi và captcha sai
+      // Trong trường hợp thành công và chuyển trang, component sẽ unmount
+      // Giữ lại setLoading(false) trong khối catch và khi captcha sai là đủ
+      // Không cần setLoading(false) ở đây nếu logic chuyển trang trong try hoạt động đúng
+      // Đã di chuyển setLoading(false) vào các nhánh xử lý lỗi/captcha sai và trước khi return/break
     }
   };
 
-  const handleUsernameChange = (e) => {
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    // Cho phép nhập số và giới hạn độ dài nếu cần, ví dụ 10 ký tự
     if (/^\d*$/.test(value) && value.length <= 10) {
-       setUsername(value);
+      setUsername(value);
     }
   };
 
@@ -139,15 +149,16 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <input
-            type="text" // Thay đổi type thành text để hiển thị placeholder tốt hơn và xử lý input dễ hơn
-            inputMode="numeric" // Gợi ý bàn phím số trên di động
-            pattern="\d*" // Chỉ cho phép nhập số về mặt HTML5 (cần validate thêm)
+            type="text"
+            inputMode="numeric"
+            pattern="\d*"
             placeholder="Mã số sinh viên"
             value={username}
             onChange={handleUsernameChange}
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
-            maxLength={10} // Giới hạn độ dài ví dụ
-            required // Thêm required nếu cần
+            maxLength={10}
+            required
+            disabled={loading} // Vô hiệu hóa khi đang tải
           />
 
           <div className="relative">
@@ -157,13 +168,15 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
-              required // Thêm required nếu cần
+              required
+              disabled={loading} // Vô hiệu hóa khi đang tải
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-blue-500"
+              className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 ${loading ? 'cursor-not-allowed' : 'hover:text-blue-500'}`}
               aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              disabled={loading} // Vô hiệu hóa khi đang tải
             >
               {showPassword ? "🙈" : "👁️"}
             </button>
@@ -177,7 +190,9 @@ export default function LoginPage() {
               onChange={(e) => setCaptchaInput(e.target.value.toUpperCase())}
               className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
               maxLength={5}
-              required // Thêm required nếu cần
+              required
+              autoComplete="off" // Tắt tự động điền cho captcha
+              disabled={loading} // Vô hiệu hóa khi đang tải
             />
             <div className="flex items-center space-x-2">
               <div className="px-3 py-2 font-bold bg-gray-100 rounded-lg text-lg tracking-widest select-none border border-gray-300">
@@ -187,7 +202,8 @@ export default function LoginPage() {
                 type="button"
                 onClick={handleRefreshCaptcha}
                 title="Làm mới mã"
-                className="text-blue-500 hover:text-blue-700 text-xl p-1 rounded-full hover:bg-gray-100 transition-colors"
+                className={`text-blue-500 hover:text-blue-700 text-xl p-1 rounded-full hover:bg-gray-100 transition-colors ${loading ? 'cursor-not-allowed opacity-50' : ''}`}
+                disabled={loading} // Vô hiệu hóa khi đang tải
               >
                 🔄
               </button>
@@ -198,7 +214,6 @@ export default function LoginPage() {
             <p className="text-red-500 text-sm font-medium mt-1">{error}</p>
           )}
 
-          {/* Cập nhật nút đăng nhập */}
           <button
             type="submit"
             className={`w-full mt-2 py-3 text-white font-semibold rounded-lg transition-all shadow-md ${
@@ -212,20 +227,25 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="flex justify-end mt-2">
-             <button
-               onClick={() => router.push("/forgot-password")}
-               className="text-sm text-blue-500 hover:underline hover:text-blue-700 font-medium transition-all cursor-pointer"
-             >
-               Quên mật khẩu?
-             </button>
-           </div>
+         <div className="flex justify-end mt-2">
+           <button
+             onClick={() => router.push("/forgot-password")}
+             className={`text-sm text-blue-500 font-medium transition-all ${loading ? 'cursor-not-allowed text-gray-400' : 'hover:underline hover:text-blue-700 cursor-pointer'}`}
+             disabled={loading} 
+           >
+             Quên mật khẩu?
+           </button>
+         </div>
+
 
         <div className="flex justify-center mt-4 items-center space-x-2">
-          <label className="transition-all text-sm text-gray-600">Bạn chưa có tài khoản?</label>
+          <label className="transition-all text-sm text-gray-600">
+            Bạn chưa có tài khoản?
+          </label>
           <button
             onClick={() => router.push("/register")}
-            className="text-blue-500 hover:underline hover:text-blue-700 transition-all cursor-pointer font-semibold text-sm"
+            className={`text-blue-500 font-semibold text-sm transition-all ${loading ? 'cursor-not-allowed text-gray-400' : 'hover:underline hover:text-blue-700 cursor-pointer'}`}
+            disabled={loading} 
           >
             Đăng ký ngay
           </button>

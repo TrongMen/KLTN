@@ -992,7 +992,7 @@ export default function UserHome() {
     { id: "myEvents", label: "🛠 Sự kiện & Đăng ký", requiresAuth: true },
     { id: "attendees", label: "✅ Người tham gia", requiresAuth: true },
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
-    { id: "chatList", label: "💬 Danh sách chat", requiresAuth: true },
+    { id: "chatList", label: "💬 Chat", requiresAuth: true },
   ];
 
   return (

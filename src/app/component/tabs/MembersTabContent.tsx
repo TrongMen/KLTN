@@ -588,7 +588,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
 
   // --- JSX Rendering ---
   return (
-    <div className="flex flex-col h-full p-4 md:p-5 bg-gray-50 relative">
+    <div className="flex flex-col h-200 p-4 md:p-5 bg-gray-50 relative">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-pink-600">

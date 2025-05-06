@@ -1,8 +1,26 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import Image from "next/image";
 import { toast } from "react-hot-toast";
-import { EventDisplayInfo, User } from "../homeadmin"; // Adjust path if needed
+import { EventDisplayInfo, User } from "../homeuser";
+import {
+  PersonIcon,
+  IdCardIcon,
+  CheckIcon,
+  Cross2Icon,
+  ReloadIcon,
+  Pencil1Icon,
+  CheckCircledIcon,
+  ClockIcon,
+  CalendarIcon,
+  ArchiveIcon,
+  ListBulletIcon,
+  GridIcon,
+  InfoCircledIcon,
+  ChevronLeftIcon, // Added
+  ChevronRightIcon, // Added
+} from "@radix-ui/react-icons";
 
 interface AdminHomeTabContentProps {
   events: EventDisplayInfo[];
@@ -10,9 +28,8 @@ interface AdminHomeTabContentProps {
   error: string | null;
   search: string;
   setSearch: (value: string) => void;
-  // Assuming parent component will now only pass 'az' or 'za'
-  sortOption: "az" | "za";
-  setSortOption: (value: "az" | "za") => void;
+  sortOption: string;
+  setSortOption: (value: string) => void;
   timeFilterOption: string;
   setTimeFilterOption: (value: string) => void;
   startDateFilter: string;
@@ -24,43 +41,118 @@ interface AdminHomeTabContentProps {
   onBackToList: () => void;
 }
 
+type EventStatus = "upcoming" | "ongoing" | "ended";
+
+const getEventStatus = (eventDateStr: string): EventStatus => {
+  if (!eventDateStr) return "upcoming";
+  try {
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+    const eventDate = new Date(eventDateStr);
+    if (isNaN(eventDate.getTime())) {
+      return "upcoming";
+    }
+    const eventDateStart = new Date(
+      eventDate.getFullYear(),
+      eventDate.getMonth(),
+      eventDate.getDate()
+    );
+    if (eventDateStart < todayStart) {
+      return "ended";
+    } else if (eventDateStart > todayStart) {
+      return "upcoming";
+    } else {
+      return "ongoing";
+    }
+  } catch (e) {
+    console.error("Error parsing event date for status:", e);
+    return "upcoming";
+  }
+};
+
+const getStatusBadgeClasses = (status: EventStatus): string => {
+  const base =
+    "px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1";
+  switch (status) {
+    case "ongoing":
+      return `${base} bg-green-100 text-green-800`;
+    case "upcoming":
+      return `${base} bg-blue-100 text-blue-800`;
+    case "ended":
+      return `${base} bg-gray-100 text-gray-700`;
+    default:
+      return `${base} bg-gray-100 text-gray-600`;
+  }
+};
+
+const getStatusText = (status: EventStatus): string => {
+  switch (status) {
+    case "ongoing":
+      return "Đang diễn ra";
+    case "upcoming":
+      return "Sắp diễn ra";
+    case "ended":
+      return "Đã kết thúc";
+    default:
+      return "";
+  }
+};
+
+const getStatusIcon = (status: EventStatus) => {
+  switch (status) {
+    case "ongoing":
+      return <CheckCircledIcon className="w-3 h-3" />;
+    case "upcoming":
+      return <ClockIcon className="w-3 h-3" />;
+    case "ended":
+      return <ArchiveIcon className="w-3 h-3" />;
+    default:
+      return null;
+  }
+};
+
+const getApprovalStatusBadgeColor = (status?: string) => {
+  switch (status?.toUpperCase()) {
+    case "APPROVED":
+      return "bg-green-100 text-green-800 border border-green-200";
+    case "PENDING":
+      return "bg-yellow-100 text-yellow-800 border border-yellow-200";
+    case "REJECTED":
+      return "bg-red-100 text-red-800 border border-red-200";
+    default:
+      return "bg-gray-100 text-gray-800 border border-gray-200";
+  }
+};
+
 const getWeekRange = (
   refDate: Date
 ): { startOfWeek: Date; endOfWeek: Date } => {
-  const date = new Date(refDate);
-  const dayOfWeek = date.getDay();
-  const diffToMonday = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-  const startOfWeek = new Date(date.setDate(diffToMonday));
-  startOfWeek.setHours(0, 0, 0, 0);
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 6);
-  endOfWeek.setHours(23, 59, 59, 999);
-  return { startOfWeek, endOfWeek };
+  const d = new Date(refDate);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const start = new Date(d.setDate(diff));
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { startOfWeek: start, endOfWeek: end };
 };
-
 const getMonthRange = (
   refDate: Date
 ): { startOfMonth: Date; endOfMonth: Date } => {
-  const date = new Date(refDate);
-  const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-  startOfMonth.setHours(0, 0, 0, 0);
-  const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-  endOfMonth.setHours(23, 59, 59, 999);
-  return { startOfMonth, endOfMonth };
+  const d = new Date(refDate);
+  const start = new Date(d.getFullYear(), d.getMonth(), 1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  end.setHours(23, 59, 59, 999);
+  return { startOfMonth: start, endOfMonth: end };
 };
 
-const getStatusBadgeColor = (status?: string) => {
-  switch (status?.toUpperCase()) {
-    case "APPROVED":
-      return "bg-green-100 text-green-800";
-    case "PENDING":
-      return "bg-yellow-100 text-yellow-800";
-    case "REJECTED":
-      return "bg-red-100 text-red-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-};
+const ITEMS_PER_PAGE_OPTIONS = [6, 12, 36]; // Define options
 
 const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   events,
@@ -81,51 +173,54 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   onBackToList,
 }) => {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  // --- Pagination State ---
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(
+    ITEMS_PER_PAGE_OPTIONS[0]
+  );
 
+  // --- Event Processing (Filtering & Sorting) ---
   const processedEvents = useMemo(() => {
-    let eventsToProcess = [...events];
-    if (search) {
-      const lowerCaseSearch = search.toLowerCase();
-      eventsToProcess = eventsToProcess.filter(
-        (event) =>
-          event.title.toLowerCase().includes(lowerCaseSearch) ||
-          event.location.toLowerCase().includes(lowerCaseSearch)
-      );
-    }
-
+    let evts = [...events];
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    if (timeFilterOption === "today") {
-      eventsToProcess = eventsToProcess.filter((event) => {
-        const eventDate = new Date(event.date);
-        return (
-          !isNaN(eventDate.getTime()) &&
-          eventDate >= todayStart &&
-          eventDate <= todayEnd
-        );
+    if (timeFilterOption === "upcoming") {
+      evts = evts.filter((e) => getEventStatus(e.date) === "upcoming");
+    } else if (timeFilterOption === "ongoing") {
+      evts = evts.filter((e) => getEventStatus(e.date) === "ongoing");
+    } else if (timeFilterOption === "ended") {
+      evts = evts.filter((e) => getEventStatus(e.date) === "ended");
+    } else if (timeFilterOption === "today") {
+      evts = evts.filter((e) => {
+        try {
+          const d = new Date(e.date);
+          return !isNaN(d.getTime()) && d >= todayStart && d <= todayEnd;
+        } catch {
+          return false;
+        }
       });
     } else if (timeFilterOption === "thisWeek") {
       const { startOfWeek, endOfWeek } = getWeekRange(new Date());
-      eventsToProcess = eventsToProcess.filter((event) => {
-        const eventDate = new Date(event.date);
-        return (
-          !isNaN(eventDate.getTime()) &&
-          eventDate >= startOfWeek &&
-          eventDate <= endOfWeek
-        );
+      evts = evts.filter((e) => {
+        try {
+          const d = new Date(e.date);
+          return !isNaN(d.getTime()) && d >= startOfWeek && d <= endOfWeek;
+        } catch {
+          return false;
+        }
       });
     } else if (timeFilterOption === "thisMonth") {
       const { startOfMonth, endOfMonth } = getMonthRange(new Date());
-      eventsToProcess = eventsToProcess.filter((event) => {
-        const eventDate = new Date(event.date);
-        return (
-          !isNaN(eventDate.getTime()) &&
-          eventDate >= startOfMonth &&
-          eventDate <= endOfMonth
-        );
+      evts = evts.filter((e) => {
+        try {
+          const d = new Date(e.date);
+          return !isNaN(d.getTime()) && d >= startOfMonth && d <= endOfMonth;
+        } catch {
+          return false;
+        }
       });
     } else if (
       timeFilterOption === "dateRange" &&
@@ -138,35 +233,58 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         const end = new Date(endDateFilter);
         end.setHours(23, 59, 59, 999);
         if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end) {
-          eventsToProcess = eventsToProcess.filter((event) => {
-            const eventDate = new Date(event.date);
-            return (
-              !isNaN(eventDate.getTime()) &&
-              eventDate >= start &&
-              eventDate <= end
-            );
+          evts = evts.filter((e) => {
+            try {
+              const d = new Date(e.date);
+              return !isNaN(d.getTime()) && d >= start && d <= end;
+            } catch {
+              return false;
+            }
           });
         } else if (start > end) {
-          console.warn("Start date is after end date in date range filter.");
+          console.warn("Start date is after end date.");
         }
       } catch (e) {
         console.error("Error parsing date range:", e);
       }
     }
-
-    // Simplified sorting: handles only 'az' and 'za'
-    if (sortOption === "za") {
-      eventsToProcess.sort((a, b) =>
-        b.title.localeCompare(a.title, "vi", { sensitivity: "base" })
-      );
-    } else {
-      // Default to 'az'
-      eventsToProcess.sort((a, b) =>
-        a.title.localeCompare(a.title, "vi", { sensitivity: "base" })
+    if (search) {
+      const l = search.toLowerCase();
+      evts = evts.filter(
+        (e) =>
+          e.title.toLowerCase().includes(l) ||
+          (e.location && e.location.toLowerCase().includes(l)) ||
+          (e.status && e.status.toLowerCase().includes(l))
       );
     }
-
-    return eventsToProcess;
+    if (sortOption === "za") {
+      evts.sort((a, b) =>
+        b.title.localeCompare(a.title, "vi", { sensitivity: "base" })
+      );
+    } else if (sortOption === "az") {
+      evts.sort((a, b) =>
+        a.title.localeCompare(b.title, "vi", { sensitivity: "base" })
+      );
+    } else {
+      evts.sort((a, b) => {
+        try {
+          const statusA = getEventStatus(a.date);
+          const statusB = getEventStatus(b.date);
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          if (isNaN(dateA) || isNaN(dateB)) return 0;
+          if (dateB !== dateA) return dateB - dateA;
+          if (statusB === "ongoing" && statusA !== "ongoing") return 1;
+          if (statusA === "ongoing" && statusB !== "ongoing") return -1;
+          if (statusB === "upcoming" && statusA === "ended") return 1;
+          if (statusA === "upcoming" && statusB === "ended") return -1;
+          return 0;
+        } catch {
+          return 0;
+        }
+      });
+    }
+    return evts;
   }, [
     events,
     search,
@@ -176,186 +294,253 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     endDateFilter,
   ]);
 
+  // --- Pagination Calculation ---
+  const totalItems = processedEvents.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
+  // Effect to reset/adjust page
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  // Calculate items for the current page
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedEvents = processedEvents.slice(startIndex, endIndex);
+
+  // --- Handlers ---
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
     setStartDateFilter(newStartDate);
+    setCurrentPage(1); // Reset page
     if (endDateFilter && newStartDate > endDateFilter) {
       setEndDateFilter("");
-      toast("Ngày bắt đầu không thể sau ngày kết thúc. Đã xóa ngày kết thúc.", {
-        icon: "⚠️",
-      });
+      toast("Ngày bắt đầu không thể sau ngày kết thúc.", { icon: "⚠️" });
     }
   };
-
   const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newEndDate = e.target.value;
     if (startDateFilter && newEndDate < startDateFilter) {
       toast.error("Ngày kết thúc không thể trước ngày bắt đầu.");
     } else {
       setEndDateFilter(newEndDate);
+      setCurrentPage(1); /* Reset page */
     }
   };
+  const handleItemsPerPageChange = (
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    setItemsPerPage(Number(e.target.value));
+    setCurrentPage(1);
+  };
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+
+  // --- Render Logic ---
+  if (isLoading) {
+    return (
+      <p className="text-center text-gray-500 italic py-6">
+        {" "}
+        Đang tải sự kiện...{" "}
+      </p>
+    );
+  }
+  if (error) {
+    return (
+      <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
+        {" "}
+        Lỗi tải sự kiện: {error}{" "}
+      </p>
+    );
+  }
 
   return (
     <div>
-      {/* Phần controls: Title, Sort, Filter, View Toggle */}
+      {/* --- Controls --- */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600">
-          Trang chủ Sự kiện (Admin)
+        <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600 shrink-0">
+          {" "}
+          Trang chủ Sự kiện (Admin){" "}
         </h1>
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-center">
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
           {/* Sort */}
-          <div className="flex-1 sm:flex-none w-full sm:w-auto">
+          <div className="flex-grow sm:flex-grow-0">
             <label htmlFor="sortOptionAdminHome" className="sr-only">
-              Sắp xếp
+              {" "}
+              Sắp xếp{" "}
             </label>
-            {/* Updated Sort Options */}
             <select
               id="sortOptionAdminHome"
               value={sortOption}
-              onChange={(e) => setSortOption(e.target.value as "az" | "za")}
-              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onChange={(e) => {
+                setSortOption(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
+              <option value="date">📅 Gần nhất</option>
               <option value="az">🔤 A - Z</option>
               <option value="za">🔤 Z - A</option>
             </select>
           </div>
           {/* Time Filter */}
-          <div className="flex-1 sm:flex-none w-full sm:w-auto">
+          <div className="flex-grow sm:flex-grow-0">
             <label htmlFor="timeFilterOptionAdminHome" className="sr-only">
-              Lọc thời gian
+              {" "}
+              Lọc thời gian{" "}
             </label>
             <select
               id="timeFilterOptionAdminHome"
               value={timeFilterOption}
-              onChange={(e) => setTimeFilterOption(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onChange={(e) => {
+                setTimeFilterOption(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
               <option value="all">♾️ Tất cả</option>
+              <option value="upcoming">☀️ Sắp diễn ra</option>
+              <option value="ongoing">🟢 Đang diễn ra</option>
+              <option value="ended">🏁 Đã kết thúc</option>
               <option value="today">📅 Hôm nay</option>
               <option value="thisWeek">🗓️ Tuần này</option>
               <option value="thisMonth">🗓️ Tháng này</option>
               <option value="dateRange">🔢 Khoảng ngày</option>
             </select>
           </div>
-          {/* View Toggle Buttons */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Items Per Page */}
+          <div className="flex-grow sm:flex-grow-0">
+            <label htmlFor="itemsPerPageSelectAdmin" className="sr-only">
+              Sự kiện mỗi trang
+            </label>
+            <select
+              id="itemsPerPageSelectAdmin"
+              value={itemsPerPage}
+              onChange={handleItemsPerPageChange}
+              className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
+            >
+              {ITEMS_PER_PAGE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {" "}
+                  {option} / trang{" "}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* View Toggle */}
+          <div className="flex items-center gap-2 flex-shrink-0 self-center">
             <button
               onClick={() => setViewMode("card")}
               title="Chế độ thẻ"
-              className={`p-2 rounded-md border transition duration-150 ease-in-out ${
+              className={`p-2 rounded-md border transition ${
                 viewMode === "card"
                   ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
               }`}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v10H5V5z"
-                  clipRule="evenodd"
-                  fillRule="evenodd"
-                />
-                <path d="M7 7h6v2H7V7zm0 4h6v2H7v-2z" />
-              </svg>
+              {" "}
+              <GridIcon className="h-5 w-5" />{" "}
             </button>
             <button
               onClick={() => setViewMode("list")}
               title="Chế độ danh sách"
-              className={`p-2 rounded-md border transition duration-150 ease-in-out ${
+              className={`p-2 rounded-md border transition ${
                 viewMode === "list"
                   ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
               }`}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
+              {" "}
+              <ListBulletIcon className="h-5 w-5" />{" "}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Date Range Picker (Conditional) */}
+      {/* Date Range Picker */}
       {timeFilterOption === "dateRange" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+          {" "}
           <div>
+            {" "}
             <label
-              htmlFor="startDateFilter"
+              htmlFor="startDateFilterAdmin"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Từ ngày
-            </label>
+              {" "}
+              Từ ngày{" "}
+            </label>{" "}
             <input
               type="date"
-              id="startDateFilter"
+              id="startDateFilterAdmin"
               value={startDateFilter}
               onChange={handleStartDateChange}
               max={endDateFilter || undefined}
-              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />{" "}
+          </div>{" "}
           <div>
+            {" "}
             <label
-              htmlFor="endDateFilter"
+              htmlFor="endDateFilterAdmin"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Đến ngày
-            </label>
+              {" "}
+              Đến ngày{" "}
+            </label>{" "}
             <input
               type="date"
-              id="endDateFilter"
+              id="endDateFilterAdmin"
               value={endDateFilter}
               onChange={handleEndDateChange}
               min={startDateFilter || undefined}
-              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />{" "}
+          </div>{" "}
         </div>
       )}
 
-      {/* Search Bar */}
+      {/* Search Input */}
       <div className="relative w-full mb-6">
+        {" "}
         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-          🔍
-        </span>
+          {" "}
+          🔍{" "}
+        </span>{" "}
         <input
           id="searchAdminHome"
           type="text"
-          placeholder="Tìm sự kiện theo tên hoặc địa điểm..."
-          className="w-full p-3 pl-10 pr-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Tìm sự kiện theo tên, địa điểm, trạng thái duyệt..."
+          className="w-full p-3 pl-10 pr-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+        />{" "}
       </div>
 
-      {/* Content Area: Loading, Error, Selected Event, or Event List */}
+      {/* --- Event Display Area --- */}
       {isLoading ? (
-        <p className="text-center text-gray-500 italic py-6">Đang tải...</p>
+        <p className="text-center text-gray-500 italic py-6">
+          Đang tải sự kiện...
+        </p>
       ) : error ? (
         <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-          {error}
+          {" "}
+          Lỗi tải sự kiện: {error}{" "}
         </p>
       ) : selectedEvent ? (
-        // --- Selected Event Detail View ---
-        <div className="p-6 border rounded-lg shadow-lg bg-gray-50">
+        <div className="p-6 border rounded-lg shadow-lg bg-gray-50 mb-6">
+          {" "}
           <button
             onClick={onBackToList}
-            className="mb-4 text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer p-1 rounded hover:bg-blue-50"
+            className="mb-4 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer p-1 rounded hover:bg-indigo-50"
           >
+            {" "}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               className="h-4 w-4 mr-1"
@@ -364,132 +549,322 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               stroke="currentColor"
               strokeWidth={2}
             >
+              {" "}
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Quay lại
-          </button>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">
-            {selectedEvent.title}
-          </h2>
-          <p className="text-sm text-gray-600">
-            📅 Ngày: {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}
-          </p>
-          {selectedEvent.time && (
-            <p className="text-sm text-gray-600">
-              🕒 TG:{" "}
-              {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </p>
-          )}
-          <p className="text-sm text-gray-600">
-            📍 Đ.Điểm: {selectedEvent.location}
-          </p>
-          <p className="mt-3 text-sm text-gray-700 whitespace-pre-wrap">
-            📜 Mô tả: {selectedEvent.description || "Không có mô tả."}
-          </p>
-          {selectedEvent.status && (
-            <p className="mt-2 text-sm font-medium">
-              Trạng thái:{" "}
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs ${getStatusBadgeColor(
-                  selectedEvent.status
-                )}`}
-              >
-                {selectedEvent.status}
-              </span>
-            </p>
-          )}
+              />{" "}
+            </svg>{" "}
+            Quay lại danh sách{" "}
+          </button>{" "}
+          <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
+            {" "}
+            <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
+              {" "}
+              {selectedEvent.avatarUrl ? (
+                <Image
+                  src={selectedEvent.avatarUrl}
+                  alt={`Avatar for ${selectedEvent.title}`}
+                  width={300}
+                  height={300}
+                  className="w-full h-auto max-h-80 rounded-lg object-cover border p-1 bg-white shadow-md"
+                />
+              ) : (
+                <div className="w-full h-48 md:h-64 lg:h-80 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-5xl font-semibold border">
+                  {" "}
+                  {selectedEvent.title?.charAt(0).toUpperCase() || "?"}{" "}
+                </div>
+              )}{" "}
+            </div>{" "}
+            <div className="flex-grow space-y-4">
+              {" "}
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                {" "}
+                <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex-1">
+                  {" "}
+                  {selectedEvent.title}{" "}
+                </h2>{" "}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-shrink-0 mt-1 sm:mt-0">
+                  {" "}
+                  {(() => {
+                    const status = getEventStatus(selectedEvent.date);
+                    return (
+                      <span
+                        className={`${getStatusBadgeClasses(
+                          status
+                        )} flex-shrink-0`}
+                      >
+                        {" "}
+                        {getStatusIcon(status)} {getStatusText(status)}{" "}
+                      </span>
+                    );
+                  })()}{" "}
+                  {selectedEvent.status && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(
+                        selectedEvent.status
+                      )} flex-shrink-0`}
+                    >
+                      {" "}
+                      <InfoCircledIcon className="w-3 h-3" />{" "}
+                      {selectedEvent.status}{" "}
+                    </span>
+                  )}{" "}
+                </div>{" "}
+              </div>{" "}
+              <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
+                {" "}
+                <p>
+                  {" "}
+                  <strong className="font-medium text-gray-900 w-24 inline-block">
+                    {" "}
+                    📅 Ngày:{" "}
+                  </strong>{" "}
+                  {new Date(selectedEvent.date).toLocaleDateString(
+                    "vi-VN"
+                  )}{" "}
+                </p>{" "}
+                {selectedEvent.time && (
+                  <p>
+                    {" "}
+                    <strong className="font-medium text-gray-900 w-24 inline-block">
+                      {" "}
+                      🕒 Thời gian:{" "}
+                    </strong>{" "}
+                    {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}{" "}
+                  </p>
+                )}{" "}
+                <p>
+                  {" "}
+                  <strong className="font-medium text-gray-900 w-24 inline-block">
+                    {" "}
+                    📍 Địa điểm:{" "}
+                  </strong>{" "}
+                  {selectedEvent.location}{" "}
+                </p>{" "}
+                <p>
+                  {" "}
+                  <strong className="font-medium text-gray-900 w-24 inline-block">
+                    {" "}
+                    👤 Người tạo:{" "}
+                  </strong>{" "}
+                  {selectedEvent.createdBy
+                    ? `ID: ${selectedEvent.createdBy}`
+                    : "N/A"}{" "}
+                </p>{" "}
+                {selectedEvent.purpose && (
+                  <p>
+                    {" "}
+                    <strong className="font-medium text-gray-900 w-24 inline-block align-top">
+                      {" "}
+                      🎯 Mục đích:{" "}
+                    </strong>{" "}
+                    <span className="inline-block max-w-[calc(100%-6rem)]">
+                      {" "}
+                      {selectedEvent.purpose}{" "}
+                    </span>{" "}
+                  </p>
+                )}{" "}
+              </div>{" "}
+              <div className="space-y-3 text-sm">
+                {" "}
+                <div>
+                  {" "}
+                  <p className="font-medium text-gray-900 mb-1">
+                    {" "}
+                    📜 Nội dung:{" "}
+                  </p>{" "}
+                  <p className="text-gray-700 whitespace-pre-wrap">
+                    {" "}
+                    {selectedEvent.content ||
+                      selectedEvent.description ||
+                      "Không có nội dung chi tiết."}{" "}
+                  </p>{" "}
+                </div>{" "}
+                <div>
+                  {" "}
+                  <strong className="font-medium text-gray-900 mb-1 block">
+                    {" "}
+                    👥 Ban tổ chức:{" "}
+                  </strong>{" "}
+                  {selectedEvent.organizers &&
+                  selectedEvent.organizers.length > 0 ? (
+                    <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
+                      {" "}
+                      {selectedEvent.organizers.map((org, index) => (
+                        <li key={`${org.userId}-${index}`}>
+                          {" "}
+                          {org.roleName || org.positionName
+                            ? `${org.roleName || ""}${
+                                org.roleName && org.positionName ? " - " : ""
+                              }${org.positionName || ""}`
+                            : `Thành viên ${index + 1}`}{" "}
+                        </li>
+                      ))}{" "}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-500 italic">Chưa có thông tin.</p>
+                  )}{" "}
+                </div>{" "}
+                <div>
+                  {" "}
+                  <strong className="font-medium text-gray-900 mb-1 block">
+                    {" "}
+                    👤 Người tham gia (Vai trò/Chức vụ):{" "}
+                  </strong>{" "}
+                  {selectedEvent.participants &&
+                  selectedEvent.participants.length > 0 ? (
+                    <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
+                      {" "}
+                      {selectedEvent.participants.map((p, index) => (
+                        <li key={`${p.userId}-${index}`}>
+                          {" "}
+                          {p.roleName || p.positionName
+                            ? `${p.roleName || ""}${
+                                p.roleName && p.positionName ? " - " : ""
+                              }${p.positionName || ""}`
+                            : `Người tham gia ${index + 1}`}{" "}
+                        </li>
+                      ))}{" "}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-500 italic">Chưa có thông tin.</p>
+                  )}{" "}
+                </div>{" "}
+                <div>
+                  {" "}
+                  <strong className="font-medium text-gray-900 mb-1 block">
+                    {" "}
+                    ✅ Người tham dự (Đã đăng ký):{" "}
+                  </strong>{" "}
+                  {selectedEvent.attendees &&
+                  selectedEvent.attendees.length > 0 ? (
+                    <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
+                      {" "}
+                      {selectedEvent.attendees.map((att) => (
+                        <li key={att.userId}>
+                          {" "}
+                          {att.fullName || `ID: ${att.userId}`}{" "}
+                          {att.studentCode && ` (${att.studentCode})`}{" "}
+                        </li>
+                      ))}{" "}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-500 italic">Chưa có ai đăng ký.</p>
+                  )}{" "}
+                </div>{" "}
+              </div>{" "}
+              <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end gap-3">
+                {" "}
+                <button className="px-4 py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition text-sm font-medium">
+                  {" "}
+                  Sửa{" "}
+                </button>{" "}
+                <button className="px-4 py-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition text-sm font-medium">
+                  {" "}
+                  Xóa{" "}
+                </button>{" "}
+                {selectedEvent.status === "PENDING" && (
+                  <button className="px-4 py-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition text-sm font-medium">
+                    {" "}
+                    Duyệt{" "}
+                  </button>
+                )}{" "}
+              </div>{" "}
+            </div>{" "}
+          </div>{" "}
         </div>
       ) : (
-        // --- Event List View (Card or List) ---
-        <div>
+        <div className="mt-1 mb-6">
+          {" "}
           {processedEvents.length > 0 ? (
-            <div className="mt-1">
-              {viewMode === "card" ? (
-                // --- Card View ---
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {processedEvents.map((event: EventDisplayInfo) => (
+            viewMode === "card" ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {" "}
+                {paginatedEvents.map((event) => {
+                  const timeStatus = getEventStatus(event.date);
+                  return (
                     <div
                       key={event.id}
-                      className="p-4 bg-white shadow rounded-lg cursor-pointer transform transition hover:shadow-md flex flex-col justify-between border border-gray-200 hover:border-blue-300"
-                      onClick={() => onEventClick(event)}
+                      className="bg-white shadow-md rounded-xl overflow-hidden transform transition hover:scale-[1.02] hover:shadow-lg flex flex-col border border-gray-200 hover:border-indigo-300"
                     >
-                      <div>
-                        <div className="flex justify-between items-start mb-1 gap-2">
-                          <h3 className="text-base font-semibold text-gray-800 line-clamp-2 flex-1">
-                            {event.title}
-                          </h3>
-                          {event.status && (
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadgeColor(
-                                event.status
-                              )}`}
-                            >
-                              {event.status || "N/A"}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mb-1">
-                          📅 {new Date(event.date).toLocaleDateString("vi-VN")}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          📍 {event.location}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                // --- List View ---
-                <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
-                  <ul className="divide-y divide-gray-200">
-                    {processedEvents.map((event: EventDisplayInfo) => (
-                      <li
-                        key={event.id}
-                        className="px-3 py-3 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors duration-150 ease-in-out cursor-pointer"
+                      {" "}
+                      <div
+                        className="w-full h-40 bg-gray-200 relative cursor-pointer"
                         onClick={() => onEventClick(event)}
                       >
-                        <div className="flex-1 mb-2 sm:mb-0 sm:pr-4">
-                          <div className="flex justify-between items-start mb-1 gap-2">
-                            <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-2 flex-1">
-                              {event.title}
-                            </p>
-                            {event.status && (
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadgeColor(
-                                  event.status
-                                )}`}
-                              >
-                                {event.status || "N/A"}
-                              </span>
-                            )}
+                        {" "}
+                        {event.avatarUrl ? (
+                          <Image
+                            src={event.avatarUrl}
+                            alt={`Avatar for ${event.title}`}
+                            layout="fill"
+                            objectFit="cover"
+                            className="transition-opacity duration-300 ease-in-out"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.opacity = "0";
+                              if (target.parentElement)
+                                target.parentElement.classList.add(
+                                  "bg-gray-300"
+                                );
+                            }}
+                            onLoad={(e) => {
+                              (e.target as HTMLImageElement).style.opacity =
+                                "1";
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
+                            {" "}
+                            {event.title?.charAt(0).toUpperCase() || "?"}{" "}
                           </div>
-                          <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <span className="inline-flex items-center gap-1">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-3.5 w-3.5 text-gray-400"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                {" "}
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                />{" "}
-                              </svg>
-                              {new Date(event.date).toLocaleDateString("vi-VN")}
-                            </span>
-                            <span className="inline-flex items-center gap-1">
+                        )}{" "}
+                        <span
+                          className={`absolute top-2 right-2 ${getStatusBadgeClasses(
+                            timeStatus
+                          )} shadow-sm`}
+                        >
+                          {" "}
+                          {getStatusIcon(timeStatus)}{" "}
+                          {getStatusText(timeStatus)}{" "}
+                        </span>{" "}
+                        {event.status && (
+                          <span
+                            className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(
+                              event.status
+                            )} shadow-sm`}
+                          >
+                            {" "}
+                            <InfoCircledIcon className="w-3 h-3" />{" "}
+                            {event.status}{" "}
+                          </span>
+                        )}{" "}
+                      </div>{" "}
+                      <div className="p-4 flex flex-col flex-grow">
+                        {" "}
+                        <div
+                          onClick={() => onEventClick(event)}
+                          className="cursor-pointer mb-3"
+                        >
+                          {" "}
+                          <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
+                            {" "}
+                            {event.title}{" "}
+                          </h2>{" "}
+                          <div className="space-y-0.5 mb-2">
+                            {" "}
+                            <p className="text-sm text-gray-600 flex items-center gap-1">
+                              {" "}
+                              <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />{" "}
+                              {new Date(event.date).toLocaleDateString("vi-VN")}{" "}
+                            </p>{" "}
+                            <p className="text-sm text-gray-600 flex items-center gap-1">
+                              {" "}
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 className="h-3.5 w-3.5 text-gray-400"
@@ -508,22 +883,229 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                />{" "}
-                              </svg>
-                              {event.location}
-                            </span>
-                          </div>
-                        </div>
+                                />
+                              </svg>{" "}
+                              {event.location}{" "}
+                            </p>{" "}
+                          </div>{" "}
+                          <div className="text-xs text-gray-500 flex items-center gap-x-3 mt-1">
+                            {" "}
+                            {event.organizers && (
+                              <span>👥 BTC: {event.organizers.length}</span>
+                            )}{" "}
+                            {event.attendees && (
+                              <span>✅ Đã ĐK: {event.attendees.length}</span>
+                            )}{" "}
+                          </div>{" "}
+                        </div>{" "}
+                        <div className="flex-grow"></div>{" "}
+                        <div className="mt-auto pt-3 border-t border-gray-100 flex justify-end gap-2">
+                          {" "}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              /* Handle Edit */ toast.info(
+                                "Chức năng sửa đang phát triển"
+                              );
+                            }}
+                            className="px-2.5 py-1 rounded text-xs bg-blue-50 text-blue-600 hover:bg-blue-100"
+                          >
+                            Sửa
+                          </button>{" "}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              /* Handle Delete */ toast.info(
+                                "Chức năng xoá đang phát triển"
+                              );
+                            }}
+                            className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100"
+                          >
+                            Xoá
+                          </button>{" "}
+                        </div>{" "}
+                      </div>{" "}
+                    </div>
+                  );
+                })}{" "}
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
+                {" "}
+                <ul className="divide-y divide-gray-200">
+                  {" "}
+                  {paginatedEvents.map((event) => {
+                    const timeStatus = getEventStatus(event.date);
+                    return (
+                      <li
+                        key={event.id}
+                        className="px-4 py-3 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors"
+                      >
+                        {" "}
+                        <div
+                          className="flex items-center flex-1 min-w-0 mb-2 sm:mb-0 sm:pr-4 cursor-pointer"
+                          onClick={() => onEventClick(event)}
+                        >
+                          {" "}
+                          {event.avatarUrl ? (
+                            <Image
+                              src={event.avatarUrl}
+                              alt={`Avatar`}
+                              width={40}
+                              height={40}
+                              className="w-10 h-10 rounded-md object-cover mr-3 flex-shrink-0 border bg-gray-100"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-md bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 font-semibold mr-3 flex-shrink-0 border">
+                              {" "}
+                              {event.title?.charAt(0).toUpperCase() || "?"}{" "}
+                            </div>
+                          )}{" "}
+                          <div className="flex-1 min-w-0">
+                            {" "}
+                            <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1">
+                              {" "}
+                              {event.title}{" "}
+                            </p>{" "}
+                            <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                              {" "}
+                              <span
+                                className={getStatusBadgeClasses(timeStatus)}
+                              >
+                                {" "}
+                                {getStatusIcon(timeStatus)}{" "}
+                                {getStatusText(timeStatus)}{" "}
+                              </span>{" "}
+                              {event.status && (
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(
+                                    event.status
+                                  )}`}
+                                >
+                                  {" "}
+                                  <InfoCircledIcon className="w-3 h-3" />{" "}
+                                  {event.status}{" "}
+                                </span>
+                              )}{" "}
+                              <span className="inline-flex items-center gap-1">
+                                {" "}
+                                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />{" "}
+                                {new Date(event.date).toLocaleDateString(
+                                  "vi-VN"
+                                )}{" "}
+                              </span>{" "}
+                              <span className="inline-flex items-center gap-1">
+                                {" "}
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-3.5 w-3.5 text-gray-400"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  {" "}
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                  />{" "}
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                  />{" "}
+                                </svg>{" "}
+                                {event.location}{" "}
+                              </span>{" "}
+                              {event.organizers && (
+                                <span className="inline-flex items-center gap-1">
+                                  {" "}
+                                  👥 {event.organizers.length} BTC{" "}
+                                </span>
+                              )}{" "}
+                              {event.attendees && (
+                                <span className="inline-flex items-center gap-1">
+                                  {" "}
+                                  ✅ {event.attendees.length} ĐK{" "}
+                                </span>
+                              )}{" "}
+                            </div>{" "}
+                          </div>{" "}
+                        </div>{" "}
+                        <div className="flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0 flex justify-end gap-2">
+                          {" "}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEventClick(event);
+                            }}
+                            className="px-2.5 py-1 rounded text-xs bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          >
+                            Xem chi tiết
+                          </button>{" "}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              /* Handle Edit */ toast.info(
+                                "Chức năng sửa đang phát triển"
+                              );
+                            }}
+                            className="px-2.5 py-1 rounded text-xs bg-blue-50 text-blue-600 hover:bg-blue-100"
+                          >
+                            Sửa
+                          </button>{" "}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              /* Handle Delete */ toast.info(
+                                "Chức năng xoá đang phát triển"
+                              );
+                            }}
+                            className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100"
+                          >
+                            Xoá
+                          </button>{" "}
+                        </div>{" "}
                       </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+                    );
+                  })}{" "}
+                </ul>{" "}
+              </div>
+            )
           ) : (
             <p className="text-gray-500 text-center col-span-1 md:col-span-2 lg:col-span-3 py-6 italic">
-              Không có sự kiện nào khớp.
+              {" "}
+              Không tìm thấy sự kiện nào khớp với bộ lọc.{" "}
             </p>
+          )}
+          {/* --- Pagination Controls --- */}
+          {processedEvents.length > 0 && totalPages > 1 && (
+            <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
+              <span className="text-sm text-gray-600">
+                Trang <span className="font-semibold">{currentPage}</span> /{" "}
+                <span className="font-semibold">{totalPages}</span> (Tổng:{" "}
+                {totalItems} sự kiện)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-md border bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {" "}
+                  <ChevronLeftIcon className="w-4 h-4" /> Trước{" "}
+                </button>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-md border bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {" "}
+                  Sau <ChevronRightIcon className="w-4 h-4" />{" "}
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

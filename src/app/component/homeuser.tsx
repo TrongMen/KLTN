@@ -595,7 +595,7 @@ export default function UserHome() {
       socket.on("notification", (data: any) => {
         console.log("SOCKET (UserHome): Nhận được thông báo:", data);
         if (data && typeof data === "object") {
-          toast.info(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
+          toast(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
             duration: 5000,
           });
           const newNotification: NotificationItem = {

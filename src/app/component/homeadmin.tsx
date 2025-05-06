@@ -5,10 +5,11 @@ import React, {
   useEffect,
   useMemo,
   useCallback,
-  useRef, // Added
+  useRef,
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { io, Socket } from "socket.io-client";
 import UserMenu from "./menu";
 import ContactModal from "./contact";
 import AdminHomeTabContent from "./tabs/AdminHomeTabContent";
@@ -17,14 +18,13 @@ import AttendeesTabContent from "./tabs/AttendeesTabContent";
 import MembersTabContent from "./tabs/MembersTabContent";
 import RolesTabContent from "./tabs/RolesTabContent";
 import ChatTabContent from "./tabs/ChatTabContent";
-import NewsFeedSection from "./tabs/NewsFeedSection"; // Added
-import CreateNewsModal, { NewsFormData } from "./tabs/CreateNewsModal"; // Added
-import NotificationDropdown, { NotificationItem } from "./NotificationDropdown"; // Added
-import { BellIcon } from "@radix-ui/react-icons"; // Added
+import NewsTabContent from "./tabs/NewsTabContent";
+import CreateNewsModal, { NewsFormData } from "./tabs/CreateNewsModal";
+import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
+import { BellIcon } from "@radix-ui/react-icons";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 
-// --- Interfaces ---
 interface Role {
   name: string;
   description?: string;
@@ -55,21 +55,21 @@ export interface Conversation {
 export interface EventDisplayInfo {
   id: string;
   title: string;
-  name?: string; // Added for consistency if needed
+  name?: string;
   date: string;
   location: string;
   description: string;
-  content?: string; // Added for consistency if needed
+  content?: string;
   speaker?: string;
   image?: string;
-  avatarUrl?: string | null; // Added for consistency if needed
+  avatarUrl?: string | null;
   time?: string;
   status?: string;
   purpose?: string;
-  createdBy?: string; // Added for consistency if needed
-  organizers?: { userId: string; roleName?: string; positionName?: string }[]; // Added
-  participants?: { userId: string; roleName?: string; positionName?: string }[]; // Added
-  attendees?: { // Added
+  createdBy?: string;
+  organizers?: { userId: string; roleName?: string; positionName?: string }[];
+  participants?: { userId: string; roleName?: string; positionName?: string }[];
+  attendees?: {
     userId: string;
     fullName?: string;
     studentCode?: string;
@@ -77,8 +77,6 @@ export interface EventDisplayInfo {
     attending?: boolean;
   }[];
 }
-
-// Added NewsItem interface (copied from UserHome)
 export interface NewsItem {
   id: string;
   title: string;
@@ -112,7 +110,6 @@ interface ConfirmationDialogProps {
   confirmVariant?: "primary" | "danger";
 }
 
-// --- Confirmation Dialog Component ---
 function ConfirmationDialog({
   isOpen,
   title,
@@ -167,7 +164,6 @@ function ConfirmationDialog({
   );
 }
 
-// --- Date Range Helpers (Unchanged) ---
 const getWeekRange = (
   refDate: Date
 ): { startOfWeek: Date; endOfWeek: Date } => {
@@ -192,19 +188,16 @@ const getMonthRange = (
   return { startOfMonth, endOfMonth };
 };
 
-// --- Active Tab Type ---
 type ActiveTab =
   | "home"
-  | "news" // Added
+  | "news"
   | "approval"
   | "attendees"
   | "members"
   | "roles"
   | "chatList";
 
-// --- Main Component ---
 export default function HomeAdmin() {
-  // --- State Variables ---
   const [search, setSearch] = useState("");
   const [allEvents, setAllEvents] = useState<EventDisplayInfo[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
@@ -229,16 +222,12 @@ export default function HomeAdmin() {
     confirmText?: string;
     cancelText?: string;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
-
-  // Added News State
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [isLoadingNews, setIsLoadingNews] = useState<boolean>(true);
   const [errorNews, setErrorNews] = useState<string | null>(null);
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
   const [isSubmittingNews, setIsSubmittingNews] = useState(false);
   const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
-
-  // Added Notification State
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] =
     useState<boolean>(false);
@@ -249,14 +238,11 @@ export default function HomeAdmin() {
     useState<boolean>(false);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
   const notificationContainerRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
 
-  // --- Hooks ---
   const router = useRouter();
-  const { authToken, refreshToken, isInitialized } = useRefreshToken(); // authToken is not directly used, relies on localStorage + refresh
+  const { refreshToken, isInitialized } = useRefreshToken();
 
-  // --- Fetch Functions ---
-
-  // Fetch News (Copied and adapted from UserHome)
   const fetchNews = useCallback(async () => {
     setIsLoadingNews(true);
     setErrorNews(null);
@@ -264,7 +250,6 @@ export default function HomeAdmin() {
     try {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      // Admin likely sees APPROVED news on the general feed too
       const url = `http://localhost:8080/identity/api/news/status?status=APPROVED`;
       let res = await fetch(url, { headers, cache: "no-store" });
       if (
@@ -315,12 +300,10 @@ export default function HomeAdmin() {
     } catch (e: any) {
       console.error("Lỗi fetchNews (Admin):", e);
       setErrorNews(e.message || "Lỗi tải tin tức.");
-      // Avoid logging out just for news fetch failure
-      // if (e.message?.includes("Unauthorized")) router.push('/login?sessionExpired=true');
     } finally {
       setIsLoadingNews(false);
     }
-  }, [refreshToken]); // Removed router dependency here
+  }, [refreshToken]);
 
   const fetchAdminHomeEvents = useCallback(
     async (token: string | null) => {
@@ -330,21 +313,20 @@ export default function HomeAdmin() {
         setErrorEvents("Yêu cầu xác thực.");
         setIsLoadingEvents(false);
         setAllEvents([]);
-        // No automatic redirect here, handled by main useEffect
         return;
       }
       let currentToken = token;
       try {
-        const headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
-        // Fetch APPROVED events for the main admin home view
+        const headers: HeadersInit = {
+          Authorization: `Bearer ${currentToken}`,
+        };
         const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
         let res = await fetch(url, { headers, cache: "no-store" });
-
         if ((res.status === 401 || res.status === 403) && refreshToken) {
           const newToken = await refreshToken();
           if (newToken) {
-            currentToken = newToken; // Update token for potential future use in this scope
-            localStorage.setItem("authToken", newToken); // Ensure storage is updated
+            currentToken = newToken;
+            localStorage.setItem("authToken", newToken);
             res = await fetch(url, {
               headers: { Authorization: `Bearer ${newToken}` },
               cache: "no-store",
@@ -353,7 +335,6 @@ export default function HomeAdmin() {
             throw new Error("Không thể làm mới phiên đăng nhập.");
           }
         }
-
         if (!res.ok) {
           let m = `Lỗi tải sự kiện (Admin) - Status: ${res.status}`;
           try {
@@ -365,17 +346,18 @@ export default function HomeAdmin() {
         const data = await res.json();
         if (data.code === 1000 && Array.isArray(data.result)) {
           const formattedEvents: EventDisplayInfo[] = data.result
-            .filter((e: any) => !e.deleted) // Ensure deleted events aren't shown
+            .filter((e: any) => !e.deleted)
             .map((apiEvent: any) => ({
               id: apiEvent.id,
               title: apiEvent.name || "Chưa có tiêu đề",
               name: apiEvent.name,
               date: apiEvent.time || apiEvent.createdAt || "",
               location: apiEvent.location || "Chưa xác định",
-              description: apiEvent.content || apiEvent.purpose || "Không có mô tả",
+              description:
+                apiEvent.content || apiEvent.purpose || "Không có mô tả",
               content: apiEvent.content,
-              speaker: apiEvent.speaker, // Assuming API provides speaker
-              image: apiEvent.avatarUrl, // Map avatarUrl to image if used like that
+              speaker: apiEvent.speaker,
+              image: apiEvent.avatarUrl,
               avatarUrl: apiEvent.avatarUrl || null,
               time: apiEvent.time,
               status: apiEvent.status,
@@ -391,18 +373,18 @@ export default function HomeAdmin() {
         console.error("Lỗi fetchAdminHomeEvents:", err);
         setErrorEvents(err.message || "Không thể tải danh sách sự kiện.");
         setAllEvents([]);
-        // Let the main useEffect handle logout on critical auth errors
-        if (err.message?.includes("Unauthorized") || err.message?.includes("Không thể làm mới")) {
-           // The hook or main effect will handle redirection
+        if (
+          err.message?.includes("Unauthorized") ||
+          err.message?.includes("Không thể làm mới")
+        ) {
         }
       } finally {
         setIsLoadingEvents(false);
       }
     },
-    [refreshToken] // Removed router dependency
+    [refreshToken]
   );
 
-  // Fetch Notifications (Copied and adapted from UserHome)
   const fetchNotifications = useCallback(
     async (userId: string, token: string | null) => {
       if (!userId || !token) {
@@ -411,7 +393,7 @@ export default function HomeAdmin() {
       }
       setIsLoadingNotifications(true);
       setErrorNotifications(null);
-      const limit = 10; // Or another appropriate limit for admins
+      const limit = 10;
       let currentToken = token;
       try {
         const url = `http://localhost:8080/identity/api/notifications?userId=${userId}&limit=${limit}`;
@@ -456,32 +438,23 @@ export default function HomeAdmin() {
         console.error("Lỗi fetchNotifications (Admin):", error);
         setErrorNotifications(error.message || "Lỗi tải thông báo.");
         setNotifications([]);
-        // Avoid logging out just for notification fetch failure
-        // if (error.message?.includes("Unauthorized")) router.push('/login?sessionExpired=true');
       } finally {
         setIsLoadingNotifications(false);
       }
     },
-    [refreshToken] // Removed router dependency
+    [refreshToken]
   );
 
-  // --- Effects ---
-
-  // Main data loading effect
   useEffect(() => {
-    if (!isInitialized) {
-      return; // Wait for refresh token hook initialization
-    }
-
+    if (!isInitialized) return;
     let isMounted = true;
     setIsLoadingUser(true);
-    // Reset loading states for fetches inside
     setIsLoadingEvents(true);
     setIsLoadingNews(true);
-    setIsLoadingNotifications(false); // Only set true inside fetchNotifications
+    setIsLoadingNotifications(false);
 
     const loadAdminData = async () => {
-      let currentAuthToken = localStorage.getItem("authToken"); // Get token potentially updated by refresh hook
+      let currentAuthToken = localStorage.getItem("authToken");
       let userIdForFetches: string | null = null;
       let tokenForSubFetches: string | null = currentAuthToken;
 
@@ -491,63 +464,70 @@ export default function HomeAdmin() {
             Authorization: `Bearer ${currentAuthToken}`,
           };
           const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
-          let userRes = await fetch(userInfoUrl, { headers, cache: 'no-store' });
+          let userRes = await fetch(userInfoUrl, {
+            headers,
+            cache: "no-store",
+          });
 
-          if ((userRes.status === 401 || userRes.status === 403) && refreshToken) {
-            console.log("Admin token expired/invalid, attempting refresh for user info...");
-            const newToken = await refreshToken(); // Let the hook handle storage update
+          if (
+            (userRes.status === 401 || userRes.status === 403) &&
+            refreshToken
+          ) {
+            console.log("Admin token expired/invalid, attempting refresh...");
+            const newToken = await refreshToken();
             if (newToken && isMounted) {
-              tokenForSubFetches = newToken; // Use the new token for subsequent fetches
+              tokenForSubFetches = newToken;
               console.log("Retrying admin user info fetch with new token...");
               userRes = await fetch(userInfoUrl, {
                 headers: { Authorization: `Bearer ${newToken}` },
-                 cache: 'no-store'
+                cache: "no-store",
               });
             } else if (isMounted) {
-              // Refresh failed or component unmounted
-               throw new Error("Unauthorized or Refresh Failed during admin user fetch");
+              throw new Error(
+                "Unauthorized or Refresh Failed during admin user fetch"
+              );
             }
           }
 
           if (!userRes.ok && isMounted) {
-             // Handle non-401/403 errors after potential refresh attempt
-             const errorText = await userRes.text();
-             throw new Error(`Admin user info failed: ${userRes.status} - ${errorText}`);
+            const errorText = await userRes.text();
+            throw new Error(
+              `Admin user info failed: ${userRes.status} - ${errorText}`
+            );
           }
 
-          if(isMounted) {
+          if (isMounted) {
             const userData = await userRes.json();
             if (userData.code === 1000 && userData.result?.id) {
               const fetchedUser: User = userData.result;
               if (!fetchedUser.roles?.some((r) => r.name === "ADMIN")) {
                 toast.error("Truy cập bị từ chối. Bạn không phải Admin.");
-                handleLogout(); // Logout if not admin
-                return; // Stop further execution in this effect
+                handleLogout();
+                return;
               } else {
                 setUser(fetchedUser);
-                userIdForFetches = fetchedUser.id; // Set user ID for subsequent fetches
-                // Token already set in tokenForSubFetches
+                userIdForFetches = fetchedUser.id;
               }
             } else {
-              // API returned success code but data structure is wrong
               throw new Error("Invalid user data structure received");
             }
           }
-
         } catch (error: any) {
           console.error("Lỗi fetch user info (Admin):", error.message);
           if (isMounted) setUser(null);
-           userIdForFetches = null;
-           tokenForSubFetches = null;
-          // Logout only on critical errors like auth failure, not invalid data structure if already logged out
-          if (error.message?.includes("Unauthorized") || error.message?.includes("Refresh Failed") || error.message?.includes("Admin user info failed")) {
-              handleLogout(); // Force logout/redirect on auth failure
+          userIdForFetches = null;
+          tokenForSubFetches = null;
+          if (
+            error.message?.includes("Unauthorized") ||
+            error.message?.includes("Refresh Failed") ||
+            error.message?.includes("Admin user info failed")
+          ) {
+            handleLogout();
           }
         } finally {
           if (isMounted) setIsLoadingUser(false);
         }
       } else {
-        // No initial token found
         if (isMounted) {
           setIsLoadingUser(false);
           setIsLoadingEvents(false);
@@ -555,43 +535,114 @@ export default function HomeAdmin() {
           setNotifications([]);
         }
         console.log("No auth token found, redirecting to login.");
-        router.push("/login"); // Redirect if no token
-        return; // Stop further execution
+        router.push("/login");
+        return;
       }
 
-      // --- Fetch other data only if user is successfully identified as Admin ---
       if (userIdForFetches && tokenForSubFetches && isMounted) {
-           await Promise.all([
-                fetchAdminHomeEvents(tokenForSubFetches),
-                fetchNews(), // fetchNews uses localStorage token + refresh logic internally
-                fetchNotifications(userIdForFetches, tokenForSubFetches)
-           ]);
+        await Promise.all([
+          fetchAdminHomeEvents(tokenForSubFetches),
+          fetchNews(),
+          fetchNotifications(userIdForFetches, tokenForSubFetches),
+        ]);
       } else if (isMounted && !userIdForFetches && !isLoadingUser) {
-           // Handle cases where user fetch finished but failed (e.g., not Admin, invalid data)
-           // Reset states if not already handled by handleLogout
-           setIsLoadingEvents(false);
-           setIsLoadingNews(false);
-           setNotifications([]);
-           setAllEvents([]);
-           setNewsItems([]);
-           // Logout should have been called already if necessary
+        setIsLoadingEvents(false);
+        setIsLoadingNews(false);
+        setNotifications([]);
+        setAllEvents([]);
+        setNewsItems([]);
       }
     };
 
     loadAdminData();
-
     return () => {
-      isMounted = false; // Cleanup function to prevent state updates on unmounted component
+      isMounted = false;
     };
-  }, [isInitialized, refreshToken, router, fetchAdminHomeEvents, fetchNews, fetchNotifications]); // Added fetch functions to dependencies
+  }, [
+    isInitialized,
+    refreshToken,
+    router,
+    fetchAdminHomeEvents,
+    fetchNews,
+    fetchNotifications,
+  ]);
 
-  // Effect for handling clicks outside notification dropdown (Copied from UserHome)
+  useEffect(() => {
+    if (user?.id && user.roles?.some((r) => r.name === "ADMIN")) {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      console.log(`SOCKET (Admin): Đang kết nối cho user: ${user.id}`);
+      const socket = io("ws://localhost:9099", {
+        path: "/socket.io",
+        query: { userId: user.id },
+        transports: ["websocket"],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 3000,
+      });
+      socketRef.current = socket;
+
+      socket.on("connect", () => {
+        console.log("SOCKET (Admin): Đã kết nối - ID:", socket.id);
+      });
+
+      socket.on("disconnect", (reason) => {
+        console.log("SOCKET (Admin): Đã ngắt kết nối - Lý do:", reason);
+      });
+
+      socket.on("connect_error", (error) => {
+        console.error("SOCKET (Admin): Lỗi kết nối:", error);
+      });
+
+      socket.on("notification", (data: any) => {
+        console.log("SOCKET (Admin): Nhận được thông báo:", data);
+        if (data && typeof data === "object") {
+          const newNotification: NotificationItem = {
+            id: data.id || `socket-admin-${Date.now()}`,
+            title: data.title || "Thông báo",
+            content: data.content || "",
+            type: data.type || "SYSTEM",
+            read: data.read !== undefined ? data.read : false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            relatedId: data.relatedId,
+            userId: data.userId || user.id,
+          };
+          setNotifications((prevNotifications) =>
+            [newNotification, ...prevNotifications].slice(0, 15)
+          );
+        } else {
+          console.warn("SOCKET (Admin): Dữ liệu thông báo không hợp lệ:", data);
+        }
+      });
+
+      return () => {
+        if (socketRef.current) {
+          console.log("SOCKET (Admin): Ngắt kết nối...");
+          socketRef.current.off("connect");
+          socketRef.current.off("disconnect");
+          socketRef.current.off("connect_error");
+          socketRef.current.off("notification");
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+      };
+    } else {
+      if (socketRef.current) {
+        console.log(
+          "SOCKET (Admin): Ngắt kết nối do user null hoặc không phải Admin."
+        );
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    }
+  }, [user, setNotifications]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         notificationContainerRef.current &&
         !notificationContainerRef.current.contains(event.target as Node) &&
-        notificationButtonRef.current && // Also check if the click wasn't on the button itself
+        notificationButtonRef.current &&
         !notificationButtonRef.current.contains(event.target as Node)
       ) {
         setShowNotificationDropdown(false);
@@ -601,11 +652,14 @@ export default function HomeAdmin() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []); // Empty dependency array means this runs once on mount
-
-  // --- Event Handlers ---
+  }, []);
 
   const handleLogout = async () => {
+    if (socketRef.current) {
+      console.log("SOCKET (Admin): Ngắt kết nối khi logout...");
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
     try {
       const token = localStorage.getItem("authToken");
       if (token) {
@@ -617,19 +671,12 @@ export default function HomeAdmin() {
       }
     } catch (error) {
       console.error("Lỗi khi đăng xuất:", error);
-      // Still proceed with local cleanup
     } finally {
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("refreshToken");
-      // Optionally clear other specific admin-related items if any
-      // localStorage.removeItem("authenticated"); // Example if used
-      // localStorage.removeItem("role"); // Example if used
-      // localStorage.removeItem("user"); // Example if used
-      localStorage.clear(); // Or clear all for simplicity
+      localStorage.clear();
       setUser(null);
       setAllEvents([]);
-      setNewsItems([]); // Clear news
-      setNotifications([]); // Clear notifications
+      setNewsItems([]);
+      setNotifications([]);
       setActiveTab("home");
       router.push("/login");
     }
@@ -638,19 +685,14 @@ export default function HomeAdmin() {
   const handleEventClick = (event: EventDisplayInfo) => setSelectedEvent(event);
   const handleBackToList = () => setSelectedEvent(null);
 
-  // --- Notification Handlers (Copied from UserHome) ---
   const handleNotificationClick = () => {
     setShowNotificationDropdown((prev) => !prev);
-    // Optionally fetch notifications again if dropdown is opened?
-    // Or rely on periodic fetching / initial load.
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
     let token = localStorage.getItem("authToken");
     if (!token || !user?.id) {
       toast.error("Vui lòng đăng nhập lại.");
-      // Potentially trigger logout if user context is lost unexpectedly
-      // handleLogout();
       return;
     }
     let currentToken = token;
@@ -677,31 +719,28 @@ export default function HomeAdmin() {
         } catch (_) {}
         throw new Error(errorMsg);
       }
-      // Update local state optimistically or after confirmation
       setNotifications((prev) =>
         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
       );
-      // No success toast needed usually for marking as read
     } catch (error: any) {
       console.error("Lỗi đánh dấu thông báo đã đọc (Admin):", error);
       toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
-       if (error.message?.includes("Unauthorized") || error.message?.includes("Không thể làm mới")) {
-           router.push("/login?sessionExpired=true");
-       }
+      if (
+        error.message?.includes("Unauthorized") ||
+        error.message?.includes("Không thể làm mới")
+      ) {
+        router.push("/login?sessionExpired=true");
+      }
     }
   };
 
-  // --- News Handlers (Copied and adapted from UserHome) ---
   const refreshNewsList = useCallback(() => {
-    // Admins might want to fetch *all* news statuses or just approved
-    // Sticking with approved for the main feed for now
     fetchNews();
-    // If there's an Approval tab, that might fetch PENDING news separately
   }, [fetchNews]);
 
   const handleNewsFormSubmit = async (
     formData: NewsFormData,
-    newsId?: string // Added for edit mode
+    newsId?: string
   ) => {
     if (!user) {
       toast.error("Vui lòng đăng nhập để thực hiện.");
@@ -714,65 +753,52 @@ export default function HomeAdmin() {
     if (formData.eventId) {
       apiFormData.append("eventId", formData.eventId);
     }
-    // Removed summary - API likely generates it or it's part of content
 
     let API_URL = "http://localhost:8080/identity/api/news";
     let method = "POST";
     let currentToken = localStorage.getItem("authToken");
 
     if (newsId) {
-        // Editing existing news
-        API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
-        method = "PUT";
-        // Only append image if a *new* one was selected during edit
-        if (formData.imageFile) {
-           apiFormData.append("coverImage", formData.imageFile);
-        }
-         // Add other fields that might be editable by admin (status? pinned?)
-        // apiFormData.append("status", formData.status); // Example if status is editable
+      API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
+      method = "PUT";
+      if (formData.imageFile) {
+        apiFormData.append("coverImage", formData.imageFile);
+      }
     } else {
-        // Creating new news
-        apiFormData.append("type", "NEWS"); // Default type
-        apiFormData.append("featured", "false"); // Default
-        apiFormData.append("pinned", "false"); // Default
-        apiFormData.append("createdById", user.id); // Set creator
-        if (formData.imageFile) {
-            apiFormData.append("coverImage", formData.imageFile);
-        }
-         // Admin might be able to set status directly? Default to PENDING or APPROVED?
-         // Let's assume default backend behavior (likely PENDING unless specified)
-         // Or maybe admin creation directly approves? Depends on API design.
-         // If admin creation should be auto-approved:
-         // apiFormData.append("status", "APPROVED");
+      apiFormData.append("type", "NEWS");
+      apiFormData.append("featured", "false");
+      apiFormData.append("pinned", "false");
+      apiFormData.append("createdById", user.id);
+      if (formData.imageFile) {
+        apiFormData.append("coverImage", formData.imageFile);
+      }
     }
-
 
     try {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      // Don't set Content-Type for FormData, browser does it with boundary
-
       let response = await fetch(API_URL, {
         method: method,
-        headers: headers, // No Content-Type here
+        headers: headers,
         body: apiFormData,
       });
-
       if (
         (response.status === 401 || response.status === 403) &&
         currentToken &&
         refreshToken
       ) {
-        console.log("Token expired/invalid during news submit, attempting refresh...");
+        console.log(
+          "Token expired/invalid during news submit, attempting refresh..."
+        );
         const newToken = await refreshToken();
         if (newToken) {
           currentToken = newToken;
           localStorage.setItem("authToken", newToken);
-          headers["Authorization"] = `Bearer ${currentToken}`; // Update header for retry
+          headers["Authorization"] = `Bearer ${currentToken}`;
           console.log("Retrying news API call with new token...");
           response = await fetch(API_URL, {
             method: method,
-            headers: headers, // Updated header
+            headers: headers,
             body: apiFormData,
           });
         } else {
@@ -780,23 +806,23 @@ export default function HomeAdmin() {
         }
       }
 
-      const result = await response.json(); // Try to parse JSON regardless of status for error message
-
+      const result = await response.json();
       if (response.ok && result.code === 1000) {
         toast.success(
           result.message ||
-            (newsId ? "Cập nhật tin tức thành công!" : "Tạo tin tức thành công!")
+            (newsId
+              ? "Cập nhật tin tức thành công!"
+              : "Tạo tin tức thành công!")
         );
-        refreshNewsList(); // Refresh the news list
-        setIsNewsModalOpen(false); // Close modal on success
-        setEditingNewsItem(null); // Clear editing state
+        refreshNewsList();
+        setIsNewsModalOpen(false);
+        setEditingNewsItem(null);
       } else {
-         // Handle API errors (e.g., validation, server errors)
-         toast.error(
-           result.message ||
-             (newsId ? "Cập nhật tin tức thất bại." : "Tạo tin tức thất bại.")
-         );
-         console.error("News Submit API Error:", result);
+        toast.error(
+          result.message ||
+            (newsId ? "Cập nhật tin tức thất bại." : "Tạo tin tức thất bại.")
+        );
+        console.error("News Submit API Error:", result);
       }
     } catch (error: any) {
       console.error("Error submitting news form (Admin):", error);
@@ -816,7 +842,7 @@ export default function HomeAdmin() {
       toast.error("Vui lòng đăng nhập để tạo tin tức.");
       return;
     }
-    setEditingNewsItem(null); // Ensure not in edit mode
+    setEditingNewsItem(null);
     setIsNewsModalOpen(true);
   };
 
@@ -826,35 +852,27 @@ export default function HomeAdmin() {
   };
 
   const handleCloseModal = () => {
-    // Prevent closing if submitting
     if (!isSubmittingNews) {
       setIsNewsModalOpen(false);
-      setEditingNewsItem(null); // Clear editing state on close
+      setEditingNewsItem(null);
     }
   };
 
+  const isPageLoading = !isInitialized || isLoadingUser;
 
-  // --- Computed Values ---
-  const isPageLoading = !isInitialized || isLoadingUser; // Loading if hook not ready OR user fetch in progress
-
-  // Unread notification count (Copied from UserHome)
   const unreadNotificationCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications]
   );
 
-
-  // --- Styling Functions ---
   const getTabButtonClasses = (tabName: ActiveTab): string => {
     const baseClasses =
       "cursor-pointer px-4 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition";
     const activeClasses = "text-white";
     const inactiveClasses = "hover:bg-opacity-80";
-    let specificBg = "";
-    let specificText = "";
-    let specificHoverBg = "";
-
-    // Define colors for each tab
+    let specificBg = "",
+      specificText = "",
+      specificHoverBg = "";
     switch (tabName) {
       case "home":
         specificBg = activeTab === tabName ? "bg-indigo-600" : "bg-indigo-100";
@@ -862,7 +880,7 @@ export default function HomeAdmin() {
         specificHoverBg =
           activeTab === tabName ? "hover:bg-indigo-700" : "hover:bg-indigo-200";
         break;
-      case "news": // Added News Tab Style
+      case "news":
         specificBg = activeTab === tabName ? "bg-green-600" : "bg-green-100";
         specificText = activeTab === tabName ? "" : "text-green-800";
         specificHoverBg =
@@ -910,20 +928,25 @@ export default function HomeAdmin() {
 
   const getActiveIndicatorColor = (tabName: ActiveTab): string => {
     switch (tabName) {
-      case "home": return "border-t-indigo-600";
-      case "news": return "border-t-green-600"; // Added
-      case "approval": return "border-t-yellow-500";
-      case "attendees": return "border-t-teal-600";
-      case "members": return "border-t-pink-600";
-      case "roles": return "border-t-orange-500";
-      case "chatList": return "border-t-purple-600";
-      default: return "border-t-gray-400";
+      case "home":
+        return "border-t-indigo-600";
+      case "news":
+        return "border-t-green-600";
+      case "approval":
+        return "border-t-yellow-500";
+      case "attendees":
+        return "border-t-teal-600";
+      case "members":
+        return "border-t-pink-600";
+      case "roles":
+        return "border-t-orange-500";
+      case "chatList":
+        return "border-t-purple-600";
+      default:
+        return "border-t-gray-400";
     }
   };
 
-  // --- Render Logic ---
-
-  // Loading state for initial auth check
   if (isPageLoading) {
     return (
       <div className="min-h-screen flex justify-center items-center bg-gray-100 text-lg font-medium text-gray-600">
@@ -932,39 +955,39 @@ export default function HomeAdmin() {
     );
   }
 
-
   if (!user || !user.roles?.some((r) => r.name === "ADMIN")) {
-
     return (
       <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100 p-4 text-center">
-        <p className="text-red-600 text-xl font-semibold mb-4">Truy cập bị từ chối</p>
-        <p className="text-gray-700 mb-6">Bạn không có quyền truy cập trang quản trị hoặc phiên đăng nhập không hợp lệ.</p>
-         <button
-            onClick={() => router.push('/login')}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out"
-         >
-           Đi đến trang Đăng nhập
-         </button>
+        <p className="text-red-600 text-xl font-semibold mb-4">
+          Truy cập bị từ chối
+        </p>
+        <p className="text-gray-700 mb-6">
+          Bạn không có quyền truy cập trang quản trị hoặc phiên đăng nhập không
+          hợp lệ.
+        </p>
+        <button
+          onClick={() => router.push("/login")}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out"
+        >
+          Đi đến trang Đăng nhập
+        </button>
       </div>
     );
   }
 
-  // --- Main Render for Authenticated Admin ---
   const tabs = [
-     { id: "home", label: "🏠 Trang chủ" },
-     { id: "news", label: "📰 Bảng tin" }, // Added News Tab
-     { id: "approval", label: "📅 Phê duyệt" }, // Clarified label
-     { id: "attendees", label: "✅ Điểm danh / Tham gia" },
-     { id: "members", label: "👥 Quản lý thành viên" },
-     { id: "roles", label: "📌 Quản lý Vai trò/Chức vụ" },
-    //  { id: "chatList", label: "💬 Chat" },
-   ];
-
+    { id: "home", label: "🏠 Trang chủ" },
+    { id: "news", label: "📰 Bảng tin" },
+    { id: "approval", label: "📅 Phê duyệt" },
+    { id: "attendees", label: "✅ Điểm danh / Tham gia" },
+    { id: "members", label: "👥 Quản lý thành viên" },
+    { id: "roles", label: "📌 Quản lý Vai trò/Chức vụ" },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative"> {/* Added relative positioning */}
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
       <Toaster position="top-center" toastOptions={{ duration: 3500 }} />
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40"> {/* Added sticky nav */}
+      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">
             Quản lý Sự kiện & CLB (Admin)
@@ -1010,10 +1033,9 @@ export default function HomeAdmin() {
       </div>
 
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
-        {/* Render Tab Content based on activeTab */}
         {activeTab === "home" && (
           <AdminHomeTabContent
-            events={allEvents} // Pass fetched events
+            events={allEvents}
             isLoading={isLoadingEvents}
             error={errorEvents}
             search={search}
@@ -1031,27 +1053,24 @@ export default function HomeAdmin() {
             onBackToList={handleBackToList}
           />
         )}
-        {activeTab === "news" && ( // Added News Feed Content
-           <NewsFeedSection
-                newsItems={newsItems}
-                isLoading={isLoadingNews}
-                error={errorNews}
-                user={user} // Pass admin user object
-                onOpenCreateModal={handleOpenCreateModal} // Allow admin to create
-                onOpenEditModal={handleOpenEditModal} // Allow admin to edit
-                onNewsDeleted={refreshNewsList} // Callback after deletion
-                refreshToken={refreshToken} // Pass refreshToken for potential internal use
-                // Admins might have different actions (e.g., delete any news)
-                // This might require modifications within NewsFeedSection or its children
-                // For now, using the same component as UserHome
-            />
+        {activeTab === "news" && (
+          <NewsTabContent
+            newsItems={newsItems}
+            isLoading={isLoadingNews}
+            error={errorNews}
+            user={user}
+            onOpenCreateModal={handleOpenCreateModal}
+            onOpenEditModal={handleOpenEditModal}
+            onNewsDeleted={refreshNewsList}
+            // refreshToken={refreshToken}
+          />
         )}
         {activeTab === "approval" && <ApprovalTabContent user={user} />}
         {activeTab === "attendees" && <AttendeesTabContent user={user} />}
         {activeTab === "members" && (
           <MembersTabContent
-            user={user} // Pass admin user
-            userRole={"ADMIN"} // Explicitly set role
+            user={user}
+            userRole={"ADMIN"}
             currentUserEmail={user?.email || null}
           />
         )}
@@ -1059,45 +1078,40 @@ export default function HomeAdmin() {
         {activeTab === "chatList" && <ChatTabContent currentUser={user} />}
       </div>
 
-       {/* Notification Bell (Copied from UserHome) */}
-       {isInitialized && !isLoadingUser && user && ( // Show only when user is loaded and exists
+      {isInitialized && !isLoadingUser && user && (
         <div
           className="fixed bottom-6 right-6 z-50 group"
-          ref={notificationContainerRef} // Ref for click outside detection
+          ref={notificationContainerRef}
         >
           <button
-            ref={notificationButtonRef} // Ref for click outside detection
+            ref={notificationButtonRef}
             onClick={handleNotificationClick}
             className="relative flex items-center justify-center h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150"
             aria-label="Thông báo"
-            aria-haspopup="true" // Indicate it opens a dropdown/menu
-            aria-expanded={showNotificationDropdown} // State of the dropdown
+            aria-haspopup="true"
+            aria-expanded={showNotificationDropdown}
           >
-            <span className="sr-only">Xem thông báo</span> {/* Accessibility */}
+            <span className="sr-only">Xem thông báo</span>
             <BellIcon className="h-6 w-6" aria-hidden="true" />
             {unreadNotificationCount > 0 && (
               <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white transform translate-x-1/4 -translate-y-1/4 ring-2 ring-white pointer-events-none">
-                 {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
               </span>
             )}
           </button>
-
-          {/* Notification Dropdown */}
           {showNotificationDropdown && (
-             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96"> {/* Position above the button */}
-                <NotificationDropdown
-                    notifications={notifications}
-                    isLoading={isLoadingNotifications}
-                    error={errorNotifications}
-                    onMarkAsRead={handleMarkAsRead}
-                    onClose={() => setShowNotificationDropdown(false)} // Allow closing from within dropdown
-                />
-             </div>
+            <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96">
+              <NotificationDropdown
+                notifications={notifications}
+                isLoading={isLoadingNotifications}
+                error={errorNotifications}
+                onMarkAsRead={handleMarkAsRead}
+                onClose={() => setShowNotificationDropdown(false)}
+              />
+            </div>
           )}
         </div>
       )}
-
-
 
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
@@ -1108,29 +1122,23 @@ export default function HomeAdmin() {
         cancelText={confirmationState.cancelText}
         onConfirm={() => {
           if (confirmationState.onConfirm) confirmationState.onConfirm();
-        
-          setConfirmationState(prev => ({...prev, isOpen: false}));
+          setConfirmationState((prev) => ({ ...prev, isOpen: false }));
         }}
         onCancel={() =>
-           setConfirmationState(prev => ({...prev, isOpen: false }))
+          setConfirmationState((prev) => ({ ...prev, isOpen: false }))
         }
       />
-
- 
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
-
-    
-       <CreateNewsModal
-            isOpen={isNewsModalOpen}
-            onClose={handleCloseModal}
-            onSubmit={handleNewsFormSubmit}
-            isSubmitting={isSubmittingNews}
-            editMode={!!editingNewsItem}
-            initialData={editingNewsItem}
-          
-        />
+      <CreateNewsModal
+        isOpen={isNewsModalOpen}
+        onClose={handleCloseModal}
+        onSubmit={handleNewsFormSubmit}
+        isSubmitting={isSubmittingNews}
+        editMode={!!editingNewsItem}
+        initialData={editingNewsItem}
+      />
     </div>
   );
 }

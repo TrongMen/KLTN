@@ -1367,8 +1367,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
         onCancel={confirmationState.onCancel}
       />
 
-      {/* Create/Edit News Modal */}
-      {/* SỬA: Truyền đúng props cho modal */}
+    
       <CreateNewsModal
         isOpen={isCreateModalOpen}
         onClose={handleNewsModalClose}

@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { io, Socket } from "socket.io-client";
 import UserMenu from "./menu";
 import ContactModal from "./contact";
 import HomeTabContent from "./tabs/HomeTabContent";
@@ -17,10 +18,9 @@ import AttendeesTabContent from "./tabs/AttendeesTabContent";
 import MembersTabContent from "./tabs/MembersTabContent";
 import ChatTabContent from "./tabs/ChatTabContent";
 import CreateEventTabContent from "./tabs/CreateEventTabContent";
-// import NewsTabContent from "./tabs/NewsTabContent"; // No longer used directly for 'news' tab
 import MyNewsTabContent from "./tabs/MyNewsTabContent";
-import NewsFeedSection from "./tabs/NewsFeedSection"; // Import NewsFeedSection
-import CreateNewsModal, { NewsFormData } from "./tabs/CreateNewsModal"; // Import modal
+import NewsTabContent from "./tabs/NewsTabContent";
+import CreateNewsModal, { NewsFormData } from "./tabs/CreateNewsModal";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
@@ -163,10 +163,11 @@ export default function UserHome() {
     useState<boolean>(false);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
   const notificationContainerRef = useRef<HTMLDivElement>(null);
-
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
   const [isSubmittingNews, setIsSubmittingNews] = useState(false);
   const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
+
+  const socketRef = useRef<Socket | null>(null);
 
   const router = useRouter();
   const { refreshToken, isInitialized } = useRefreshToken();
@@ -250,7 +251,7 @@ export default function UserHome() {
         const nt = await refreshToken();
         if (nt) {
           currentToken = nt;
-            localStorage.setItem("authToken", nt);
+          localStorage.setItem("authToken", nt);
           headers["Authorization"] = `Bearer ${currentToken}`;
           res = await fetch(url, { headers, cache: "no-store" });
         } else throw new Error("Unauthorized or Refresh Failed");
@@ -316,13 +317,12 @@ export default function UserHome() {
           const nt = await refreshToken();
           if (nt) {
             currentToken = nt;
-             localStorage.setItem("authToken", nt);
+            localStorage.setItem("authToken", nt);
             res = await fetch(url, {
               headers: { Authorization: `Bearer ${currentToken}` },
               cache: "no-store",
             });
-          }
-          else throw new Error("Unauthorized or Refresh Failed");
+          } else throw new Error("Unauthorized or Refresh Failed");
         }
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
@@ -357,7 +357,7 @@ export default function UserHome() {
         return;
       }
       setIsLoadingCreatedEventIds(true);
-       let currentToken = token;
+      let currentToken = token;
       try {
         const url = `http://localhost:8080/identity/api/events/creator/${userId}`;
         let res = await fetch(url, {
@@ -366,15 +366,14 @@ export default function UserHome() {
         });
         if (res.status === 401 || res.status === 403) {
           const nt = await refreshToken();
-          if (nt){
-             currentToken = nt;
-              localStorage.setItem("authToken", nt);
+          if (nt) {
+            currentToken = nt;
+            localStorage.setItem("authToken", nt);
             res = await fetch(url, {
               headers: { Authorization: `Bearer ${currentToken}` },
               cache: "no-store",
             });
-          }
-          else throw new Error("Unauthorized or Refresh Failed");
+          } else throw new Error("Unauthorized or Refresh Failed");
         }
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = await res.json();
@@ -395,7 +394,7 @@ export default function UserHome() {
     [refreshToken, router]
   );
 
- const fetchNotifications = useCallback(
+  const fetchNotifications = useCallback(
     async (userId: string, token: string | null) => {
       if (!userId || !token) {
         setNotifications([]);
@@ -404,7 +403,7 @@ export default function UserHome() {
       setIsLoadingNotifications(true);
       setErrorNotifications(null);
       const limit = 10;
-       let currentToken = token;
+      let currentToken = token;
       try {
         const url = `http://localhost:8080/identity/api/notifications?userId=${userId}&limit=${limit}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
@@ -448,7 +447,7 @@ export default function UserHome() {
         console.error("Lỗi fetchNotifications:", error);
         setErrorNotifications(error.message || "Lỗi tải thông báo.");
         setNotifications([]);
-         if (error.message?.includes("Unauthorized"))
+        if (error.message?.includes("Unauthorized"))
           router.push("/login?sessionExpired=true");
       } finally {
         setIsLoadingNotifications(false);
@@ -457,11 +456,9 @@ export default function UserHome() {
     [refreshToken, router]
   );
 
-
- useEffect(() => {
+  useEffect(() => {
     if (!isInitialized) return;
     let isMounted = true;
-
     setIsLoadingUser(true);
     setIsLoadingEvents(true);
     setIsLoadingRegisteredIds(true);
@@ -473,88 +470,95 @@ export default function UserHome() {
     let tokenForSubFetches: string | null = currentAuthToken;
 
     const loadInitialData = async () => {
-       const eventsPromise = fetchAllEvents();
-       const newsPromise = fetchNews();
+      const eventsPromise = fetchAllEvents();
+      const newsPromise = fetchNews();
 
-       if (currentAuthToken) {
-           try {
-               const headers: HeadersInit = { Authorization: `Bearer ${currentAuthToken}` };
-               const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
-               let userRes = await fetch(userInfoUrl, { headers, cache: 'no-store' });
+      if (currentAuthToken) {
+        try {
+          const headers: HeadersInit = {
+            Authorization: `Bearer ${currentAuthToken}`,
+          };
+          const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
+          let userRes = await fetch(userInfoUrl, {
+            headers,
+            cache: "no-store",
+          });
 
-               if (userRes.status === 401 || userRes.status === 403) {
-                   console.log("Token expired or invalid, attempting refresh for user info...");
-                   const nt = await refreshToken();
-                   if (nt && isMounted) {
-                       tokenForSubFetches = nt;
-                       localStorage.setItem("authToken", nt);
-                       console.log("Retrying user info fetch with new token...");
-                       userRes = await fetch(userInfoUrl, {
-                           headers: { Authorization: `Bearer ${nt}` },
-                           cache: 'no-store'
-                       });
-                   } else if (isMounted) {
-                       throw new Error("Unauthorized or Refresh Failed during user fetch");
-                   }
-               }
+          if (userRes.status === 401 || userRes.status === 403) {
+            console.log(
+              "Token expired or invalid, attempting refresh for user info..."
+            );
+            const nt = await refreshToken();
+            if (nt && isMounted) {
+              tokenForSubFetches = nt;
+              localStorage.setItem("authToken", nt);
+              console.log("Retrying user info fetch with new token...");
+              userRes = await fetch(userInfoUrl, {
+                headers: { Authorization: `Bearer ${nt}` },
+                cache: "no-store",
+              });
+            } else if (isMounted) {
+              throw new Error(
+                "Unauthorized or Refresh Failed during user fetch"
+              );
+            }
+          }
 
-               if (!userRes.ok && isMounted) {
-                    throw new Error(`Workspace user info failed: ${userRes.status}`);
-               }
+          if (!userRes.ok && isMounted) {
+            throw new Error(`Workspace user info failed: ${userRes.status}`);
+          }
 
-               if(isMounted) {
-                   const userData = await userRes.json();
-                   if (userData.code === 1000 && userData.result?.id) {
-                       const fetchedUser: User = userData.result;
-                       userIdForFetches = fetchedUser.id;
-                       setUser(fetchedUser);
-                   } else {
-                       throw new Error("Invalid user data received");
-                   }
-               }
+          if (isMounted) {
+            const userData = await userRes.json();
+            if (userData.code === 1000 && userData.result?.id) {
+              const fetchedUser: User = userData.result;
+              userIdForFetches = fetchedUser.id;
+              setUser(fetchedUser);
+            } else {
+              throw new Error("Invalid user data received");
+            }
+          }
+        } catch (error: any) {
+          console.error("Lỗi fetch user info (UserHome):", error.message);
+          if (isMounted) setUser(null);
+          userIdForFetches = null;
+          tokenForSubFetches = null;
+          if (!error.message?.includes("Invalid user data")) {
+            router.push("/login?sessionExpired=true");
+          }
+        } finally {
+          if (isMounted) setIsLoadingUser(false);
+        }
+      } else {
+        if (isMounted) {
+          setUser(null);
+          setIsLoadingUser(false);
+          setIsLoadingRegisteredIds(false);
+          setIsLoadingCreatedEventIds(false);
+          setNotifications([]);
+        }
+      }
 
-           } catch (error: any) {
-               console.error("Lỗi fetch user info (UserHome):", error.message);
-                if (isMounted) setUser(null);
-                userIdForFetches = null;
-                tokenForSubFetches = null;
-                if (!error.message?.includes("Invalid user data")) {
-                     router.push('/login?sessionExpired=true');
-                }
-           } finally {
-                if (isMounted) setIsLoadingUser(false);
-           }
-       } else {
-           if (isMounted) {
-               setUser(null);
-               setIsLoadingUser(false);
-               setIsLoadingRegisteredIds(false);
-               setIsLoadingCreatedEventIds(false);
-               setNotifications([]);
-           }
-       }
+      await Promise.all([eventsPromise, newsPromise]);
 
-       await Promise.all([eventsPromise, newsPromise]);
-
-       if (userIdForFetches && tokenForSubFetches && isMounted) {
-            await Promise.all([
-              fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
-              fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
-              fetchNotifications(userIdForFetches, tokenForSubFetches)
-            ]);
-       } else if (isMounted) {
-           setIsLoadingRegisteredIds(false);
-           setIsLoadingCreatedEventIds(false);
-           if (!userIdForFetches) setNotifications([]);
-       }
+      if (userIdForFetches && tokenForSubFetches && isMounted) {
+        await Promise.all([
+          fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
+          fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
+          fetchNotifications(userIdForFetches, tokenForSubFetches),
+        ]);
+      } else if (isMounted) {
+        setIsLoadingRegisteredIds(false);
+        setIsLoadingCreatedEventIds(false);
+        if (!userIdForFetches) setNotifications([]);
+      }
     };
 
     loadInitialData();
-
     return () => {
-       isMounted = false;
+      isMounted = false;
     };
-}, [
+  }, [
     isInitialized,
     fetchAllEvents,
     fetchRegisteredEventIds,
@@ -562,15 +566,85 @@ export default function UserHome() {
     fetchNews,
     fetchNotifications,
     refreshToken,
-    router
-]);
+    router,
+  ]);
 
+  useEffect(() => {
+    if (user?.id) {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+      console.log(`SOCKET (UserHome): Đang kết nối cho user: ${user.id}`);
+      const socket = io("ws://localhost:9099", {
+        path: "/socket.io",
+        query: { userId: user.id },
+        transports: ["websocket"],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 3000,
+      });
+      socketRef.current = socket;
+      socket.on("connect", () =>
+        console.log("SOCKET (UserHome): Đã kết nối - ID:", socket.id)
+      );
+      socket.on("disconnect", (reason) =>
+        console.log("SOCKET (UserHome): Đã ngắt kết nối - Lý do:", reason)
+      );
+      socket.on("connect_error", (error) =>
+        console.error("SOCKET (UserHome): Lỗi kết nối:", error)
+      );
+      socket.on("notification", (data: any) => {
+        console.log("SOCKET (UserHome): Nhận được thông báo:", data);
+        if (data && typeof data === "object") {
+          toast.info(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
+            duration: 5000,
+          });
+          const newNotification: NotificationItem = {
+            id: data.id || `socket-user-${Date.now()}`,
+            title: data.title || "Thông báo",
+            content: data.content || "",
+            type: data.type || "SYSTEM",
+            read: data.read !== undefined ? data.read : false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            relatedId: data.relatedId,
+            userId: data.userId || user.id,
+          };
+          setNotifications((prevNotifications) =>
+            [newNotification, ...prevNotifications].slice(0, 15)
+          );
+        } else {
+          console.warn(
+            "SOCKET (UserHome): Dữ liệu thông báo không hợp lệ:",
+            data
+          );
+        }
+      });
+      return () => {
+        if (socketRef.current) {
+          console.log("SOCKET (UserHome): Ngắt kết nối...");
+          socketRef.current.off("connect");
+          socketRef.current.off("disconnect");
+          socketRef.current.off("connect_error");
+          socketRef.current.off("notification");
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+      };
+    } else {
+      if (socketRef.current) {
+        console.log("SOCKET (UserHome): Ngắt kết nối do user null.");
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    }
+  }, [user?.id, setNotifications]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         notificationContainerRef.current &&
-        !notificationContainerRef.current.contains(event.target as Node)
+        !notificationContainerRef.current.contains(event.target as Node) &&
+        notificationButtonRef.current &&
+        !notificationButtonRef.current.contains(event.target as Node)
       ) {
         setShowNotificationDropdown(false);
       }
@@ -592,7 +666,7 @@ export default function UserHome() {
       return;
     }
     try {
-       const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
+      const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
       let res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -601,7 +675,7 @@ export default function UserHome() {
         const nt = await refreshToken();
         if (nt) {
           token = nt;
-           localStorage.setItem("authToken", nt);
+          localStorage.setItem("authToken", nt);
           res = await fetch(url, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` },
@@ -629,8 +703,8 @@ export default function UserHome() {
     } catch (err: any) {
       console.error("Lỗi đăng ký:", err);
       toast.error(`${err.message || "Đăng ký thất bại."}`);
-       if (err.message?.includes("Unauthorized"))
-         router.push("/login?sessionExpired=true");
+      if (err.message?.includes("Unauthorized"))
+        router.push("/login?sessionExpired=true");
     } finally {
       setIsRegistering(null);
     }
@@ -670,9 +744,10 @@ export default function UserHome() {
       ),
       onConfirm: () => {
         executeRegistration(event);
-         setConfirmationState(prev => ({...prev, isOpen: false }));
+        setConfirmationState((prev) => ({ ...prev, isOpen: false }));
       },
-      onCancel: () => setConfirmationState(prev => ({...prev, isOpen: false })),
+      onCancel: () =>
+        setConfirmationState((prev) => ({ ...prev, isOpen: false })),
       confirmVariant: "primary",
       confirmText: "Đăng ký",
       cancelText: "Hủy",
@@ -690,6 +765,7 @@ export default function UserHome() {
     },
     []
   );
+
   const handleEventClick = (event: EventDisplayInfo) => {
     setSelectedEvent(event);
   };
@@ -698,6 +774,11 @@ export default function UserHome() {
   };
 
   const handleLogout = async () => {
+    if (socketRef.current) {
+      console.log("SOCKET (UserHome): Ngắt kết nối khi logout...");
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
     try {
       const t = localStorage.getItem("authToken");
       if (t)
@@ -724,7 +805,6 @@ export default function UserHome() {
   const refreshNewsList = useCallback(() => {
     fetchNews();
   }, [fetchNews]);
-
   const handleNotificationClick = () => {
     setShowNotificationDropdown((prev) => !prev);
   };
@@ -735,7 +815,7 @@ export default function UserHome() {
       toast.error("Vui lòng đăng nhập lại.");
       return;
     }
-     let currentToken = token;
+    let currentToken = token;
     try {
       const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
       let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
@@ -760,135 +840,130 @@ export default function UserHome() {
         throw new Error(errorMsg);
       }
       setNotifications((prev) =>
-         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-       );
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      );
     } catch (error: any) {
       console.error("Lỗi đánh dấu thông báo đã đọc:", error);
       toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
-       if (error.message?.includes("Unauthorized"))
-         router.push("/login?sessionExpired=true");
+      if (error.message?.includes("Unauthorized"))
+        router.push("/login?sessionExpired=true");
     }
   };
 
-    const handleNewsFormSubmit = async (
-      formData: NewsFormData,
-      newsId?: string
-    ) => {
-      if (!user) {
-        toast.error("Vui lòng đăng nhập để thực hiện.");
-        return;
+  const handleNewsFormSubmit = async (
+    formData: NewsFormData,
+    newsId?: string
+  ) => {
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để thực hiện.");
+      return;
+    }
+    setIsSubmittingNews(true);
+    const apiFormData = new FormData();
+    apiFormData.append("title", formData.title);
+    apiFormData.append("content", formData.content);
+    if (formData.eventId) {
+      apiFormData.append("eventId", formData.eventId);
+    }
+    let API_URL = "http://localhost:8080/identity/api/news";
+    let method = "POST";
+    let currentToken = localStorage.getItem("authToken");
+
+    if (newsId) {
+      API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
+      method = "PUT";
+      if (formData.imageFile) {
+        apiFormData.append("coverImage", formData.imageFile);
       }
-      setIsSubmittingNews(true);
-      const apiFormData = new FormData();
-      apiFormData.append("title", formData.title);
-      apiFormData.append("content", formData.content);
-      if (formData.eventId) {
-        apiFormData.append("eventId", formData.eventId);
+    } else {
+      apiFormData.append("type", "NEWS");
+      apiFormData.append("featured", "false");
+      apiFormData.append("pinned", "false");
+      apiFormData.append("createdById", user.id);
+      if (formData.imageFile) {
+        apiFormData.append("coverImage", formData.imageFile);
       }
+    }
 
-      let API_URL = "http://localhost:8080/identity/api/news";
-      let method = "POST";
-      let currentToken = localStorage.getItem("authToken");
-
-      if (newsId) {
-        API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
-        method = "PUT";
-        if (formData.imageFile) {
-          apiFormData.append("coverImage", formData.imageFile);
-        }
-      } else {
-        apiFormData.append("type", "NEWS");
-        apiFormData.append("featured", "false");
-        apiFormData.append("pinned", "false");
-        apiFormData.append("createdById", user.id);
-        if (formData.imageFile) {
-          apiFormData.append("coverImage", formData.imageFile);
-        }
-      }
-
-      try {
-        let headers: HeadersInit = {};
-        if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-
-        let response = await fetch(API_URL, {
-          method: method,
-          headers: headers,
-          body: apiFormData,
-        });
-
-        if (
-          (response.status === 401 || response.status === 403) &&
-          currentToken &&
-          refreshToken
-        ) {
-          console.log("Token expired or invalid, attempting refresh...");
-          const newToken = await refreshToken();
-          if (newToken) {
-            currentToken = newToken;
-            localStorage.setItem("authToken", newToken);
-            headers["Authorization"] = `Bearer ${currentToken}`;
-            console.log("Retrying API call with new token...");
-            response = await fetch(API_URL, {
-              method: method,
-              headers: headers,
-              body: apiFormData,
-            });
-          } else {
-            throw new Error("Refresh token failed or missing.");
-          }
-        }
-
-        const result = await response.json();
-
-        if (response.ok && result.code === 1000) {
-          toast.success(
-            result.message ||
-              (newsId ? "Cập nhật thành công!" : "Tạo mới thành công!")
-          );
-          refreshNewsList();
-          setIsNewsModalOpen(false);
-          setEditingNewsItem(null);
+    try {
+      let headers: HeadersInit = {};
+      if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
+      let response = await fetch(API_URL, {
+        method: method,
+        headers: headers,
+        body: apiFormData,
+      });
+      if (
+        (response.status === 401 || response.status === 403) &&
+        currentToken &&
+        refreshToken
+      ) {
+        console.log("Token expired or invalid, attempting refresh...");
+        const newToken = await refreshToken();
+        if (newToken) {
+          currentToken = newToken;
+          localStorage.setItem("authToken", newToken);
+          headers["Authorization"] = `Bearer ${currentToken}`;
+          console.log("Retrying API call with new token...");
+          response = await fetch(API_URL, {
+            method: method,
+            headers: headers,
+            body: apiFormData,
+          });
         } else {
-          toast.error(
-            result.message ||
-              (newsId ? "Cập nhật thất bại." : "Tạo mới thất bại.")
-          );
-          console.error("API Error:", result);
+          throw new Error("Refresh token failed or missing.");
         }
-      } catch (error: any) {
-        console.error("Error submitting news form:", error);
-        if (error.message?.includes("Refresh token failed")) {
-          toast.error("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
-          router.push("/login?sessionExpired=true");
-        } else {
-          toast.error("Lỗi khi gửi yêu cầu: " + error.message);
-        }
-      } finally {
-        setIsSubmittingNews(false);
       }
-    };
+      const result = await response.json();
+      if (response.ok && result.code === 1000) {
+        toast.success(
+          result.message ||
+            (newsId ? "Cập nhật thành công!" : "Tạo mới thành công!")
+        );
 
-    const handleOpenCreateModal = () => {
-      if (!user) {
-        toast.error("Vui lòng đăng nhập để tạo tin tức.");
-        return;
-      }
-      setEditingNewsItem(null);
-      setIsNewsModalOpen(true);
-    };
-    const handleOpenEditModal = (newsItem: NewsItem) => {
-      setEditingNewsItem(newsItem);
-      setIsNewsModalOpen(true);
-    };
-    const handleCloseModal = () => {
-      if (!isSubmittingNews) {
         setIsNewsModalOpen(false);
         setEditingNewsItem(null);
+      } else {
+        toast.error(
+          result.message ||
+            (newsId ? "Cập nhật thất bại." : "Tạo mới thất bại.")
+        );
+        console.error("API Error:", result);
       }
-    };
+    } catch (error: any) {
+      console.error("Error submitting news form:", error);
+      if (error.message?.includes("Refresh token failed")) {
+        toast.error("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
+        router.push("/login?sessionExpired=true");
+      } else {
+        toast.error("Lỗi khi gửi yêu cầu: " + error.message);
+      }
+    } finally {
+      setIsSubmittingNews(false);
+    }
+  };
 
+  const handleOpenCreateModal = () => {
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để tạo tin tức.");
+      return;
+    }
+    setEditingNewsItem(null);
+    setIsNewsModalOpen(true);
+  };
+  const handleOpenEditModal = (newsItem: NewsItem) => {
+    setEditingNewsItem(newsItem);
+    setIsNewsModalOpen(true);
+  };
+  const handleCloseModal = () => {
+    if (!isSubmittingNews) {
+      setIsNewsModalOpen(false);
+      setEditingNewsItem(null);
+    }
+  };
 
   const isPageLoading = !isInitialized || isLoadingUser;
+
   const getTabButtonClasses = (tabName: ActiveTab): string => {
     const base =
       "cursor-pointer px-4 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition";
@@ -904,7 +979,7 @@ export default function UserHome() {
         hover = "hover:bg-indigo-700";
         break;
       case "news":
-        bg = "bg-green-600"; // Changed color for Bảng tin
+        bg = "bg-green-600";
         text = "text-green-800";
         hover = "hover:bg-green-700";
         break;
@@ -956,12 +1031,13 @@ export default function UserHome() {
       activeTab === tabName ? active : specificText
     } ${activeTab !== tabName ? inactive : ""} ${specificHover}`;
   };
+
   const getActiveIndicatorColor = (tabName: ActiveTab): string => {
     switch (tabName) {
       case "home":
         return "border-t-indigo-600";
       case "news":
-        return "border-t-green-600"; // Changed color for Bảng tin
+        return "border-t-green-600";
       case "myNews":
         return "border-t-amber-600";
       case "createEvent":
@@ -980,13 +1056,15 @@ export default function UserHome() {
         return "border-t-gray-400";
     }
   };
+
   const unreadNotificationCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications]
   );
+
   const tabs = [
     { id: "home", label: "🎉 Trang chủ", requiresAuth: false },
-    { id: "news", label: "📰 Bảng tin", requiresAuth: false }, // Added News Feed tab
+    { id: "news", label: "📰 Bảng tin", requiresAuth: false },
     { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
     { id: "myNews", label: "📝 Tin tức của tôi", requiresAuth: true },
     { id: "myEvents", label: "🛠 Sự kiện & Đăng ký", requiresAuth: true },
@@ -1013,7 +1091,7 @@ export default function UserHome() {
             >
               Liên hệ
             </span>
-             {isInitialized && !isLoadingUser && (
+            {isInitialized && !isLoadingUser && (
               <UserMenu user={user} onLogout={handleLogout} />
             )}
             {(!isInitialized || isLoadingUser) && (
@@ -1093,15 +1171,15 @@ export default function UserHome() {
               />
             )}
             {activeTab === "news" && (
-              <NewsFeedSection
-                 newsItems={newsItems}
-                 isLoading={isLoadingNews}
-                 error={errorNews}
-                 user={user}
-                 onOpenCreateModal={handleOpenCreateModal}
-                 onOpenEditModal={handleOpenEditModal}
-                 onNewsDeleted={refreshNewsList}
-                 refreshToken={refreshToken}
+              <NewsTabContent
+                newsItems={newsItems}
+                isLoading={isLoadingNews}
+                error={errorNews}
+                user={user}
+                onOpenCreateModal={handleOpenCreateModal}
+                onOpenEditModal={handleOpenEditModal}
+                onNewsDeleted={refreshNewsList}
+                refreshToken={refreshToken}
               />
             )}
             {user && activeTab === "myNews" && (
@@ -1129,27 +1207,27 @@ export default function UserHome() {
                 isLoadingRegisteredIds={isLoadingRegisteredIds}
                 onRegistrationChange={handleRegistrationChange}
                 onEventUpdatedOrDeleted={() => {
-                   fetchAllEvents();
-                   const t = localStorage.getItem("authToken");
-                   if (user?.id && t) {
-                     fetchUserCreatedEvents(user.id, t);
-                     fetchRegisteredEventIds(user.id, t);
-                   }
+                  fetchAllEvents();
+                  const t = localStorage.getItem("authToken");
+                  if (user?.id && t) {
+                    fetchUserCreatedEvents(user.id, t);
+                    fetchRegisteredEventIds(user.id, t);
+                  }
                 }}
               />
             )}
-             {user && activeTab === "attendees" && (
-               <AttendeesTabContent user={user} />
+            {user && activeTab === "attendees" && (
+              <AttendeesTabContent user={user} />
             )}
-             {user && activeTab === "members" && (
+            {user && activeTab === "members" && (
               <MembersTabContent
                 user={user}
                 userRole={user.roles?.[0]?.name?.toUpperCase() || "UNKNOWN"}
                 currentUserEmail={user.email || null}
               />
             )}
-             {user && activeTab === "chatList" && (
-               <ChatTabContent currentUser={user} />
+            {user && activeTab === "chatList" && (
+              <ChatTabContent currentUser={user} />
             )}
             {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
               !user &&
@@ -1162,7 +1240,6 @@ export default function UserHome() {
           </>
         )}
       </div>
-
       {isInitialized && !isLoadingUser && user && (
         <div
           className="fixed bottom-6 right-6 z-50 group"
@@ -1180,26 +1257,23 @@ export default function UserHome() {
             <BellIcon className="h-6 w-6" aria-hidden="true" />
             {unreadNotificationCount > 0 && (
               <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white transform translate-x-1/4 -translate-y-1/4 ring-2 ring-white pointer-events-none">
-                 {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
               </span>
             )}
           </button>
-
           {showNotificationDropdown && (
-             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96">
-               <NotificationDropdown
-                 notifications={notifications}
-                 isLoading={isLoadingNotifications}
-                 error={errorNotifications}
-                 onMarkAsRead={handleMarkAsRead}
-                 onClose={() => setShowNotificationDropdown(false)}
-               />
-             </div>
+            <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96">
+              <NotificationDropdown
+                notifications={notifications}
+                isLoading={isLoadingNotifications}
+                error={errorNotifications}
+                onMarkAsRead={handleMarkAsRead}
+                onClose={() => setShowNotificationDropdown(false)}
+              />
+            </div>
           )}
         </div>
       )}
-
-
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
         title={confirmationState.title}
@@ -1211,20 +1285,20 @@ export default function UserHome() {
           if (confirmationState.onConfirm) confirmationState.onConfirm();
         }}
         onCancel={() =>
-           setConfirmationState(prev => ({...prev, isOpen: false }))
+          setConfirmationState((prev) => ({ ...prev, isOpen: false }))
         }
       />
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
-       <CreateNewsModal
-         isOpen={isNewsModalOpen}
-         onClose={handleCloseModal}
-         onSubmit={handleNewsFormSubmit}
-         isSubmitting={isSubmittingNews}
-         editMode={!!editingNewsItem}
-         initialData={editingNewsItem}
-       />
+      <CreateNewsModal
+        isOpen={isNewsModalOpen}
+        onClose={handleCloseModal}
+        onSubmit={handleNewsFormSubmit}
+        isSubmitting={isSubmittingNews}
+        editMode={!!editingNewsItem}
+        initialData={editingNewsItem}
+      />
     </div>
   );
 }

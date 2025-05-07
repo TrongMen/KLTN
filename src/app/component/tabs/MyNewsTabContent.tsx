@@ -652,7 +652,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Vui lòng đăng nhập lại.");
-        // SỬA: Đảm bảo URL đúng theo logic của NewsFeedSection
+        
         const url = `http://localhost:8080/identity/api/news/${newsId}?deletedById=${currentUserId}`;
         const res = await fetch(url, {
           method: "DELETE",
@@ -1382,7 +1382,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                       }}
                       disabled={!!isRestoring}
                       title="Khôi phục tin tức"
-                      className={`p-1.5 rounded-full bg-blue-100 text-blue-600 hover:bg-blue-200 transition duration-150 ease-in-out ${
+                      className={`p-1.5 rounded-full cursor-pointer bg-blue-100 text-blue-600 hover:bg-blue-200 transition duration-150 ease-in-out ${
                         isRestoring === item.id
                           ? "opacity-50 cursor-wait animate-pulse"
                           : ""
@@ -1492,7 +1492,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                         }}
                         disabled={!!isRestoring}
                         title="Khôi phục tin tức"
-                        className={`p-1.5 rounded text-blue-600 hover:bg-blue-100 transition duration-150 ease-in-out flex items-center gap-1 text-xs font-medium ${
+                        className={`p-1.5 rounded cursor-pointer text-blue-600 hover:bg-blue-100 transition duration-150 ease-in-out flex items-center gap-1 text-xs font-medium ${
                           isRestoring === item.id
                             ? "opacity-50 cursor-wait"
                             : ""

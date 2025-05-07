@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
 import UserMenu from "./menu";
-import ContactModal from "./contact";
+import ContactModal from "./modals/ContactModal";
+import AboutModal from "./modals/AboutModal";
 import AdminHomeTabContent from "./tabs/AdminHomeTabContent";
 import ApprovalTabContent from "./tabs/ApprovalTabContent";
 import AttendeesTabContent from "./tabs/AttendeesTabContent";
@@ -208,6 +209,7 @@ export default function HomeAdmin() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState<boolean>(true);
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [sortOption, setSortOption] = useState("date-desc");
   const [timeFilterOption, setTimeFilterOption] = useState("all");
@@ -993,11 +995,14 @@ export default function HomeAdmin() {
             Quản lý Sự kiện & CLB (Admin)
           </div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            <Link href="/about">
-              <span className="cursor-pointer hover:text-gray-300 transition-colors">
+            
+          <span
+              className="cursor-pointer hover:text-gray-300 transition-colors"
+              onClick={() => setShowAboutModal(true)}
+            >
                 Giới thiệu
               </span>
-            </Link>
+            
             <span
               className="cursor-pointer hover:text-gray-300 transition-colors"
               onClick={() => setShowContactModal(true)}
@@ -1130,6 +1135,9 @@ export default function HomeAdmin() {
       />
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
+      )}
+      {showAboutModal && (
+        <AboutModal onClose={() => setShowAboutModal(false)} />
       )}
       <CreateNewsModal
         isOpen={isNewsModalOpen}

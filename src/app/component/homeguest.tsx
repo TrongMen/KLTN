@@ -12,7 +12,8 @@ import Link from "next/link";
 
 import { io, Socket } from "socket.io-client";
 import UserMenu from "./menu";
-import ContactModal from "./contact";
+import ContactModal from "./modals/ContactModal";
+import AboutModal from "./modals/AboutModal";
 import HomeTabContent from "./tabs/HomeTabContent";
 import RegisteredEventsTabContent from "./tabs/RegisteredEventsTabContent";
 import MembersTabContent from "./tabs/MembersTabContent";
@@ -232,6 +233,7 @@ export default function HomeGuest() {
   const [sortOption, setSortOption] = useState("date");
   const [timeFilterOption, setTimeFilterOption] = useState("upcoming");
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [isRegistering, setIsRegistering] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<{
@@ -1175,11 +1177,13 @@ export default function HomeGuest() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            <Link href="/about">
-              <span className="cursor-pointer hover:text-gray-300 transition-colors">
+          <span
+              className="cursor-pointer hover:text-gray-300 transition-colors"
+              onClick={() => setShowAboutModal(true)}
+            >
                 Giới thiệu
               </span>
-            </Link>
+            
             <span
               className="cursor-pointer hover:text-gray-300 transition-colors"
               onClick={() => setShowContactModal(true)}
@@ -1381,6 +1385,10 @@ export default function HomeGuest() {
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
+
+      {showAboutModal && (
+              <AboutModal onClose={() => setShowAboutModal(false)} />
+            )}
     </div>
   );
 }

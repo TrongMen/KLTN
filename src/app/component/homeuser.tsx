@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
 import UserMenu from "./menu";
-import ContactModal from "./contact";
+import ContactModal from "./modals/ContactModal";
+import AboutModal from "./modals/AboutModal";
 import HomeTabContent from "./tabs/HomeTabContent";
 import MyEventsTabContent from "./tabs/MyEventsTabContent";
 import AttendeesTabContent from "./tabs/AttendeesTabContent";
@@ -143,6 +144,8 @@ export default function UserHome() {
   const [sortOption, setSortOption] = useState("date");
   const [timeFilterOption, setTimeFilterOption] = useState("upcoming");
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
+  
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [confirmationState, setConfirmationState] = useState<{
     isOpen: boolean;
@@ -1080,11 +1083,13 @@ export default function UserHome() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            <Link href="/about">
-              <span className="cursor-pointer hover:text-gray-300">
+          <span
+              className="cursor-pointer hover:text-gray-300 transition-colors"
+              onClick={() => setShowAboutModal(true)}
+            >
                 Giới thiệu
               </span>
-            </Link>
+           
             <span
               className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
@@ -1291,6 +1296,9 @@ export default function UserHome() {
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
+      {showAboutModal && (
+              <AboutModal onClose={() => setShowAboutModal(false)} />
+            )}
       <CreateNewsModal
         isOpen={isNewsModalOpen}
         onClose={handleCloseModal}

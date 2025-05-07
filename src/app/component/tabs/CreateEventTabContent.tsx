@@ -9,11 +9,11 @@ import React, {
 } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { BTCSection, type BTCSectionHandle } from "../BTCSection";
+import { BTCSection, type BTCSectionHandle } from "../../../sections/BTCSection";
 import {
   ParticipantSection,
   type ParticipantSectionHandle,
-} from "../ParticipantSection";
+} from "../../../sections/ParticipantSection";
 import EventList from "../ListEvenUser";
 import { User as MainUserType } from "../homeuser";
 

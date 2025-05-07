@@ -765,7 +765,7 @@ export default function HomeGuest() {
         // Xử lý dữ liệu nhận được
         if (data && typeof data === "object") {
           // Hiển thị toast thông báo
-          toast.info(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
+          toast(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
             duration: 5000,
           });
 

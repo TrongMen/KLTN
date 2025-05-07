@@ -20,7 +20,7 @@ import {
   PlusIcon,
   Pencil1Icon,
 } from "@radix-ui/react-icons";
-import CreateNewsModal, { NewsFormData } from "./CreateNewsModal"; // Đảm bảo import đúng
+import CreateNewsModal, { NewsFormData } from "../modals/CreateNewsModal"; // Đảm bảo import đúng
 
 // --- Helper Functions (Giữ nguyên) ---
 const getWeekRange = (

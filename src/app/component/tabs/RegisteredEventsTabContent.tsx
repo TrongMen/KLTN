@@ -12,7 +12,7 @@ import {
   ListBulletIcon,
   ReaderIcon,
 } from "@radix-ui/react-icons";
-import AttendeeQrScannerModal from "./AttendeeQrScannerModal";
+import AttendeeQrScannerModal from "../modals/AttendeeQrScannerModal";
 
 interface EventInfo {
   id: string;

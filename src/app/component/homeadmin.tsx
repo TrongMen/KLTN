@@ -19,7 +19,7 @@ import MembersTabContent from "./tabs/MembersTabContent";
 import RolesTabContent from "./tabs/RolesTabContent";
 import ChatTabContent from "./tabs/ChatTabContent";
 import NewsTabContent from "./tabs/NewsTabContent";
-import CreateNewsModal, { NewsFormData } from "./tabs/CreateNewsModal";
+import CreateNewsModal, { NewsFormData } from "./modals/CreateNewsModal";
 import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
 import { BellIcon } from "@radix-ui/react-icons";
 import { useRefreshToken } from "../../hooks/useRefreshToken";

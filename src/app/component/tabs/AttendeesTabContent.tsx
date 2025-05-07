@@ -10,7 +10,7 @@ import React, {
 import { toast } from "react-hot-toast";
 import Link from "next/link";
 import { User as MainUserType } from "../homeuser";
-import QrScannerModal from "./QrScannerModal";
+import QrScannerModal from "../modals/QrScannerModal";
 import { Html5QrcodeResult } from "html5-qrcode";
 import {
   ArrowLeftIcon,

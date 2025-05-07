@@ -5,7 +5,7 @@ import { toast } from "react-hot-toast";
 import Link from "next/link";
 import Image from "next/image"; // Đảm bảo đã import Image
 import { User as MainUserType } from "../homeuser";
-import UpdateEventModal from "./UpdateEventModal";
+import UpdateEventModal from "../modals/UpdateEventModal";
 import {
   ArrowLeftIcon,
   CheckIcon,

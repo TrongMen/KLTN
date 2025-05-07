@@ -20,7 +20,7 @@ import ChatTabContent from "./tabs/ChatTabContent";
 import CreateEventTabContent from "./tabs/CreateEventTabContent";
 import MyNewsTabContent from "./tabs/MyNewsTabContent";
 import NewsTabContent from "./tabs/NewsTabContent";
-import CreateNewsModal, { NewsFormData } from "./tabs/CreateNewsModal";
+import CreateNewsModal, { NewsFormData } from "./modals/CreateNewsModal";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";

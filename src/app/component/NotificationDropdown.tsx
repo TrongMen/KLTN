@@ -55,18 +55,18 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
     onClose
 }) => {
     return (
-        // Bỏ ref={ref} nếu không dùng forwardRef
+    
         <div
-            // Giữ nguyên các class định vị và style khác
-            className="absolute right-0 bottom-full mb-2 w-80 sm:w-96 bg-white rounded-md shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto flex flex-col animate-fade-in-up"
+        
+            className="absolute  right-0 bottom-full mb-2 w-80 sm:w-96 bg-white rounded-md shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto flex flex-col animate-fade-in-up"
         >
-            {/* Header */}
+           
             <div className="p-3 border-b border-gray-200 sticky top-0 bg-white z-10 flex-shrink-0">
                 <h3 className="text-sm font-semibold text-gray-700">Thông báo</h3>
             </div>
 
-            {/* Content */}
-            <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+     
+            <div className="flex-grow  overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                 {isLoading ? (
                     <div className="p-4 text-center text-sm text-gray-500">Đang tải thông báo...</div>
                 ) : error ? (

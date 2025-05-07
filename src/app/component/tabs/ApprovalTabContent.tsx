@@ -775,7 +775,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
         </button>
         <button
           onClick={() => setActiveSubTab("news")}
-          className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors duration-150 ${
+          className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors duration-150 cursor-pointer ${
             activeSubTab === "news"
               ? "border-b-2 border-yellow-500 text-yellow-600 bg-yellow-50"
               : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
@@ -861,7 +861,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
             <button
               onClick={() => setViewMode("card")}
               title="Chế độ thẻ"
-              className={`p-2 rounded-md border transition ${
+              className={`p-2 rounded-md border transition cursor-pointer ${
                 viewMode === "card"
                   ? "bg-yellow-500 border-yellow-600 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
@@ -884,7 +884,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
             <button
               onClick={() => setViewMode("list")}
               title="Chế độ danh sách"
-              className={`p-2 rounded-md border transition ${
+              className={`p-2 rounded-md border transition cursor-pointer ${
                 viewMode === "list"
                   ? "bg-yellow-500 border-yellow-600 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"

@@ -387,7 +387,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              <option value="date">📅 Gần nhất</option>
+              {/* <option value="date">📅 Gần nhất</option> */}
               <option value="az">🔤 A - Z</option>
               <option value="za">🔤 Z - A</option>
             </select>
@@ -441,7 +441,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             <button
               onClick={() => setViewMode("card")}
               title="Chế độ thẻ"
-              className={`p-2 rounded-md border transition ${
+              className={`p-2 rounded-md border transition cursor-pointer ${
                 viewMode === "card"
                   ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
@@ -453,7 +453,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             <button
               onClick={() => setViewMode("list")}
               title="Chế độ danh sách"
-              className={`p-2 rounded-md border transition ${
+              className={`p-2 rounded-md border transition  cursor-pointer ${
                 viewMode === "list"
                   ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
@@ -775,7 +775,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             onRegister(selectedEvent);
                           }
                         }}
-                        className={`px-4 py-2 rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center ${
+                        className={`px-4 py-2 cursor-pointer rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center ${
                           isRegistered
                             ? "bg-green-500 cursor-not-allowed"
                             : processing
@@ -973,7 +973,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                   onRegister(event);
                                 }
                               }}
-                              className={`w-full px-4 py-2 rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center ${
+                              className={`w-full px-4 py-2 cursor-pointer rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center ${
                                 isRegistered
                                   ? "bg-green-500 cursor-not-allowed"
                                   : processing

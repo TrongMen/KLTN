@@ -1085,7 +1085,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   <button
                     onClick={() => setEventViewMode("list")}
                     title="Danh sách sự kiện"
-                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
+                    className={`flex-1 cursor-pointer sm:flex-none p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
                       eventViewMode === "list"
                         ? "bg-teal-600 border-teal-700 text-white shadow-sm z-10"
                         : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
@@ -1107,7 +1107,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   <button
                     onClick={() => setEventViewMode("card")}
                     title="Thẻ sự kiện"
-                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transition duration-150 ease-in-out ${
+                    className={`flex-1 sm:flex-none cursor-pointer p-2 rounded-r-md border transition duration-150 ease-in-out ${
                       eventViewMode === "card"
                         ? "bg-teal-600 border-teal-700 text-white shadow-sm z-10"
                         : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"

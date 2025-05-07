@@ -1482,7 +1482,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                         }}
                         disabled={isProcessing}
                         title="Chỉnh sửa"
-                        className={`p-1.5 rounded text-xs font-medium flex items-center justify-center gap-1 transition ${
+                        className={`p-1.5 rounded text-xs cursor-pointer font-medium flex items-center justify-center gap-1 transition ${
                           isProcessing
                             ? "bg-gray-200 text-gray-400 cursor-wait"
                             : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
@@ -1499,7 +1499,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                         }}
                         disabled={isProcessing}
                         title="Xóa"
-                        className={`p-1.5 rounded text-xs font-medium flex items-center justify-center gap-1 transition ${
+                        className={`p-1.5 rounded text-xs cursor-pointer font-medium flex items-center justify-center gap-1 transition ${
                           isProcessing
                             ? "bg-gray-200 text-gray-400 cursor-wait"
                             : "bg-red-100 text-red-700 hover:bg-red-200"
@@ -1520,7 +1520,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                         }}
                         disabled={isProcessing}
                         title="Khôi phục"
-                        className={`flex-1 px-2 py-1 rounded text-xs font-medium flex items-center justify-center gap-1 transition ${
+                        className={`flex-1 px-2 py-1 cursor-pointer rounded text-xs font-medium flex items-center justify-center gap-1 transition ${
                           isProcessing
                             ? "bg-yellow-200 text-yellow-700 cursor-wait"
                             : "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
@@ -1646,7 +1646,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                         }}
                         disabled={isProcessing}
                         title="Chỉnh sửa"
-                        className={`p-1.5 rounded text-xs font-medium flex items-center justify-center gap-1 transition ${
+                        className={`p-1.5 rounded text-xs cursor-pointer font-medium flex items-center justify-center gap-1 transition ${
                           isProcessing
                             ? "bg-gray-200 text-gray-400 cursor-wait"
                             : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
@@ -1663,7 +1663,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                         }}
                         disabled={isProcessing}
                         title="Xóa"
-                        className={`p-1.5 rounded text-xs font-medium flex items-center justify-center gap-1 transition ${
+                        className={`p-1.5 rounded text-xs cursor-pointer font-medium flex items-center justify-center gap-1 transition ${
                           isProcessing
                             ? "bg-gray-200 text-gray-400 cursor-wait"
                             : "bg-red-100 text-red-700 hover:bg-red-200"
@@ -1876,7 +1876,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
             <button
               onClick={() => handleOpenUpdateModal(event)}
               disabled={isProcessing}
-              className={`bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md text-sm cursor-pointer flex items-center shadow-sm transition ${
+              className={`bg-indigo-500 hover:bg-indigo-600 cursor-pointer text-white px-4 py-2 rounded-md text-sm cursor-pointer flex items-center shadow-sm transition ${
                 isProcessing ? "opacity-50 cursor-wait" : ""
               }`}
             >
@@ -2603,7 +2603,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                       <button
                         onClick={() => setMyViewMode("card")}
                         title="Chế độ thẻ"
-                        className={`flex-1 md:flex-none p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
+                        className={`flex-1 md:flex-none cursor-pointer p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
                           myViewMode === "card"
                             ? "bg-blue-600 border-blue-700 text-white shadow-sm z-10"
                             : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
@@ -2615,7 +2615,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                       <button
                         onClick={() => setMyViewMode("list")}
                         title="Chế độ danh sách"
-                        className={`flex-1 md:flex-none p-2 rounded-r-md border transition duration-150 ease-in-out ${
+                        className={`flex-1 md:flex-none cursor-pointer p-2 rounded-r-md border transition duration-150 ease-in-out ${
                           myViewMode === "list"
                             ? "bg-blue-600 border-blue-700 text-white shadow-sm z-10"
                             : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
@@ -2735,7 +2735,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                       <button
                         onClick={() => setDeletedViewMode("card")}
                         title="Chế độ thẻ"
-                        className={`flex-1 md:flex-none p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
+                        className={`flex-1 md:flex-none cursor-pointer p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
                           deletedViewMode === "card"
                             ? "bg-gray-600 border-gray-700 text-white shadow-sm z-10"
                             : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
@@ -2747,7 +2747,7 @@ const MyEventsTabContent: React.FC<MyEventsProps> = ({
                       <button
                         onClick={() => setDeletedViewMode("list")}
                         title="Chế độ danh sách"
-                        className={`flex-1 md:flex-none p-2 rounded-r-md border transition duration-150 ease-in-out ${
+                        className={`flex-1 md:flex-none cursor-pointer p-2 rounded-r-md border transition duration-150 ease-in-out ${
                           deletedViewMode === "list"
                             ? "bg-gray-600 border-gray-700 text-white shadow-sm z-10"
                             : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"

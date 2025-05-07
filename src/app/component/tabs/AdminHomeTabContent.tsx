@@ -381,7 +381,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              <option value="date">📅 Gần nhất</option>
+              {/* <option value="date">📅 Gần nhất</option> */}
               <option value="az">🔤 A - Z</option>
               <option value="za">🔤 Z - A</option>
             </select>
@@ -431,11 +431,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             </select>
           </div>
           {/* View Toggle */}
-          <div className="flex items-center gap-2 flex-shrink-0 self-center">
+          <div className="flex items-center gap-2 flex-shrink-0 self-center ">
             <button
               onClick={() => setViewMode("card")}
               title="Chế độ thẻ"
-              className={`p-2 rounded-md border transition ${
+              className={`p-2 rounded-md border transition cursor-pointer ${
                 viewMode === "card"
                   ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
@@ -447,7 +447,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             <button
               onClick={() => setViewMode("list")}
               title="Chế độ danh sách"
-              className={`p-2 rounded-md border transition ${
+              className={`p-2 rounded-md border transition cursor-pointer ${
                 viewMode === "list"
                   ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
@@ -1091,7 +1091,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-md border bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-md border cursor-pointer bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                 >
                   {" "}
                   <ChevronLeftIcon className="w-4 h-4" /> Trước{" "}
@@ -1099,7 +1099,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-md border bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-md border cursor-pointer bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                 >
                   {" "}
                   Sau <ChevronRightIcon className="w-4 h-4" />{" "}

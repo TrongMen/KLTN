@@ -1332,7 +1332,7 @@ export default function HomeGuest() {
           <button
             ref={notificationButtonRef}
             onClick={handleNotificationClick}
-            className="relative flex items-center justify-center h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150"
+            className="relative flex items-center cursor-pointer justify-center h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150"
             aria-label="Thông báo"
             aria-haspopup="true"
             aria-expanded={showNotificationDropdown}

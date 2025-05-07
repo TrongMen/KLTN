@@ -1054,7 +1054,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
         <div className="flex-shrink-0 flex items-center gap-2 p-1 bg-gray-200 rounded-lg">
           <button
             onClick={() => setDisplayMode("list")}
-            className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+            className={`px-3 py-1 rounded-md text-sm font-medium transition-colors cursor-pointer ${
               displayMode === "list"
                 ? "bg-white text-purple-600 shadow"
                 : "text-gray-600 hover:bg-gray-100"
@@ -1066,7 +1066,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
           </button>
           <button
             onClick={() => setDisplayMode("card")}
-            className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+            className={`px-3 py-1 rounded-md text-sm cursor-pointer font-medium transition-colors ${
               displayMode === "card"
                 ? "bg-white text-purple-600 shadow"
                 : "text-gray-600 hover:bg-gray-100"
@@ -1432,7 +1432,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                             )
                           }
                           disabled={unlockingMemberId === member.id}
-                          className={`${unlockButtonClasses} w-full sm:w-auto justify-center mt-2 ${
+                          className={`${unlockButtonClasses} w-full sm:w-auto justify-center mt-2 cursor-pointer ${
                             unlockingMemberId === member.id ? "cursor-wait" : ""
                           }`}
                           title={`Mở khóa tài khoản của ${member.displayName}`}
@@ -1832,7 +1832,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                           )
                         }
                         disabled={unlockingMemberId === member.id}
-                        className={`${unlockButtonClasses} w-full justify-center text-xs py-2 ${
+                        className={`${unlockButtonClasses} w-full justify-center text-xs py-2  cursor-pointer${
                           unlockingMemberId === member.id ? "cursor-wait" : ""
                         }`}
                         title={`Mở khóa tài khoản của ${member.displayName}`}

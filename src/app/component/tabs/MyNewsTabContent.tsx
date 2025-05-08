@@ -920,7 +920,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
           onClick={() => setViewingNewsDetails(null)}
           className="mb-4 text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer p-1 rounded hover:bg-blue-50"
         >
-          <ArrowLeftIcon className="h-4 w-4 mr-1" /> Quay lại danh sách
+          <ChevronLeftIcon className="h-6 w-6 " /> Quay lại danh sách
         </button>
 
         <h3 className="text-xl font-bold text-gray-800 mb-4">{item.title}</h3>
@@ -1659,10 +1659,10 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                       backgroundSize: "1.5em 1.5em",
                     }}
                   >
-                    <option value="newest">Ngày tạo mới nhất</option>
-                    <option value="oldest">Ngày tạo cũ nhất</option>
-                    <option value="az">Tiêu đề A - Z</option>
-                    <option value="za">Tiêu đề Z - A</option>
+                    {/* <option value="newest">Ngày tạo mới nhất</option> */}
+                    {/* <option value="oldest">Ngày tạo cũ nhất</option> */}
+                    <option value="az"> A - Z</option>
+                    <option value="za"> Z - A</option>
                   </select>
                 </div>
                 <div>

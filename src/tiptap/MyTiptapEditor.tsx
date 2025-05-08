@@ -4,7 +4,7 @@ import StarterKit from '@tiptap/starter-kit';
 import FontFamily from '@tiptap/extension-font-family';
 import TextStyle from '@tiptap/extension-text-style';
 import Underline from '@tiptap/extension-underline';
-import MenuBar from './MenuBar'; // <-- Đảm bảo đường dẫn đúng
+import MenuBar from './MenuBar'; 
 
 interface MyTiptapEditorProps {
   initialContent?: string;

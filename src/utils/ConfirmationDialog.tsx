@@ -2,7 +2,6 @@
 
 import React, { useMemo } from 'react';
 
-// Định nghĩa Interface cho props
 export interface ConfirmationDialogProps {
   isOpen: boolean;
   title: string;
@@ -14,7 +13,6 @@ export interface ConfirmationDialogProps {
   confirmVariant?: "primary" | "danger";
 }
 
-// Export component ConfirmationDialog
 export function ConfirmationDialog({
   isOpen,
   title,
@@ -53,5 +51,4 @@ export function ConfirmationDialog({
   );
 }
 
-// Hoặc bạn có thể export default nếu muốn
-// export default ConfirmationDialog;
+export default ConfirmationDialog;

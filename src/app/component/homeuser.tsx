@@ -1064,7 +1064,7 @@ export default function UserHome() {
     { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
     { id: "myNews", label: "📝 Tin tức của tôi", requiresAuth: true },
     { id: "myEvents", label: "🛠 Sự kiện / Đăng ký", requiresAuth: true },
-    { id: "attendees", label: "✅ Điểm danh / Tham gia", requiresAuth: true },
+    { id: "attendees", label: "✅ Điểm danh ", requiresAuth: true },
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
     { id: "chatList", label: "💬 Chat", requiresAuth: true },
   ];

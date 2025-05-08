@@ -5,7 +5,7 @@ import Image from "next/image";
 import { toast } from "react-hot-toast";
 import { EventDisplayInfo } from "../homeadmin"; // Điều chỉnh đường dẫn nếu cần
 import {
-  ReloadIcon, // Thêm ReloadIcon
+  ReloadIcon,
   CheckCircledIcon,
   ClockIcon,
   CalendarIcon,
@@ -34,7 +34,7 @@ interface AdminHomeTabContentProps {
   selectedEvent: EventDisplayInfo | null;
   onEventClick: (event: EventDisplayInfo) => void;
   onBackToList: () => void;
-  onRefreshEvents: () => Promise<void>; // Prop mới cho hàm refresh
+  onRefreshEvents: () => Promise<void>;
 }
 
 type EventStatus = "upcoming" | "ongoing" | "ended";
@@ -59,6 +59,7 @@ const getEventStatus = (eventDateStr: string): EventStatus => {
     else if (eventDateStart > todayStart) return "upcoming";
     else return "ongoing";
   } catch (e) {
+    console.error("Error parsing event date for getEventStatus:", e);
     return "upcoming";
   }
 };
@@ -116,6 +117,15 @@ const getApprovalStatusBadgeColor = (status?: string) => {
       return "bg-gray-100 text-gray-800 border border-gray-200";
   }
 };
+const getApprovalStatusText = (status?: string) => {
+    switch (status?.toUpperCase()) {
+      case "APPROVED": return "Đã duyệt";
+      case "PENDING": return "Chờ duyệt";
+      case "REJECTED": return "Bị từ chối";
+      default: return status || "Không rõ";
+    }
+};
+
 
 const getWeekRange = (
   refDate: Date
@@ -160,14 +170,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   selectedEvent,
   onEventClick,
   onBackToList,
-  onRefreshEvents, // Nhận prop mới
+  onRefreshEvents,
 }) => {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(
     ITEMS_PER_PAGE_OPTIONS[0]
   );
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false); // State loading cho nút refresh
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const processedEvents = useMemo(() => {
     let evts = [...events];
@@ -242,29 +252,33 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         (e) =>
           e.title.toLowerCase().includes(l) ||
           (e.location && e.location.toLowerCase().includes(l)) ||
-          (e.status && e.status.toLowerCase().includes(l))
+          (e.status && getApprovalStatusText(e.status).toLowerCase().includes(l)) ||
+          (e.createdBy && e.createdBy.toLowerCase().includes(l))
       );
     }
-    if (sortOption === "za")
-      evts.sort((a, b) =>
-        b.title.localeCompare(a.title, "vi", { sensitivity: "base" })
-      );
-    else if (sortOption === "az")
-      evts.sort((a, b) =>
-        a.title.localeCompare(b.title, "vi", { sensitivity: "base" })
-      );
-    else {
-      evts.sort((a, b) => {
-        try {
-          const dateA = new Date(a.date).getTime();
-          const dateB = new Date(b.date).getTime();
-          if (isNaN(dateA) || isNaN(dateB)) return 0;
-          return dateB - dateA;
-        } catch {
-          return 0;
+    evts.sort((a, b) => {
+        const isAPending = a.status === "PENDING";
+        const isBPending = b.status === "PENDING";
+        if (isAPending && !isBPending) return -1;
+        if (!isAPending && isBPending) return 1;
+
+        if (sortOption === "za") {
+            return b.title.localeCompare(a.title, "vi", { sensitivity: "base" });
+        } else if (sortOption === "az") {
+            return a.title.localeCompare(b.title, "vi", { sensitivity: "base" });
+        } else {
+            try {
+                const dateA = a.date ? new Date(a.date).getTime() : 0;
+                const dateB = b.date ? new Date(b.date).getTime() : 0;
+                if (isNaN(dateA) && isNaN(dateB)) return 0;
+                if (isNaN(dateA)) return 1;
+                if (isNaN(dateB)) return -1;
+                return dateB - dateA;
+            } catch {
+                return 0;
+            }
         }
-      });
-    }
+    });
     return evts;
   }, [
     events,
@@ -315,15 +329,15 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   };
 
   const handleRefresh = async () => {
-    setIsRefreshing(true); // Bắt đầu loading nút refresh
+    setIsRefreshing(true);
     try {
-      await onRefreshEvents(); // Gọi hàm fetch từ props
+      await onRefreshEvents();
       toast.success("Đã làm mới danh sách sự kiện!");
     } catch (error) {
       console.error("Lỗi khi làm mới sự kiện (AdminHomeTabContent):", error);
       toast.error("Không thể làm mới sự kiện.");
     } finally {
-      setIsRefreshing(false); // Kết thúc loading nút refresh
+      setIsRefreshing(false);
     }
   };
 
@@ -331,23 +345,21 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600 shrink-0">
-          Trang chủ Sự kiện (Admin)
+          Quản lý Sự kiện
         </h1>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
-          {/* Thêm nút Làm mới */}
           <div className="flex-grow sm:flex-grow-0">
             <button
               onClick={handleRefresh}
-              disabled={isLoading || isRefreshing} // Disable nếu đang tải hoặc đang refresh
+              disabled={isLoading || isRefreshing}
               title="Làm mới danh sách sự kiện"
               className="w-full h-full p-2 border cursor-pointer border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
             >
-              {isRefreshing ? ( // Hiển thị icon xoay nếu đang refresh
+              {isRefreshing ? (
                 <ReloadIcon className="w-5 h-5 animate-spin text-indigo-600" />
               ) : (
                 <ReloadIcon className="w-5 h-5 text-indigo-600" />
               )}
-              {/* <span className="ml-2 hidden sm:inline">Làm mới</span> */}
             </button>
           </div>
           <div className="flex-grow sm:flex-grow-0">
@@ -363,6 +375,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
+              <option value="default">⭐ Ưu tiên chờ duyệt</option>
               <option value="date-desc">📅 Mới nhất</option>
               <option value="az">🔤 A - Z</option>
               <option value="za">🔤 Z - A</option>
@@ -381,13 +394,13 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              <option value="all">♾️ Tất cả</option>{" "}
+              <option value="all">♾️ Tất cả</option>
               <option value="upcoming">☀️ Sắp diễn ra</option>
-              <option value="ongoing">🟢 Đang diễn ra</option>{" "}
+              <option value="ongoing">🟢 Đang diễn ra</option>
               <option value="ended">🏁 Đã kết thúc</option>
-              <option value="today">📅 Hôm nay</option>{" "}
+              <option value="today">📅 Hôm nay</option>
               <option value="thisWeek">🗓️ Tuần này</option>
-              <option value="thisMonth">🗓️ Tháng này</option>{" "}
+              <option value="thisMonth">🗓️ Tháng này</option>
               <option value="dateRange">🔢 Khoảng ngày</option>
             </select>
           </div>
@@ -418,8 +431,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
               }`}
             >
-              {" "}
-              <GridIcon className="h-5 w-5" />{" "}
+              <GridIcon className="h-5 w-5" />
             </button>
             <button
               onClick={() => setViewMode("list")}
@@ -430,8 +442,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
               }`}
             >
-              {" "}
-              <ListBulletIcon className="h-5 w-5" />{" "}
+              <ListBulletIcon className="h-5 w-5" />
             </button>
           </div>
         </div>
@@ -439,16 +450,13 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
 
       {timeFilterOption === "dateRange" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
-          {" "}
           <div>
-            {" "}
             <label
               htmlFor="startDateFilterAdmin"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              {" "}
-              Từ ngày{" "}
-            </label>{" "}
+              Từ ngày
+            </label>
             <input
               type="date"
               id="startDateFilterAdmin"
@@ -456,17 +464,15 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               onChange={handleStartDateChange}
               max={endDateFilter || undefined}
               className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />{" "}
-          </div>{" "}
+            />
+          </div>
           <div>
-            {" "}
             <label
               htmlFor="endDateFilterAdmin"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              {" "}
-              Đến ngày{" "}
-            </label>{" "}
+              Đến ngày
+            </label>
             <input
               type="date"
               id="endDateFilterAdmin"
@@ -474,45 +480,43 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               onChange={handleEndDateChange}
               min={startDateFilter || undefined}
               className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />{" "}
-          </div>{" "}
+            />
+          </div>
         </div>
       )}
       <div className="relative w-full mb-6">
-        {" "}
         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-          {" "}
-          🔍{" "}
-        </span>{" "}
+          🔍
+        </span>
         <input
           id="searchAdminHome"
           type="text"
-          placeholder="Tìm sự kiện theo tên, địa điểm, trạng thái duyệt..."
+          placeholder="Tìm theo tên, địa điểm, trạng thái duyệt, người tạo..."
           className="w-full p-3 pl-10 pr-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
             setCurrentPage(1);
           }}
-        />{" "}
+        />
       </div>
 
-      {isLoading ? (
-        <p className="text-center text-gray-500 italic py-6">
-          Đang tải sự kiện...
-        </p>
+      {isLoading && !selectedEvent ? (
+         <div className="flex justify-center items-center min-h-[200px]">
+           <ReloadIcon className="w-8 h-8 animate-spin text-indigo-600" />
+           <p className="ml-3 text-gray-500 italic">Đang tải danh sách sự kiện...</p>
+         </div>
       ) : error ? (
         <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
           Lỗi tải sự kiện: {error}
         </p>
       ) : selectedEvent ? (
+        // --- Chế độ xem chi tiết ---
         <div className="p-6 border rounded-lg shadow-lg bg-gray-50 mb-6">
-          {" "}
           <button
             onClick={onBackToList}
             className="mb-4 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer p-1 rounded hover:bg-indigo-50"
           >
-            {" "}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               className="h-4 w-4 mr-1"
@@ -521,19 +525,16 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               stroke="currentColor"
               strokeWidth={2}
             >
-              {" "}
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 d="M15 19l-7-7 7-7"
-              />{" "}
-            </svg>{" "}
-            Quay lại danh sách{" "}
-          </button>{" "}
+              />
+            </svg>
+            Quay lại danh sách
+          </button>
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
-            {" "}
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
-              {" "}
               {selectedEvent.avatarUrl ? (
                 <Image
                   src={selectedEvent.avatarUrl}
@@ -546,17 +547,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 <div className="w-full h-48 md:h-64 lg:h-80 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-5xl font-semibold border">
                   {selectedEvent.title?.charAt(0).toUpperCase() || "?"}
                 </div>
-              )}{" "}
-            </div>{" "}
+              )}
+            </div>
             <div className="flex-grow space-y-4">
-              {" "}
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                {" "}
                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex-1">
                   {selectedEvent.title}
-                </h2>{" "}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-shrink-0 mt-1 sm:mt-0">
-                  {" "}
+                </h2>
+                <div className="flex flex-col items-end sm:items-center sm:flex-row gap-2 flex-shrink-0 mt-1 sm:mt-0">
                   {(() => {
                     const status = getEventStatus(selectedEvent.date);
                     return (
@@ -568,90 +566,84 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                         {getStatusIcon(status)} {getStatusText(status)}
                       </span>
                     );
-                  })()}{" "}
+                  })()}
                   {selectedEvent.status && (
                     <span
                       className={`px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(
                         selectedEvent.status
                       )} flex-shrink-0`}
                     >
-                      <InfoCircledIcon className="w-3 h-3" />{" "}
-                      {selectedEvent.status}
+                      <InfoCircledIcon className="w-3 h-3" />
+                      {getApprovalStatusText(selectedEvent.status)}
                     </span>
-                  )}{" "}
-                </div>{" "}
-              </div>{" "}
+                  )}
+                </div>
+              </div>
               <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
-                {" "}
                 <p>
                   <strong className="font-medium text-gray-900 w-24 inline-block">
                     📅 Ngày:
-                  </strong>{" "}
+                  </strong>
                   {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}
-                </p>{" "}
+                </p>
                 {selectedEvent.time && (
                   <p>
                     <strong className="font-medium text-gray-900 w-24 inline-block">
                       🕒 Thời gian:
-                    </strong>{" "}
+                    </strong>
                     {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
                   </p>
-                )}{" "}
+                )}
                 <p>
                   <strong className="font-medium text-gray-900 w-24 inline-block">
                     📍 Địa điểm:
-                  </strong>{" "}
+                  </strong>
                   {selectedEvent.location}
-                </p>{" "}
+                </p>
                 <p>
                   <strong className="font-medium text-gray-900 w-24 inline-block">
                     👤 Người tạo:
-                  </strong>{" "}
-                  {selectedEvent.createdBy
-                    ? `ID: ${selectedEvent.createdBy}`
-                    : "N/A"}
-                </p>{" "}
+                  </strong>
+                  {selectedEvent.createdBy ? `${selectedEvent.createdBy}` : "N/A"}
+                </p>
                 {selectedEvent.purpose && (
                   <p>
                     <strong className="font-medium text-gray-900 w-24 inline-block align-top">
                       🎯 Mục đích:
-                    </strong>{" "}
+                    </strong>
                     <span className="inline-block max-w-[calc(100%-6rem)]">
                       {selectedEvent.purpose}
                     </span>
                   </p>
-                )}{" "}
-              </div>{" "}
+                )}
+              </div>
               <div className="space-y-3 text-sm">
-                {" "}
                 <div>
-                  {" "}
                   <p className="font-medium text-gray-900 mb-1">
                     📜 Nội dung:
-                  </p>{" "}
+                  </p>
                   <p className="text-gray-700 whitespace-pre-wrap">
                     {selectedEvent.content ||
                       selectedEvent.description ||
                       "Không có nội dung chi tiết."}
-                  </p>{" "}
-                </div>{" "}
+                  </p>
+                </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
                     👥 Ban tổ chức:
-                  </strong>{" "}
+                  </strong>
                   {selectedEvent.organizers &&
                   selectedEvent.organizers.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
                       {selectedEvent.organizers.map((org, index) => (
                         <li
-                          key={`<span class="math-inline">\{org\.userId\}\-</span>{index}`}
+                          key={`${org.userId}-${index}`}
                         >
                           {org.roleName || org.positionName
-                            ? `<span class="math-inline">\{org\.roleName \|\| ""\}</span>{org.roleName && org.positionName ? " - " : ""}${
+                            ? `${org.roleName || ""}${org.roleName && org.positionName ? " - " : ""}${
                                 org.positionName || ""
                               }`
                             : `Thành viên ${index + 1}`}
@@ -660,22 +652,21 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
-                  )}{" "}
-                </div>{" "}
+                  )}
+                </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
                     👤 Người tham gia (Vai trò/Chức vụ):
-                  </strong>{" "}
+                  </strong>
                   {selectedEvent.participants &&
                   selectedEvent.participants.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
                       {selectedEvent.participants.map((p, index) => (
                         <li
-                          key={`<span class="math-inline">\{p\.userId\}\-</span>{index}`}
+                          key={`${p.userId}-${index}`}
                         >
                           {p.roleName || p.positionName
-                            ? `<span class="math-inline">\{p\.roleName \|\| ""\}</span>{p.roleName && p.positionName ? " - " : ""}${
+                            ? `${p.roleName || ""}${p.roleName && p.positionName ? " - " : ""}${
                                 p.positionName || ""
                               }`
                             : `Người tham gia ${index + 1}`}
@@ -684,63 +675,56 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
-                  )}{" "}
-                </div>{" "}
+                  )}
+                </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
                     ✅ Người tham dự (Đã đăng ký):
-                  </strong>{" "}
+                  </strong>
                   {selectedEvent.attendees &&
                   selectedEvent.attendees.length > 0 ? (
-                    <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
+                    <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1 max-h-32 overflow-y-auto">
                       {selectedEvent.attendees.map((att) => (
                         <li key={att.userId}>
-                          {att.fullName || `ID: ${att.userId}`}{" "}
+                          {att.fullName || `ID: ${att.userId}`}
                           {att.studentCode && ` (${att.studentCode})`}
                         </li>
                       ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có ai đăng ký.</p>
-                  )}{" "}
-                </div>{" "}
-              </div>{" "}
+                  )}
+                </div>
+              </div>
               <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end gap-3">
-                {" "}
+                {/* Nút Sửa đã bị loại bỏ */}
                 <button
-                  onClick={() => toast.info("Chức năng sửa đang phát triển")}
-                  className="px-4 py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition text-sm font-medium"
-                >
-                  Sửa
-                </button>{" "}
-                <button
-                  onClick={() => toast.info("Chức năng xoá đang phát triển")}
+                  onClick={() => toast.error("Chức năng xoá sự kiện tạm thời không khả dụng.")}
                   className="px-4 py-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition text-sm font-medium"
                 >
-                  Xóa
-                </button>{" "}
+                  Xoá sự kiện
+                </button>
                 {selectedEvent.status === "PENDING" && (
                   <button
                     onClick={() =>
-                      toast.info("Chức năng duyệt đang phát triển")
+                      toast.info("Chức năng duyệt sự kiện đang được phát triển.")
                     }
-                    className="px-4 py-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition text-sm font-medium"
+                    className="px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition text-sm font-medium"
                   >
-                    Duyệt
+                    Duyệt sự kiện
                   </button>
-                )}{" "}
-              </div>{" "}
-            </div>{" "}
-          </div>{" "}
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
+        // --- Chế độ xem danh sách/thẻ ---
         <div className="mt-1 mb-6">
-          {" "}
           {processedEvents.length > 0 ? (
             viewMode === "card" ? (
+              // --- Chế độ xem thẻ (Card View) ---
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {" "}
                 {paginatedEvents.map((event) => {
                   const timeStatus = getEventStatus(event.date);
                   return (
@@ -748,12 +732,10 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                       key={event.id}
                       className="bg-white shadow-md rounded-xl overflow-hidden transform transition hover:scale-[1.02] hover:shadow-lg flex flex-col border border-gray-200 hover:border-indigo-300"
                     >
-                      {" "}
                       <div
                         className="w-full h-40 bg-gray-200 relative cursor-pointer"
                         onClick={() => onEventClick(event)}
                       >
-                        {" "}
                         {event.avatarUrl ? (
                           <Image
                             src={event.avatarUrl}
@@ -778,264 +760,214 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                           <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
                             {event.title?.charAt(0).toUpperCase() || "?"}
                           </div>
-                        )}{" "}
-                        <span
-                          className={`absolute top-2 right-2 ${getStatusBadgeClasses(
-                            timeStatus
-                          )} shadow-sm`}
-                        >
-                          {getStatusIcon(timeStatus)}{" "}
-                          {getStatusText(timeStatus)}
-                        </span>{" "}
-                        {event.status && (
-                          <span
-                            className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(
-                              event.status
-                            )} shadow-sm`}
-                          >
-                            <InfoCircledIcon className="w-3 h-3" />{" "}
-                            {event.status}
-                          </span>
-                        )}{" "}
-                      </div>{" "}
+                        )}
+                         <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                            <span className={`${getStatusBadgeClasses(timeStatus)} shadow-sm`}>
+                                {getStatusIcon(timeStatus)} {getStatusText(timeStatus)}
+                            </span>
+                            {event.status && (
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(event.status)} shadow-sm`}>
+                                    <InfoCircledIcon className="w-3 h-3" /> {getApprovalStatusText(event.status)}
+                                </span>
+                            )}
+                        </div>
+                      </div>
                       <div className="p-4 flex flex-col flex-grow">
-                        {" "}
                         <div
                           onClick={() => onEventClick(event)}
-                          className="cursor-pointer mb-3"
+                          className="cursor-pointer mb-3 flex-grow"
                         >
-                          {" "}
                           <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
                             {event.title}
-                          </h2>{" "}
+                          </h2>
                           <div className="space-y-0.5 mb-2">
-                            {" "}
                             <p className="text-sm text-gray-600 flex items-center gap-1">
                               <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
                               {new Date(event.date).toLocaleDateString("vi-VN")}
-                            </p>{" "}
+                            </p>
                             <p className="text-sm text-gray-600 flex items-center gap-1">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-3.5 w-3.5 text-gray-400"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                />
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                />
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} >
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                               </svg>
                               {event.location}
-                            </p>{" "}
-                          </div>{" "}
+                            </p>
+                          </div>
                           <div className="text-xs text-gray-500 flex items-center gap-x-3 mt-1">
-                            {event.organizers && (
+                            {event.organizers && event.organizers.length > 0 &&(
                               <span>👥 BTC: {event.organizers.length}</span>
-                            )}{" "}
-                            {event.attendees && (
+                            )}
+                            {event.attendees && event.attendees.length > 0 && (
                               <span>✅ Đã ĐK: {event.attendees.length}</span>
                             )}
-                          </div>{" "}
-                        </div>{" "}
-                        <div className="flex-grow"></div>{" "}
+                          </div>
+                        </div>
                         <div className="mt-auto pt-3 border-t border-gray-100 flex justify-end gap-2">
-                          {" "}
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toast.info("Chức năng sửa đang phát triển");
-                            }}
-                            className="px-2.5 py-1 rounded text-xs bg-blue-50 text-blue-600 hover:bg-blue-100"
+                            onClick={(e) => { e.stopPropagation(); onEventClick(event); }}
+                            className="px-2.5 py-1 rounded text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-medium"
                           >
-                            Sửa
-                          </button>{" "}
+                            Chi tiết
+                          </button>
+                          {/* Nút Sửa đã bị loại bỏ */}
+                          {event.status === "PENDING" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toast.info("Chức năng duyệt đang phát triển"); }}
+                              className="px-2.5 py-1 rounded text-xs bg-green-500 text-white hover:bg-green-600"
+                            >
+                              Duyệt
+                            </button>
+                          )}
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toast.info("Chức năng xoá đang phát triển");
-                            }}
-                            className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100"
+                                onClick={(e) => { e.stopPropagation(); toast.error("Chức năng xoá sự kiện tạm thời không khả dụng.");}}
+                                className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100"
                           >
-                            Xoá
-                          </button>{" "}
-                        </div>{" "}
-                      </div>{" "}
+                                Xoá
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   );
-                })}{" "}
+                })}
               </div>
             ) : (
-              <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
-                {" "}
-                <ul className="divide-y divide-gray-200">
-                  {" "}
-                  {paginatedEvents.map((event) => {
+               // CHẾ ĐỘ DANH SÁCH (LIST VIEW) - ADMIN
+                <ul className="space-y-4">
+                    {paginatedEvents.map((event) => {
                     const timeStatus = getEventStatus(event.date);
                     return (
-                      <li
+                        <li
                         key={event.id}
-                        className="px-4 py-3 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors"
-                      >
-                        {" "}
-                        <div
-                          className="flex items-center flex-1 min-w-0 mb-2 sm:mb-0 sm:pr-4 cursor-pointer"
-                          onClick={() => onEventClick(event)}
+                        className="bg-white shadow-lg rounded-xl overflow-hidden transition transform hover:scale-[1.01] hover:shadow-xl flex flex-col md:flex-row border border-gray-200 hover:border-indigo-300"
                         >
-                          {" "}
-                          {event.avatarUrl ? (
+                        <div
+                            className="relative w-full md:w-1/3 xl:w-1/4 flex-shrink-0 h-48 md:h-auto cursor-pointer"
+                            onClick={() => onEventClick(event)}
+                        >
+                            {event.avatarUrl ? (
                             <Image
-                              src={event.avatarUrl}
-                              alt={`Avatar`}
-                              width={40}
-                              height={40}
-                              className="w-10 h-10 rounded-md object-cover mr-3 flex-shrink-0 border bg-gray-100"
+                                src={event.avatarUrl}
+                                alt={`Hình ảnh cho ${event.title}`}
+                                layout="fill"
+                                objectFit="cover"
+                                className="bg-gray-100"
                             />
-                          ) : (
-                            <div className="w-10 h-10 rounded-md bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 font-semibold mr-3 flex-shrink-0 border">
-                              {event.title?.charAt(0).toUpperCase() || "?"}
+                            ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
+                                {event.title?.charAt(0).toUpperCase() || "?"}
                             </div>
-                          )}{" "}
-                          <div className="flex-1 min-w-0">
-                            {" "}
-                            <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1">
-                              {event.title}
-                            </p>{" "}
-                            <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              {" "}
-                              <span
-                                className={getStatusBadgeClasses(timeStatus)}
-                              >
-                                {getStatusIcon(timeStatus)}{" "}
-                                {getStatusText(timeStatus)}
-                              </span>{" "}
-                              {event.status && (
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(
-                                    event.status
-                                  )}`}
+                            )}
+                        </div>
+
+                        <div className="p-4 flex flex-col justify-between flex-grow md:pl-4">
+                            <div className="mb-3" onClick={() => onEventClick(event)} >
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1">
+                                    <h2 className="text-md sm:text-lg font-semibold text-gray-800 hover:text-indigo-600 cursor-pointer line-clamp-2 flex-1">
+                                    {event.title}
+                                    </h2>
+                                    <div className="flex flex-col items-end sm:items-start sm:flex-row sm:ml-2 gap-1 mt-1 sm:mt-0 shrink-0">
+                                        <span className={`${getStatusBadgeClasses(timeStatus)}`}>
+                                            {getStatusIcon(timeStatus)} {getStatusText(timeStatus)}
+                                        </span>
+                                        {event.status && (
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(event.status)}`}>
+                                            <InfoCircledIcon className="w-3 h-3" /> {getApprovalStatusText(event.status)}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-xs text-gray-500 space-y-1 mb-2">
+                                    <p className="flex items-center gap-1">
+                                    <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+                                    {new Date(event.date).toLocaleDateString("vi-VN")}
+                                    {event.time && ` - ${new Date(event.time).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit"})}`}
+                                    </p>
+                                    <p className="flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} >
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    {event.location}
+                                    </p>
+                                    {event.createdBy && (
+                                       <p className="flex items-center gap-1">
+                                       <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                        Người tạo: {event.createdBy}
+                                       </p>
+                                    )}
+                                </div>
+                                <p className="text-sm text-gray-600 line-clamp-2 mb-2">
+                                    {event.description || event.purpose || "Chưa có mô tả chi tiết."}
+                                </p>
+                                <div className="text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    {event.organizers && event.organizers.length > 0 && (
+                                    <span className="inline-flex items-center gap-1">👥 {event.organizers.length} BTC</span>
+                                    )}
+                                    {event.attendees && event.attendees.length > 0 && (
+                                    <span className="inline-flex items-center gap-1">✅ {event.attendees.length} ĐK</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="mt-auto flex justify-end gap-2">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onEventClick(event); }}
+                                    className="px-3 py-1.5 rounded-md text-xs bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition font-medium"
                                 >
-                                  <InfoCircledIcon className="w-3 h-3" />{" "}
-                                  {event.status}
-                                </span>
-                              )}{" "}
-                              <span className="inline-flex items-center gap-1">
-                                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
-                                {new Date(event.date).toLocaleDateString(
-                                  "vi-VN"
+                                    Xem chi tiết
+                                </button>
+                                {/* Nút Sửa đã bị loại bỏ */}
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); toast.error("Chức năng xoá sự kiện tạm thời không khả dụng.");}}
+                                    className="px-3 py-1.5 rounded-md text-xs bg-red-100 text-red-700 hover:bg-red-200 transition font-medium"
+                                >
+                                    Xoá
+                                </button>
+                                 {event.status === "PENDING" && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); toast.info("Chức năng duyệt sự kiện đang được phát triển.");}}
+                                        className="px-3 py-1.5 rounded-md text-xs bg-green-500 text-white hover:bg-green-600 transition font-medium"
+                                    >
+                                        Duyệt
+                                    </button>
                                 )}
-                              </span>{" "}
-                              <span className="inline-flex items-center gap-1">
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-3.5 w-3.5 text-gray-400"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={2}
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                  />
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                  />
-                                </svg>
-                                {event.location}
-                              </span>{" "}
-                              {event.organizers && (
-                                <span className="inline-flex items-center gap-1">
-                                  👥 {event.organizers.length} BTC
-                                </span>
-                              )}{" "}
-                              {event.attendees && (
-                                <span className="inline-flex items-center gap-1">
-                                  ✅ {event.attendees.length} ĐK
-                                </span>
-                              )}{" "}
-                            </div>{" "}
-                          </div>{" "}
-                        </div>{" "}
-                        <div className="flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0 flex justify-end gap-2">
-                          {" "}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEventClick(event);
-                            }}
-                            className="px-2.5 py-1 rounded text-xs bg-gray-100 text-gray-700 hover:bg-gray-200"
-                          >
-                            Xem chi tiết
-                          </button>{" "}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toast.info("Chức năng sửa đang phát triển");
-                            }}
-                            className="px-2.5 py-1 rounded text-xs bg-blue-50 text-blue-600 hover:bg-blue-100"
-                          >
-                            Sửa
-                          </button>{" "}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toast.info("Chức năng xoá đang phát triển");
-                            }}
-                            className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100"
-                          >
-                            Xoá
-                          </button>{" "}
-                        </div>{" "}
-                      </li>
+                            </div>
+                        </div>
+                        </li>
                     );
-                  })}{" "}
-                </ul>{" "}
-              </div>
+                    })}
+                </ul>
             )
           ) : (
             <p className="text-gray-500 text-center col-span-1 md:col-span-2 lg:col-span-3 py-6 italic">
               Không tìm thấy sự kiện nào khớp với bộ lọc.
             </p>
-          )}{" "}
+          )}
           {processedEvents.length > 0 && totalPages > 1 && (
             <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
-              {" "}
               <span className="text-sm text-gray-600">
                 Trang <span className="font-semibold">{currentPage}</span> /{" "}
                 <span className="font-semibold">{totalPages}</span> (Tổng:{" "}
-                {totalItems} sự kiện)
-              </span>{" "}
+                <span className="font-semibold">{totalItems}</span> sự kiện)
+              </span>
               <div className="flex items-center gap-2">
-                {" "}
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
                   className="px-3 py-1.5 rounded-md border cursor-pointer bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                 >
                   <ChevronLeftIcon className="w-4 h-4" /> Trước
-                </button>{" "}
+                </button>
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
                   className="px-3 py-1.5 rounded-md border cursor-pointer bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                 >
                   Sau <ChevronRightIcon className="w-4 h-4" />
-                </button>{" "}
-              </div>{" "}
+                </button>
+              </div>
             </div>
-          )}{" "}
+          )}
         </div>
       )}
     </div>

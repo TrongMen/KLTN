@@ -552,6 +552,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     };
   }, [selectedEventId, fetchAttendees, fetchQrCodeImage]);
 
+  useEffect(() => {
+    // Log mỗi khi isScannerOpen thay đổi
+    console.log(`!!!!!!!! AttendeesTabContent: isScannerOpen changed to: ${isScannerOpen} !!!!!!!!`);
+  }, [isScannerOpen]);
   // Added handleRefresh function
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -1774,6 +1778,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
 
                     <button
                       onClick={() => {
+                        console.log("Nút Quét Mã QR được nhấn!");
                         setIsScannerOpen(true);
                       }}
                       disabled={isProcessing}

@@ -20,7 +20,7 @@ export default function AboutModal({ onClose }: AboutModalProps) {
           </button>
         </div>
         <p className="text-gray-700 mb-4">
-          Chào mừng bạn đến với nền tảng <span className="font-semibold text-blue-600">Quản lý Sự kiện Câu lạc bộ</span>! Đây là trang web được xây dựng nhằm hỗ trợ việc tổ chức, quản lý và tham gia các sự kiện trong các câu lạc bộ, đặc biệt tại môi trường đại học.
+          Chào mừng bạn đến với nền tảng <span className="font-semibold text-blue-600">Quản lý sự kiện Câu lạc bộ</span>! Đây là trang web được xây dựng nhằm hỗ trợ việc tổ chức, quản lý và tham gia các sự kiện trong các câu lạc bộ, đặc biệt tại môi trường đại học.
         </p>
         <ul className="space-y-3 text-gray-600">
           <li>

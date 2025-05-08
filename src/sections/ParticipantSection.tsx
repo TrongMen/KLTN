@@ -195,12 +195,10 @@ export const ParticipantSection = forwardRef<
   const [participantForms, setParticipantForms] = useState<
     ParticipantFormRow[]
   >([]);
-  const [roles, setRoles] = useState<ApiRole[]>([]); // Danh sách role để chọn
-  // Bỏ state positions vì lấy từ user
+  const [roles, setRoles] = useState<ApiRole[]>([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Tính toán ID user đã tồn tại
   const existingParticipantIds = useMemo(
     () => new Set(existingParticipants?.map((p) => p.userId) ?? []),
     [existingParticipants]
@@ -211,7 +209,6 @@ export const ParticipantSection = forwardRef<
     return allUsers.filter((user) => user.position != null);
   }, [allUsers]);
 
-  // Fetch chỉ danh sách Roles
   useEffect(() => {
     const fetchRoles = async () => {
       setLoading(true);
@@ -220,14 +217,12 @@ export const ParticipantSection = forwardRef<
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Token không tồn tại.");
         const headers = { Authorization: `Bearer ${token}` };
-        // *** Chỉ fetch roles ***
         const rRes = await fetch(
           "http://localhost:8080/identity/api/organizerrole",
           { headers }
         ); 
         if (!rRes.ok) throw new Error(`Lỗi tải vai trò`);
         const rData = await rRes.json();
-        // Kiểm tra cấu trúc trả về của API roles
         if (rData?.code !== 1000) {
           throw new Error(
             `API Roles trả về lỗi: ${rData?.message || "Unknown API error"}`
@@ -253,17 +248,16 @@ export const ParticipantSection = forwardRef<
         id: Date.now(),
         userId: "",
         positionId: "",
-        positionName: "", // Khởi tạo rỗng
+        positionName: "",
         roleId: "",
-        roleName: "", // Khởi tạo rỗng
-        canSelectRole: false, // Khởi tạo là false
+        roleName: "", 
+        canSelectRole: false, 
       },
     ]);
 
   const removeParticipantFormRow = (id: number) =>
     setParticipantForms((prev) => prev.filter((f) => f.id !== id));
 
-  // Cập nhật handleParticipantChange
   const handleParticipantChange = (
     id: number,
     field: keyof Omit<
@@ -279,24 +273,22 @@ export const ParticipantSection = forwardRef<
             // Tìm user được chọn trong danh sách gốc (chứa đủ thông tin)
             const selectedUser = allUsers.find((u) => u.id === value);
             const positionId = selectedUser?.position?.id ?? "";
-            const positionName = selectedUser?.position?.name ?? "—"; // Mặc định nếu không có
+            const positionName = selectedUser?.position?.name ?? "—"; 
 
             let roleId = "";
             let roleName = "";
             let canSelectRole = false;
 
             if (selectedUser?.organizerRole) {
-              // User đã có role -> hiển thị role đó
               roleId = selectedUser.organizerRole.id;
               roleName = selectedUser.organizerRole.name;
               canSelectRole = false;
             } else if (selectedUser) {
               // User chưa có role -> cho phép chọn
-              roleId = ""; // Reset roleId khi user thay đổi và cần chọn lại
-              roleName = ""; // Reset
+              roleId = ""; 
+              roleName = ""; 
               canSelectRole = true;
             } else {
-              // Không chọn user nào cả
               roleId = "";
               roleName = "";
               canSelectRole = false;
@@ -444,14 +436,12 @@ export const ParticipantSection = forwardRef<
               )}
             </div>
 
-            {/* Nút xóa */}
             <button
               type="button"
               onClick={() => removeParticipantFormRow(form.id)}
               className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 w-full sm:w-auto cursor-pointer text-sm flex-shrink-0 h-[30px]"
             >
               {" "}
-              {/* Set height */}
               Xóa
             </button>
           </div>

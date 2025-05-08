@@ -408,7 +408,7 @@ const EventList: React.FC<EventListProps> = ({
             </h3>
             <button
               onClick={handleBackToList}
-              className="text-gray-500 hover:text-gray-700 text-2xl"
+              className="text-gray-500 cursor-pointer hover:text-gray-700 text-2xl"
             >
               &times;
             </button>
@@ -675,7 +675,7 @@ const EventList: React.FC<EventListProps> = ({
                     currentUser?.role === "ADMIN") && (
                     <button
                       onClick={() => handleDeleteClick(event)}
-                      className="px-3 py-1 bg-red-100 text-red-700 text-xs rounded hover:bg-red-200 transition-colors"
+                      className="px-3 py-1 bg-red-100 cursor-pointer  text-red-700 text-xs rounded hover:bg-red-200 transition-colors"
                     >
                       Xóa
                     </button>

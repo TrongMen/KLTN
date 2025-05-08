@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast, Toaster } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType } from "../homeuser";
+import { User as MainUserType, ApiUser as FullApiUser } from "../../homeadmin";
+import { RefreshTokenResponse } from "../../../../hooks/useRefreshToken";
 import {
   CheckCircledIcon,
   CrossCircledIcon,
@@ -48,15 +49,10 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   confirmButtonClass = "bg-red-500 hover:bg-red-600",
 }) => {
   const [reason, setReason] = useState("");
-
   useEffect(() => {
-    if (isOpen) {
-      setReason("");
-    }
+    if (isOpen) setReason("");
   }, [isOpen]);
-
   if (!isOpen) return null;
-
   const handleConfirm = () => {
     if (requiresReason && onConfirmWithReason) {
       if (!reason.trim()) {
@@ -68,12 +64,15 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       onConfirm();
     }
   };
-
   return (
     <div className="fixed inset-0 bg-black/30 bg-opacity-50 z-[80] flex justify-center items-center p-4">
+      {" "}
       <div className="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">{title}</h2>
-        <p className="text-gray-600 mb-4 whitespace-pre-line">{message}</p>
+        {" "}
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">
+          {title}
+        </h2>{" "}
+        <p className="text-gray-600 mb-4 whitespace-pre-line">{message}</p>{" "}
         {requiresReason && (
           <div className="mb-4">
             <label
@@ -91,23 +90,24 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               placeholder={reasonPlaceholder}
             />
           </div>
-        )}
+        )}{" "}
         <div className="flex justify-end gap-3">
+          {" "}
           <button
             onClick={onCancel}
             className="px-4 py-2 cursor-pointer bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors text-sm font-medium"
           >
             {cancelText}
-          </button>
+          </button>{" "}
           <button
             onClick={handleConfirm}
             disabled={requiresReason && !reason.trim()}
             className={`px-4 py-2 cursor-pointer text-white rounded transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${confirmButtonClass}`}
           >
             {confirmText}
-          </button>
-        </div>
-      </div>
+          </button>{" "}
+        </div>{" "}
+      </div>{" "}
     </div>
   );
 };
@@ -116,12 +116,10 @@ export interface ApiPosition {
   id: string;
   name: string;
 }
-
 export interface ApiOrganizerRole {
   id: string;
   name: string;
 }
-
 export interface LockedByInfo {
   id: string;
   username: string | null;
@@ -129,26 +127,6 @@ export interface LockedByInfo {
   lastName: string | null;
   avatar: string | null;
 }
-
-export interface ApiUser {
-  id: string;
-  username: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  dob: string | null;
-  roles: { name: string; description?: string; permissions?: any[] }[];
-  avatar: string | null;
-  email: string | null;
-  gender: boolean | null;
-  position?: ApiPosition | null;
-  organizerRole?: ApiOrganizerRole | null;
-  locked: boolean;
-  lockedAt?: string | null;
-  lockedBy?: LockedByInfo | null;
-  lockReason?: string | null;
-  qrCodeUrl?: string | null;
-}
-
 export interface DisplayMember {
   id: string;
   displayName: string;
@@ -159,7 +137,6 @@ export interface DisplayMember {
   organizerRoleName: string | null;
   locked: boolean;
 }
-
 export interface DisplayLockedMemberInfo extends DisplayMember {
   lockedAt: string | null;
   lockReason: string | null;
@@ -171,6 +148,8 @@ interface MembersTabContentProps {
   user: MainUserType | null;
   userRole: "ADMIN" | "USER" | "GUEST" | string;
   currentUserEmail: string | null;
+  refreshToken: () => Promise<RefreshTokenResponse>;
+  onSessionExpired: () => void;
 }
 
 const roleDisplayMap: Record<string, string> = {
@@ -184,24 +163,24 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   user,
   userRole,
   currentUserEmail,
+  refreshToken,
+  onSessionExpired,
 }) => {
   const [tab, setTab] = useState<
     "all" | "admin" | "core" | "casual" | "locked"
   >("all");
-  const [allApiUsers, setAllApiUsers] = useState<ApiUser[]>([]);
+  const [allApiUsers, setAllApiUsers] = useState<FullApiUser[]>([]);
   const [displayMembers, setDisplayMembers] = useState<DisplayMember[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState<"az" | "za" | "none">("none");
-
-  const [rawLockedUsers, setRawLockedUsers] = useState<ApiUser[]>([]);
+  const [rawLockedUsers, setRawLockedUsers] = useState<FullApiUser[]>([]);
   const [displayLockedUsers, setDisplayLockedUsers] = useState<
     DisplayLockedMemberInfo[]
   >([]);
   const [loadingLocked, setLoadingLocked] = useState<boolean>(false);
   const [errorLocked, setErrorLocked] = useState<string | null>(null);
-
   const [positions, setPositions] = useState<ApiPosition[]>([]);
   const [assigningPositionTo, setAssigningPositionTo] = useState<string | null>(
     null
@@ -224,17 +203,19 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   );
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedUserProfile, setSelectedUserProfile] =
-    useState<ApiUser | null>(null);
+    useState<FullApiUser | null>(null);
   const [displayMode, setDisplayMode] = useState<"list" | "card">("list");
+  const [isRefreshingManual, setIsRefreshingManual] = useState<boolean>(false);
 
-  const isCurrentUserAdmin = useMemo(() => {
-    if (!user || !user.roles) return false;
-    return user.roles.some((role) =>
-      typeof role === "string"
-        ? role.toUpperCase() === "ADMIN"
-        : role.name?.toUpperCase() === "ADMIN"
-    );
-  }, [user]);
+  const isCurrentUserAdmin = useMemo(
+    () =>
+      user?.roles?.some((role) =>
+        typeof role === "string"
+          ? role.toUpperCase() === "ADMIN"
+          : role.name?.toUpperCase() === "ADMIN"
+      ),
+    [user]
+  );
 
   const formatDateNullable = (
     dateString: string | undefined | null
@@ -253,7 +234,9 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     }
   };
 
-  const transformApiUserToDisplayMember = (apiUser: ApiUser): DisplayMember => {
+  const transformApiUserToDisplayMember = (
+    apiUser: FullApiUser
+  ): DisplayMember => {
     const roleName = apiUser.roles?.[0]?.name?.toUpperCase() || "UNKNOWN";
     let displayName = [apiUser.lastName, apiUser.firstName]
       .filter(Boolean)
@@ -272,9 +255,8 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       locked: apiUser.locked,
     };
   };
-
   const transformApiUserToDisplayLockedMemberInfo = (
-    apiUser: ApiUser
+    apiUser: FullApiUser
   ): DisplayLockedMemberInfo => {
     const baseDisplayMember = transformApiUserToDisplayMember(apiUser);
     let lockedByDisplayName = "Không rõ";
@@ -296,149 +278,246 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     };
   };
 
-  const fetchMembers = useCallback(async () => {
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      setError("Không tìm thấy token xác thực.");
-      toast.error("Yêu cầu xác thực.");
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const response = await fetch("http://localhost:8080/identity/users", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        let errMsg = `Lỗi ${response.status}`;
-        if (response.status === 401 || response.status === 403) {
-          errMsg = "Phiên hết hạn/Không có quyền.";
-          localStorage.removeItem("authToken");
-        } else {
-          try {
-            const errData = await response.json();
-            errMsg = errData.message || errMsg;
-          } catch (e) {}
-        }
-        throw new Error(errMsg);
-      }
-      const data = await response.json();
-      if (data.code === 1000 && Array.isArray(data.result)) {
-        setAllApiUsers(data.result);
-        setDisplayMembers(data.result.map(transformApiUserToDisplayMember));
-      } else {
-        throw new Error(data.message || "Dữ liệu thành viên không hợp lệ.");
-      }
+  const fetchMembers = useCallback(
+    async (isManualRefresh = false) => {
+      if (!isManualRefresh) setLoading(true);
       setError(null);
-    } catch (err: any) {
-      console.error("Lỗi tải thành viên:", err);
-      const msg = err instanceof Error ? err.message : "Lỗi tải thành viên.";
-      setError(msg);
-      toast.error(`Lỗi tải thành viên: ${msg}`);
-      setDisplayMembers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      let token = localStorage.getItem("authToken");
+      if (!token) {
+        if (!isManualRefresh) setError("Yêu cầu xác thực.");
+        setLoading(false);
+        onSessionExpired();
+        return;
+      }
 
-  const fetchLockedUsers = useCallback(async () => {
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      setErrorLocked("Không tìm thấy token xác thực.");
-      toast.error("Yêu cầu xác thực để xem danh sách bị khóa.");
-      setLoadingLocked(false);
-      return;
-    }
-    setLoadingLocked(true);
-    setErrorLocked(null);
-    try {
-      const response = await fetch(
-        "http://localhost:8080/identity/users/locked",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!response.ok) {
-        let errMsg = `Lỗi ${response.status}`;
+      try {
+        let response = await fetch("http://localhost:8080/identity/users", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
         if (response.status === 401 || response.status === 403) {
-          errMsg = "Phiên hết hạn/Không có quyền.";
-          localStorage.removeItem("authToken");
-        } else {
-          try {
-            const errData = await response.json();
-            errMsg = errData.message || errMsg;
-          } catch (e) {}
+          const refreshResult = await refreshToken();
+          if (refreshResult.sessionExpired || refreshResult.error) {
+            onSessionExpired();
+            return;
+          }
+          if (refreshResult.token) {
+            token = refreshResult.token;
+            response = await fetch("http://localhost:8080/identity/users", {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store",
+            });
+          } else {
+            onSessionExpired();
+            return;
+          }
         }
-        throw new Error(errMsg);
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            onSessionExpired();
+            return;
+          }
+          const errData = await response
+            .json()
+            .catch(() => ({ message: `Lỗi ${response.status}` }));
+          throw new Error(errData.message || `Lỗi ${response.status}`);
+        }
+        const data = await response.json();
+        if (data.code === 1000 && Array.isArray(data.result)) {
+          setAllApiUsers(data.result);
+          setDisplayMembers(data.result.map(transformApiUserToDisplayMember));
+          setError(null);
+        } else {
+          throw new Error(data.message || "Dữ liệu thành viên không hợp lệ.");
+        }
+      } catch (err: any) {
+        if (
+          err.message !== "Phiên đăng nhập hết hạn." &&
+          !err.message?.includes("Failed to fetch")
+        ) {
+          setError(err.message || "Lỗi tải thành viên.");
+          toast.error(`Lỗi tải thành viên: ${err.message}`);
+        }
+        setDisplayMembers([]);
+        setAllApiUsers([]);
+      } finally {
+        if (!isManualRefresh) setLoading(false);
       }
-      const data = await response.json();
-      if (
-        data.code === 1000 &&
-        data.result &&
-        Array.isArray(data.result.content)
-      ) {
-        setRawLockedUsers(data.result.content);
-        setDisplayLockedUsers(
-          data.result.content.map(transformApiUserToDisplayLockedMemberInfo)
-        );
-      } else {
-        throw new Error(
-          data.message || "Dữ liệu tài khoản bị khóa không hợp lệ."
-        );
+    },
+    [refreshToken, onSessionExpired]
+  );
+
+  const fetchLockedUsers = useCallback(
+    async (isManualRefresh = false) => {
+      if (!isManualRefresh) setLoadingLocked(true);
+      setErrorLocked(null);
+      let token = localStorage.getItem("authToken");
+      if (!token) {
+        if (!isManualRefresh) setErrorLocked("Yêu cầu xác thực.");
+        setLoadingLocked(false);
+        onSessionExpired();
+        return;
       }
-    } catch (err: any) {
-      console.error("Lỗi tải tài khoản bị khóa:", err);
-      const msg =
-        err instanceof Error ? err.message : "Lỗi tải tài khoản bị khóa.";
-      setErrorLocked(msg);
-      toast.error(`Lỗi tải DS bị khóa: ${msg}`);
-      setDisplayLockedUsers([]);
-    } finally {
-      setLoadingLocked(false);
-    }
-  }, []);
+
+      try {
+        let response = await fetch(
+          "http://localhost:8080/identity/users/locked",
+          { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+        );
+        if (response.status === 401 || response.status === 403) {
+          const refreshResult = await refreshToken();
+          if (refreshResult.sessionExpired || refreshResult.error) {
+            onSessionExpired();
+            return;
+          }
+          if (refreshResult.token) {
+            token = refreshResult.token;
+            response = await fetch(
+              "http://localhost:8080/identity/users/locked",
+              {
+                headers: { Authorization: `Bearer ${token}` },
+                cache: "no-store",
+              }
+            );
+          } else {
+            onSessionExpired();
+            return;
+          }
+        }
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            onSessionExpired();
+            return;
+          }
+          const errData = await response
+            .json()
+            .catch(() => ({ message: `Lỗi ${response.status}` }));
+          throw new Error(errData.message || `Lỗi ${response.status}`);
+        }
+        const data = await response.json();
+        if (
+          data.code === 1000 &&
+          data.result &&
+          Array.isArray(data.result.content)
+        ) {
+          setRawLockedUsers(data.result.content);
+          setDisplayLockedUsers(
+            data.result.content.map(transformApiUserToDisplayLockedMemberInfo)
+          );
+          setErrorLocked(null);
+        } else {
+          throw new Error(
+            data.message || "Dữ liệu tài khoản bị khóa không hợp lệ."
+          );
+        }
+      } catch (err: any) {
+        if (
+          err.message !== "Phiên đăng nhập hết hạn." &&
+          !err.message?.includes("Failed to fetch")
+        ) {
+          setErrorLocked(err.message || "Lỗi tải tài khoản bị khóa.");
+          toast.error(`Lỗi tải DS bị khóa: ${err.message}`);
+        }
+        setDisplayLockedUsers([]);
+        setRawLockedUsers([]);
+      } finally {
+        if (!isManualRefresh) setLoadingLocked(false);
+      }
+    },
+    [refreshToken, onSessionExpired]
+  );
 
   const fetchPositions = useCallback(async () => {
-    const token = localStorage.getItem("authToken");
-    if (!token) return;
+    let token = localStorage.getItem("authToken");
+    if (!token) {
+      onSessionExpired();
+      return;
+    }
     try {
-      const response = await fetch(
+      let response = await fetch(
         "http://localhost:8080/identity/api/positions",
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
       );
+      if (response.status === 401 || response.status === 403) {
+        const refreshResult = await refreshToken();
+        if (refreshResult.sessionExpired || refreshResult.error) {
+          onSessionExpired();
+          return;
+        }
+        if (refreshResult.token) {
+          token = refreshResult.token;
+          response = await fetch(
+            "http://localhost:8080/identity/api/positions",
+            { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+          );
+        } else {
+          onSessionExpired();
+          return;
+        }
+      }
       if (!response.ok) {
-        let errMsg = `Lỗi ${response.status}`;
-        try {
-          const errData = await response.json();
-          errMsg = errData.message || errMsg;
-        } catch (e) {}
-        throw new Error(errMsg);
+        if (response.status === 401 || response.status === 403) {
+          onSessionExpired();
+          return;
+        }
+        const errData = await response
+          .json()
+          .catch(() => ({ message: `Lỗi ${response.status}` }));
+        throw new Error(errData.message || `Lỗi ${response.status}`);
       }
       const data = await response.json();
       if (data.code === 1000 && Array.isArray(data.result))
         setPositions(data.result);
       else throw new Error(data.message || "Dữ liệu vị trí không hợp lệ.");
     } catch (err: any) {
-      console.error("Lỗi tải vị trí:", err);
-      const msg = err instanceof Error ? err.message : "Lỗi tải vị trí.";
-      setError((prev) => (prev ? `${prev}\n${msg}` : msg));
-      toast.error(`Lỗi tải vị trí: ${msg}`);
+      if (
+        err.message !== "Phiên đăng nhập hết hạn." &&
+        !err.message?.includes("Failed to fetch")
+      ) {
+        const msg = err instanceof Error ? err.message : "Lỗi tải vị trí.";
+        setError((prev) => (prev ? `${prev}\n${msg}` : msg));
+        toast.error(`Lỗi tải vị trí: ${msg}`);
+      }
     }
-  }, []);
+  }, [refreshToken, onSessionExpired]);
 
   const fetchOrganizerRoles = useCallback(async () => {
-    const token = localStorage.getItem("authToken");
-    if (!token) return;
+    let token = localStorage.getItem("authToken");
+    if (!token) {
+      onSessionExpired();
+      return;
+    }
     try {
-      const response = await fetch(
+      let response = await fetch(
         "http://localhost:8080/identity/api/organizerrole",
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
       );
+      if (response.status === 401 || response.status === 403) {
+        const refreshResult = await refreshToken();
+        if (refreshResult.sessionExpired || refreshResult.error) {
+          onSessionExpired();
+          return;
+        }
+        if (refreshResult.token) {
+          token = refreshResult.token;
+          response = await fetch(
+            "http://localhost:8080/identity/api/organizerrole",
+            { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
+          );
+        } else {
+          onSessionExpired();
+          return;
+        }
+      }
       if (!response.ok) {
-        let errMsg = `Lỗi ${response.status}`;
-        try {
-          const errData = await response.json();
-          errMsg = errData.message || errMsg;
-        } catch (e) {}
-        throw new Error(errMsg);
+        if (response.status === 401 || response.status === 403) {
+          onSessionExpired();
+          return;
+        }
+        const errData = await response
+          .json()
+          .catch(() => ({ message: `Lỗi ${response.status}` }));
+        throw new Error(errData.message || `Lỗi ${response.status}`);
       }
       const data = await response.json();
       if (data.code === 1000 && Array.isArray(data.result))
@@ -448,13 +527,17 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
           data.message || "Dữ liệu vai trò tổ chức không hợp lệ."
         );
     } catch (err: any) {
-      console.error("Lỗi tải vai trò tổ chức:", err);
-      const msg =
-        err instanceof Error ? err.message : "Lỗi tải vai trò tổ chức.";
-      setError((prev) => (prev ? `${prev}\n${msg}` : msg));
-      toast.error(`Lỗi tải vai trò tổ chức: ${msg}`);
+      if (
+        err.message !== "Phiên đăng nhập hết hạn." &&
+        !err.message?.includes("Failed to fetch")
+      ) {
+        const msg =
+          err instanceof Error ? err.message : "Lỗi tải vai trò tổ chức.";
+        setError((prev) => (prev ? `${prev}\n${msg}` : msg));
+        toast.error(`Lỗi tải vai trò tổ chức: ${msg}`);
+      }
     }
-  }, []);
+  }, [refreshToken, onSessionExpired]);
 
   useEffect(() => {
     setLoading(true);
@@ -470,10 +553,8 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   }, [fetchMembers, fetchPositions, fetchOrganizerRoles]);
 
   useEffect(() => {
-    if (tab === "locked" && !loadingLocked) {
-      fetchLockedUsers();
-    }
-  }, [tab, fetchLockedUsers, ]);
+    if (tab === "locked" && !loadingLocked) fetchLockedUsers();
+  }, [tab, fetchLockedUsers]);
 
   const processedMembers = useMemo(() => {
     let membersToProcess: Array<DisplayMember | DisplayLockedMemberInfo> = [];
@@ -488,7 +569,6 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
         return false;
       });
     }
-
     if (searchTerm.trim()) {
       const lowerSearchTerm = searchTerm.trim().toLowerCase();
       membersToProcess = membersToProcess.filter(
@@ -532,7 +612,6 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     setAssigningOrganizerRoleTo(null);
     setSelectedOrganizerRoleId("");
   };
-
   const handleAssignOrganizerRoleClick = (memberId: string) => {
     setAssigningOrganizerRoleTo(memberId);
     const currentUserData = allApiUsers.find((u) => u.id === memberId);
@@ -553,21 +632,39 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       return;
     }
     const assignPromise = new Promise<void>(async (resolve, reject) => {
-      const token = localStorage.getItem("authToken");
+      let token = localStorage.getItem("authToken");
       if (!token) {
         reject(new Error("Token không tồn tại."));
+        onSessionExpired();
         return;
       }
       try {
-        const response = await fetch(
+        let response = await fetch(
           `http://localhost:8080/identity/users/${memberId}/position?positionId=${selectedPositionId}`,
           { method: "PUT", headers: { Authorization: `Bearer ${token}` } }
         );
+        if (response.status === 401 || response.status === 403) {
+          const refreshResult = await refreshToken();
+          if (refreshResult.sessionExpired || refreshResult.error) {
+            reject(new Error("Phiên hết hạn/Lỗi refresh"));
+            onSessionExpired();
+            return;
+          }
+          if (refreshResult.token) {
+            token = refreshResult.token;
+            response = await fetch(
+              `http://localhost:8080/identity/users/${memberId}/position?positionId=${selectedPositionId}`,
+              { method: "PUT", headers: { Authorization: `Bearer ${token}` } }
+            );
+          } else {
+            reject(new Error("Không thể làm mới token"));
+            onSessionExpired();
+            return;
+          }
+        }
         const responseData = await response.json();
-        if (!response.ok)
+        if (!response.ok || responseData.code !== 1000)
           throw new Error(responseData.message || `Lỗi ${response.status}.`);
-        if (responseData.code !== 1000)
-          throw new Error(responseData.message || "Lỗi API.");
         resolve();
       } catch (error) {
         console.error("Lỗi gán vị trí:", error);
@@ -579,7 +676,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       success: () => {
         setAssigningPositionTo(null);
         setSelectedPositionId("");
-        fetchMembers();
+        fetchMembers(true);
         return `Gán vị trí thành công!`;
       },
       error: (err) => `Gán thất bại: ${err.message}`,
@@ -590,28 +687,50 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     const currentPositionName = displayMembers.find(
       (m) => m.id === memberId
     )?.positionName;
+    if (!currentPositionName) return;
     setConfirmDialogProps({
       title: "Xác nhận xóa vị trí",
       message: `Xóa vị trí "${currentPositionName}" của "${memberName}"?`,
       onConfirm: () => {
         const removePromise = new Promise<void>(async (resolve, reject) => {
-          const token = localStorage.getItem("authToken");
+          let token = localStorage.getItem("authToken");
           if (!token) {
             reject(new Error("Token không tồn tại."));
+            onSessionExpired();
             return;
           }
           try {
-            const response = await fetch(
+            let response = await fetch(
               `http://localhost:8080/identity/users/${memberId}/position`,
               { method: "PUT", headers: { Authorization: `Bearer ${token}` } }
             );
+            if (response.status === 401 || response.status === 403) {
+              const refreshResult = await refreshToken();
+              if (refreshResult.sessionExpired || refreshResult.error) {
+                reject(new Error("Phiên hết hạn/Lỗi refresh"));
+                onSessionExpired();
+                return;
+              }
+              if (refreshResult.token) {
+                token = refreshResult.token;
+                response = await fetch(
+                  `http://localhost:8080/identity/users/${memberId}/position`,
+                  {
+                    method: "PUT",
+                    headers: { Authorization: `Bearer ${token}` },
+                  }
+                );
+              } else {
+                reject(new Error("Không thể làm mới token"));
+                onSessionExpired();
+                return;
+              }
+            }
             const responseData = await response.json();
-            if (!response.ok)
+            if (!response.ok || responseData.code !== 1000)
               throw new Error(
                 responseData.message || `Lỗi ${response.status}.`
               );
-            if (responseData.code !== 1000)
-              throw new Error(responseData.message || "Lỗi API.");
             resolve();
           } catch (error) {
             console.error("Lỗi xóa vị trí:", error);
@@ -623,7 +742,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
           success: () => {
             setAssigningPositionTo(null);
             setSelectedPositionId("");
-            fetchMembers();
+            fetchMembers(true);
             setIsConfirmOpen(false);
             setConfirmDialogProps(null);
             return `Xóa vị trí thành công!`;
@@ -651,21 +770,39 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       return;
     }
     const assignPromise = new Promise<void>(async (resolve, reject) => {
-      const token = localStorage.getItem("authToken");
+      let token = localStorage.getItem("authToken");
       if (!token) {
         reject(new Error("Token không tồn tại."));
+        onSessionExpired();
         return;
       }
       try {
-        const response = await fetch(
+        let response = await fetch(
           `http://localhost:8080/identity/users/${memberId}/organizer-role?organizerRoleId=${selectedOrganizerRoleId}`,
           { method: "PUT", headers: { Authorization: `Bearer ${token}` } }
         );
+        if (response.status === 401 || response.status === 403) {
+          const refreshResult = await refreshToken();
+          if (refreshResult.sessionExpired || refreshResult.error) {
+            reject(new Error("Phiên hết hạn/Lỗi refresh"));
+            onSessionExpired();
+            return;
+          }
+          if (refreshResult.token) {
+            token = refreshResult.token;
+            response = await fetch(
+              `http://localhost:8080/identity/users/${memberId}/organizer-role?organizerRoleId=${selectedOrganizerRoleId}`,
+              { method: "PUT", headers: { Authorization: `Bearer ${token}` } }
+            );
+          } else {
+            reject(new Error("Không thể làm mới token"));
+            onSessionExpired();
+            return;
+          }
+        }
         const responseData = await response.json();
-        if (!response.ok)
+        if (!response.ok || responseData.code !== 1000)
           throw new Error(responseData.message || `Lỗi ${response.status}.`);
-        if (responseData.code !== 1000)
-          throw new Error(responseData.message || "Lỗi API.");
         resolve();
       } catch (error) {
         console.error("Lỗi gán vai trò tổ chức:", error);
@@ -677,7 +814,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       success: () => {
         setAssigningOrganizerRoleTo(null);
         setSelectedOrganizerRoleId("");
-        fetchMembers();
+        fetchMembers(true);
         return `Gán vai trò thành công!`;
       },
       error: (err) => `Gán thất bại: ${err.message}`,
@@ -694,23 +831,44 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       message: `Xóa vai trò "${currentRoleName}" của "${memberName}"?`,
       onConfirm: () => {
         const removePromise = new Promise<void>(async (resolve, reject) => {
-          const token = localStorage.getItem("authToken");
+          let token = localStorage.getItem("authToken");
           if (!token) {
             reject(new Error("Token không tồn tại."));
+            onSessionExpired();
             return;
           }
           try {
-            const response = await fetch(
+            let response = await fetch(
               `http://localhost:8080/identity/users/${memberId}/organizer-role`,
               { method: "PUT", headers: { Authorization: `Bearer ${token}` } }
             );
+            if (response.status === 401 || response.status === 403) {
+              const refreshResult = await refreshToken();
+              if (refreshResult.sessionExpired || refreshResult.error) {
+                reject(new Error("Phiên hết hạn/Lỗi refresh"));
+                onSessionExpired();
+                return;
+              }
+              if (refreshResult.token) {
+                token = refreshResult.token;
+                response = await fetch(
+                  `http://localhost:8080/identity/users/${memberId}/organizer-role`,
+                  {
+                    method: "PUT",
+                    headers: { Authorization: `Bearer ${token}` },
+                  }
+                );
+              } else {
+                reject(new Error("Không thể làm mới token"));
+                onSessionExpired();
+                return;
+              }
+            }
             const responseData = await response.json();
-            if (!response.ok)
+            if (!response.ok || responseData.code !== 1000)
               throw new Error(
                 responseData.message || `Lỗi ${response.status}.`
               );
-            if (responseData.code !== 1000)
-              throw new Error(responseData.message || "Lỗi API.");
             resolve();
           } catch (error) {
             console.error("Lỗi xóa vai trò tổ chức:", error);
@@ -722,7 +880,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
           success: () => {
             setAssigningOrganizerRoleTo(null);
             setSelectedOrganizerRoleId("");
-            fetchMembers();
+            fetchMembers(true);
             setIsConfirmOpen(false);
             setConfirmDialogProps(null);
             return `Xóa vai trò thành công!`;
@@ -759,18 +917,36 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     setLockingMemberId(userIdToLock);
     const toastId = toast.loading(`Đang khóa tài khoản ${memberName}...`);
     try {
-      const token = localStorage.getItem("authToken");
+      let token = localStorage.getItem("authToken");
       if (!token) {
         toast.error("Vui lòng đăng nhập lại.", { id: toastId });
+        onSessionExpired();
         throw new Error("Token không tồn tại.");
       }
       const url = `http://localhost:8080/identity/users/${userIdToLock}/lock?lockedById=${adminUserId}&reason=${encodeURIComponent(
         reason
       )}`;
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (response.status === 401 || response.status === 403) {
+        const refreshResult = await refreshToken();
+        if (refreshResult.sessionExpired || refreshResult.error) {
+          onSessionExpired();
+          throw new Error("Phiên hết hạn/Lỗi refresh");
+        }
+        if (refreshResult.token) {
+          token = refreshResult.token;
+          response = await fetch(url, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } else {
+          onSessionExpired();
+          throw new Error("Không thể làm mới token");
+        }
+      }
       const responseData = await response.json();
       if (!response.ok || responseData.code !== 1000) {
         throw new Error(
@@ -781,7 +957,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
         responseData.message || `Đã khóa tài khoản ${memberName}!`,
         { id: toastId }
       );
-      await Promise.all([fetchMembers(), fetchLockedUsers()]);
+      await Promise.all([fetchMembers(true), fetchLockedUsers(true)]);
       if (selectedUserProfile && selectedUserProfile.id === userIdToLock) {
         const updatedUser =
           rawLockedUsers.find((u) => u.id === userIdToLock) ||
@@ -799,13 +975,13 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   };
 
   const handleLockAccountTrigger = (
-    memberData: ApiUser | DisplayMember | DisplayLockedMemberInfo
+    memberData: FullApiUser | DisplayMember | DisplayLockedMemberInfo
   ) => {
     const memberId = memberData.id;
     const fullMemberInfo =
       allApiUsers.find((u) => u.id === memberId) ||
       rawLockedUsers.find((u) => u.id === memberId) ||
-      (memberData as ApiUser);
+      (memberData as FullApiUser);
     const memberName =
       (fullMemberInfo as DisplayMember).displayName ||
       `${fullMemberInfo.lastName || ""} ${
@@ -813,7 +989,6 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       }`.trim() ||
       fullMemberInfo.username ||
       "Thành viên";
-
     if (
       !user ||
       !isCurrentUserAdmin ||
@@ -854,16 +1029,34 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     setUnlockingMemberId(userIdToUnlock);
     const toastId = toast.loading(`Đang mở khóa tài khoản ${memberName}...`);
     try {
-      const token = localStorage.getItem("authToken");
+      let token = localStorage.getItem("authToken");
       if (!token) {
         toast.error("Vui lòng đăng nhập lại.", { id: toastId });
+        onSessionExpired();
         throw new Error("Token không tồn tại.");
       }
       const url = `http://localhost:8080/identity/users/${userIdToUnlock}/unlock`;
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (response.status === 401 || response.status === 403) {
+        const refreshResult = await refreshToken();
+        if (refreshResult.sessionExpired || refreshResult.error) {
+          onSessionExpired();
+          throw new Error("Phiên hết hạn/Lỗi refresh");
+        }
+        if (refreshResult.token) {
+          token = refreshResult.token;
+          response = await fetch(url, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } else {
+          onSessionExpired();
+          throw new Error("Không thể làm mới token");
+        }
+      }
       const responseData = await response.json();
       if (!response.ok || responseData.code !== 1000) {
         throw new Error(
@@ -874,7 +1067,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
         responseData.message || `Đã mở khóa tài khoản ${memberName}!`,
         { id: toastId }
       );
-      await Promise.all([fetchMembers(), fetchLockedUsers()]);
+      await Promise.all([fetchMembers(true), fetchLockedUsers(true)]);
       if (selectedUserProfile && selectedUserProfile.id === userIdToUnlock) {
         const updatedUser = allApiUsers.find((u) => u.id === userIdToUnlock);
         if (updatedUser) setSelectedUserProfile(updatedUser);
@@ -890,13 +1083,13 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   };
 
   const handleUnlockAccountTrigger = (
-    memberData: ApiUser | DisplayLockedMemberInfo
+    memberData: FullApiUser | DisplayLockedMemberInfo
   ) => {
     const memberId = memberData.id;
     const fullMemberInfo =
       rawLockedUsers.find((u) => u.id === memberId) ||
       allApiUsers.find((u) => u.id === memberId) ||
-      (memberData as ApiUser);
+      (memberData as FullApiUser);
     const memberName =
       (fullMemberInfo as DisplayMember).displayName ||
       `${fullMemberInfo.lastName || ""} ${
@@ -904,7 +1097,6 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       }`.trim() ||
       fullMemberInfo.username ||
       "Thành viên";
-
     if (!isCurrentUserAdmin) {
       toast.error("Bạn không có quyền thực hiện hành động này.");
       return;
@@ -935,6 +1127,24 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     }
   };
 
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshingManual(true);
+    setError(null);
+    setErrorLocked(null);
+    try {
+      if (tab === "locked") {
+        await fetchLockedUsers(true);
+      } else {
+        await fetchMembers(true);
+      }
+      toast.success("Đã làm mới danh sách!");
+    } catch (err) {
+      toast.error("Làm mới thất bại.");
+    } finally {
+      setIsRefreshingManual(false);
+    }
+  }, [tab, fetchMembers, fetchLockedUsers]);
+
   const actionButtonBaseClasses =
     "p-1.5 rounded hover:bg-opacity-80 transition-colors duration-150 text-xs font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed";
   const assignButtonClasses = `${actionButtonBaseClasses} bg-sky-50 text-sky-700 border border-sky-300 hover:bg-sky-100 hover:border-sky-400`;
@@ -947,9 +1157,21 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       <Toaster position="top-center" reverseOrder={false} />
       <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-pink-600">
-          {" "}
-          Thành viên câu lạc bộ{" "}
+          Thành viên câu lạc bộ
         </h2>
+        <button
+          onClick={handleRefresh}
+          disabled={loading || loadingLocked || isRefreshingManual}
+          className="p-2 border border-gray-300 cursor-pointer rounded-lg text-sm focus:ring-2 focus:ring-pink-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-auto sm:ml-4"
+          title="Làm mới danh sách"
+        >
+          {isRefreshingManual ? (
+            <ReloadIcon className="w-5 h-5 animate-spin text-pink-600" />
+          ) : (
+            <ReloadIcon className="w-5 h-5 text-pink-600" />
+          )}
+          <span className="ml-2 hidden sm:inline">Làm mới</span>
+        </button>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-2 mb-5 border-b border-gray-200 flex-shrink-0">
         <button
@@ -960,8 +1182,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
               : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          {" "}
-          👥 Tất cả ({displayMembers.length}){" "}
+          👥 Tất cả ({displayMembers.length})
         </button>
         <button
           onClick={() => setTab("admin")}
@@ -971,10 +1192,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
               : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          {" "}
-          👑 QTV ({
-            displayMembers.filter((m) => m.roleName === "ADMIN").length
-          }){" "}
+          👑 QTV ({displayMembers.filter((m) => m.roleName === "ADMIN").length})
         </button>
         <button
           onClick={() => setTab("core")}
@@ -984,9 +1202,8 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
               : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          {" "}
           💪 Nòng cốt (
-          {displayMembers.filter((m) => m.roleName === "USER").length}){" "}
+          {displayMembers.filter((m) => m.roleName === "USER").length})
         </button>
         <button
           onClick={() => setTab("casual")}
@@ -996,9 +1213,8 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
               : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          {" "}
           🧍 Vãng lai (
-          {displayMembers.filter((m) => m.roleName === "GUEST").length}){" "}
+          {displayMembers.filter((m) => m.roleName === "GUEST").length})
         </button>
         {isCurrentUserAdmin && (
           <button
@@ -1009,17 +1225,17 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {" "}
             <LockClosedIcon className="inline-block h-4 w-4 mr-1 align-text-bottom" />{" "}
-            Bị khóa ({displayLockedUsers.length}){" "}
+            Bị khóa ({displayLockedUsers.length})
           </button>
         )}
       </div>
       <div className="flex flex-col sm:flex-row gap-3 mb-4 flex-shrink-0 items-center">
         <div className="relative flex-grow">
+          {" "}
           <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
             <MagnifyingGlassIcon className="h-4 w-4" />
-          </span>
+          </span>{" "}
           <input
             type="text"
             placeholder={
@@ -1031,13 +1247,14 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full p-2 pl-9 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm"
             aria-label="Tìm kiếm thành viên"
-          />
+          />{" "}
         </div>
         <div className="flex-shrink-0">
+          {" "}
           <label htmlFor="sort-select" className="text-sm text-gray-600 mr-1">
             {" "}
             Sắp xếp:{" "}
-          </label>
+          </label>{" "}
           <select
             id="sort-select"
             value={sortOrder}
@@ -1047,11 +1264,13 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
             className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-purple-500 focus:border-purple-500 h-[38px] shadow-sm bg-white appearance-none pr-7"
             aria-label="Sắp xếp thành viên"
           >
+            {" "}
             <option value="none">Mặc định</option>{" "}
-            <option value="az">A - Z</option> <option value="za">Z - A</option>
-          </select>
+            <option value="az">A - Z</option> <option value="za">Z - A</option>{" "}
+          </select>{" "}
         </div>
         <div className="flex-shrink-0 flex items-center gap-2 p-1 bg-gray-200 rounded-lg">
+          {" "}
           <button
             onClick={() => setDisplayMode("list")}
             className={`px-3 py-1 rounded-md text-sm font-medium transition-colors cursor-pointer ${
@@ -1062,8 +1281,9 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
             aria-pressed={displayMode === "list"}
             title="Hiển thị dạng danh sách"
           >
-            <ListBulletIcon className="w-4 h-4 inline-block sm:mr-1" />
-          </button>
+            {" "}
+            <ListBulletIcon className="w-4 h-4 inline-block sm:mr-1" />{" "}
+          </button>{" "}
           <button
             onClick={() => setDisplayMode("card")}
             className={`px-3 py-1 rounded-md text-sm cursor-pointer font-medium transition-colors ${
@@ -1074,11 +1294,11 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
             aria-pressed={displayMode === "card"}
             title="Hiển thị dạng thẻ"
           >
-            <Component1Icon className="w-4 h-4 inline-block sm:mr-1" />
-          </button>
+            {" "}
+            <Component1Icon className="w-4 h-4 inline-block sm:mr-1" />{" "}
+          </button>{" "}
         </div>
       </div>
-
       <div
         className={`overflow-y-auto flex-1 pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 ${
           displayMode === "list"
@@ -1090,20 +1310,25 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
             : "space-y-3"
         }`}
       >
-        {(loading && tab !== "locked") ||
-        (loadingLocked && tab === "locked") ? (
+        {isRefreshingManual ? (
+          <div className="flex justify-center items-center py-10 col-span-full">
+            <ReloadIcon className="w-8 h-8 animate-spin text-pink-600" />
+            <p className="ml-3 text-gray-500 italic">
+              Đang tải danh sách thành viên...
+            </p>
+          </div>
+        ) : (loading && tab !== "locked") ||
+          (loadingLocked && tab === "locked") ? (
           <p className="text-center text-gray-500 py-4">Đang tải...</p>
         ) : (error && tab !== "locked") || (errorLocked && tab === "locked") ? (
           <div className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200 whitespace-pre-line">
-            {" "}
-            ⚠️ {tab === "locked" ? errorLocked : error}{" "}
+            ⚠️ {tab === "locked" ? errorLocked : error}
           </div>
         ) : processedMembers.length > 0 ? (
           processedMembers.map((memberItem) => {
             const isLockedTabActive = tab === "locked";
             const member = memberItem as DisplayMember &
               Partial<DisplayLockedMemberInfo>;
-
             if (
               displayMode === "list" ||
               (isLockedTabActive && displayMode === "list")
@@ -1117,10 +1342,12 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                       : ""
                   } ${isLockedTabActive ? "border-l-4 border-orange-300" : ""}`}
                 >
+                  {" "}
                   <div
                     className="flex items-center gap-3 overflow-hidden mr-2 mb-3 sm:mb-0 flex-grow cursor-pointer"
                     onClick={() => handleViewProfile(member.id)}
                   >
+                    {" "}
                     <img
                       src={
                         member.avatar ||
@@ -1132,13 +1359,15 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                       width={40}
                       height={40}
                       className="w-10 h-10 rounded-full object-cover border flex-shrink-0 bg-gray-200"
-                    />
+                    />{" "}
                     <div className="overflow-hidden">
+                      {" "}
                       <h3
                         className="font-semibold text-sm md:text-base text-gray-800 truncate"
                         title={member.displayName}
                       >
-                        {member.displayName}
+                        {" "}
+                        {member.displayName}{" "}
                         {member.locked && (
                           <span
                             className={`text-xs font-semibold ml-1 ${
@@ -1149,17 +1378,16 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                           >
                             (Bị khóa)
                           </span>
-                        )}
-                      </h3>
+                        )}{" "}
+                      </h3>{" "}
                       {member.email && (
                         <p
                           className="text-gray-600 text-xs md:text-sm truncate"
                           title={member.email}
                         >
-                          {" "}
-                          📧 {member.email}{" "}
+                          📧 {member.email}
                         </p>
-                      )}
+                      )}{" "}
                       <p
                         className={`text-xs md:text-sm font-medium ${
                           member.roleName === "ADMIN"
@@ -1171,285 +1399,207 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                             : "text-gray-500"
                         }`}
                       >
-                        {roleDisplayMap[member.roleName] || member.roleName}
+                        {" "}
+                        {roleDisplayMap[member.roleName] ||
+                          member.roleName}{" "}
                         {!isLockedTabActive &&
                           (member.positionName || member.organizerRoleName) &&
-                          " ("}
-                        {!isLockedTabActive && member.positionName}
+                          " ("}{" "}
+                        {!isLockedTabActive && member.positionName}{" "}
                         {!isLockedTabActive &&
                           member.positionName &&
                           member.organizerRoleName &&
-                          " / "}
-                        {!isLockedTabActive && member.organizerRoleName}
+                          " / "}{" "}
+                        {!isLockedTabActive && member.organizerRoleName}{" "}
                         {!isLockedTabActive &&
                           (member.positionName || member.organizerRoleName) &&
-                          ")"}
-                      </p>
+                          ")"}{" "}
+                      </p>{" "}
                       {isLockedTabActive && member.lockReason !== undefined && (
                         <>
+                          {" "}
                           <p
                             className="text-xs text-gray-500 mt-0.5"
                             title={member.lockReason || ""}
                           >
+                            {" "}
                             <strong>Lý do:</strong>{" "}
-                            {member.lockReason || "Không có"}
-                          </p>
+                            {member.lockReason || "Không có"}{" "}
+                          </p>{" "}
                           <p className="text-xs text-gray-500">
+                            {" "}
                             <strong>Khóa lúc:</strong>{" "}
-                            {formatDateNullable(member.lockedAt)}
-                          </p>
+                            {formatDateNullable(member.lockedAt)}{" "}
+                          </p>{" "}
                           <p
                             className="text-xs text-gray-500"
                             title={member.lockedByDisplayName}
                           >
+                            {" "}
                             <strong>Người khóa:</strong>{" "}
-                            {member.lockedByDisplayName}
-                          </p>
+                            {member.lockedByDisplayName}{" "}
+                          </p>{" "}
                         </>
-                      )}
-                    </div>
-                  </div>
+                      )}{" "}
+                    </div>{" "}
+                  </div>{" "}
                   <div className="flex flex-col items-stretch sm:items-end gap-2 flex-shrink-0 w-full sm:w-auto sm:max-w-xs md:max-w-sm">
-                    {!isLockedTabActive &&
-                      isCurrentUserAdmin &&
-                      (member.roleName === "USER" ||
-                        member.roleName === "GUEST") &&
-                      user &&
-                      member.id !== user.id && (
-                        <>
-                          {assigningPositionTo === member.id ? (
-                            <div className="p-2.5 border border-sky-300 rounded-md bg-sky-50 w-full shadow-sm">
-                              {" "}
-                              <label
-                                htmlFor={`position-select-list-${member.id}`}
-                                className="block text-xs font-medium text-sky-700 mb-1.5"
-                              >
-                                Gán vị trí cho {member.displayName}:
-                              </label>{" "}
-                              <div className="flex items-center gap-2">
-                                {" "}
-                                <select
-                                  id={`position-select-list-${member.id}`}
-                                  value={selectedPositionId}
-                                  onChange={(e) =>
-                                    setSelectedPositionId(e.target.value)
-                                  }
-                                  className="flex-grow p-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 bg-white shadow-sm"
-                                >
-                                  {" "}
-                                  <option value="" disabled>
-                                    {positions.length > 0
-                                      ? "-- Chọn Vị trí --"
-                                      : loading
-                                      ? "Đang tải..."
-                                      : "Không có vị trí"}
-                                  </option>{" "}
-                                  {positions.map((pos) => (
-                                    <option key={pos.id} value={pos.id}>
-                                      {pos.name}
-                                    </option>
-                                  ))}{" "}
-                                </select>{" "}
-                                <button
-                                  onClick={() =>
-                                    handleAssignPosition(member.id)
-                                  }
-                                  disabled={!selectedPositionId}
-                                  className="px-3 py-1.5 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                                >
-                                  Lưu
-                                </button>{" "}
-                                <button
-                                  onClick={() => {
-                                    setAssigningPositionTo(null);
-                                    setSelectedPositionId("");
-                                  }}
-                                  className="px-3 py-1.5 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400 font-medium"
-                                >
-                                  Hủy
-                                </button>{" "}
-                              </div>{" "}
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 w-full justify-end">
-                              {" "}
-                              <button
-                                onClick={() =>
-                                  handleAssignPositionClick(member.id)
-                                }
-                                className={`${assignButtonClasses} flex-grow sm:flex-grow-0 justify-center cursor-pointer`}
-                                title={
-                                  member.positionName
-                                    ? `Đổi vị trí: ${member.positionName}`
-                                    : "Phân vị trí"
-                                }
-                              >
-                                <Component1Icon className="h-3.5 w-3.5" />
-                                <span>
-                                  {member.positionName
-                                    ? "Đổi Vị trí"
-                                    : "Phân Vị trí"}
-                                </span>
-                              </button>{" "}
-                              {member.positionName && (
-                                <button
-                                  onClick={() =>
-                                    handleRemovePosition(
-                                      member.id,
-                                      member.displayName
-                                    )
-                                  }
-                                  className={`${removeButtonClasses} px-2 cursor-pointer`}
-                                  title={`Xóa vị trí ${member.positionName}`}
-                                >
-                                  <TrashIcon className="h-3.5 w-3.5" />
-                                </button>
-                              )}{" "}
-                            </div>
-                          )}
-                          {assigningOrganizerRoleTo === member.id ? (
-                            <div className="p-2.5 border border-purple-300 rounded-md bg-purple-50 w-full shadow-sm mt-2">
-                              {" "}
-                              <label
-                                htmlFor={`role-select-list-${member.id}`}
-                                className="block text-xs font-medium text-purple-700 mb-1.5"
-                              >
-                                Gán vai trò BTC cho {member.displayName}:
-                              </label>{" "}
-                              <div className="flex items-center gap-2">
-                                {" "}
-                                <select
-                                  id={`role-select-list-${member.id}`}
-                                  value={selectedOrganizerRoleId}
-                                  onChange={(e) =>
-                                    setSelectedOrganizerRoleId(e.target.value)
-                                  }
-                                  className="flex-grow p-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
-                                >
-                                  {" "}
-                                  <option value="" disabled>
-                                    {organizerRoles.length > 0
-                                      ? "-- Chọn Vai trò BTC --"
-                                      : loading
-                                      ? "Đang tải..."
-                                      : "Không có vai trò"}
-                                  </option>{" "}
-                                  {organizerRoles.map((role) => (
-                                    <option key={role.id} value={role.id}>
-                                      {role.name}
-                                    </option>
-                                  ))}{" "}
-                                </select>{" "}
-                                <button
-                                  onClick={() =>
-                                    handleAssignOrganizerRole(member.id)
-                                  }
-                                  disabled={!selectedOrganizerRoleId}
-                                  className="px-3 py-1.5 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                                >
-                                  Lưu
-                                </button>{" "}
-                                <button
-                                  onClick={() => {
-                                    setAssigningOrganizerRoleTo(null);
-                                    setSelectedOrganizerRoleId("");
-                                  }}
-                                  className="px-3 py-1.5 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400 font-medium"
-                                >
-                                  Hủy
-                                </button>{" "}
-                              </div>{" "}
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 w-full justify-end mt-1.5">
-                              {" "}
-                              <button
-                                onClick={() =>
-                                  handleAssignOrganizerRoleClick(member.id)
-                                }
-                                className={`bg-purple-50 cursor-pointer text-purple-700 border border-purple-300 hover:bg-purple-100 hover:border-purple-400 ${actionButtonBaseClasses} flex-grow sm:flex-grow-0 justify-center`}
-                                title={
-                                  member.organizerRoleName
-                                    ? `Đổi vai trò : ${member.organizerRoleName}`
-                                    : "Phân vai trò "
-                                }
-                              >
-                                <ListBulletIcon className="h-3.5 w-3.5" />
-                                <span>
-                                  {member.organizerRoleName
-                                    ? "Đổi vai trò "
-                                    : "Phân vai trò "}
-                                </span>
-                              </button>{" "}
-                              {member.organizerRoleName && (
-                                <button
-                                  onClick={() =>
-                                    handleRemoveOrganizerRole(
-                                      member.id,
-                                      member.displayName
-                                    )
-                                  }
-                                  className={`${removeButtonClasses} px-2 cursor-pointer`}
-                                  title={`Xóa vai trò ${member.organizerRoleName}`}
-                                >
-                                  <TrashIcon className="h-3.5 w-3.5" />
-                                </button>
-                              )}{" "}
-                            </div>
-                          )}
-                          {!member.locked && (
-                            <button
-                              onClick={() => handleLockAccountTrigger(member)}
-                              disabled={lockingMemberId === member.id}
-                              className={`${lockButtonClasses} w-full sm:w-auto justify-center mt-2 cursor-pointer ${
-                                lockingMemberId === member.id
-                                  ? "cursor-wait"
-                                  : ""
-                              }`}
-                              title={`Khóa tài khoản của ${member.displayName}`}
+                    {!isLockedTabActive && isCurrentUserAdmin && (
+                      <>
+                        {assigningPositionTo === member.id ? (
+                          <div className="flex items-center gap-1 w-full">
+                            <select
+                              value={selectedPositionId}
+                              onChange={(e) =>
+                                setSelectedPositionId(e.target.value)
+                              }
+                              className="flex-grow p-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm bg-white"
                             >
-                              {lockingMemberId === member.id ? (
-                                <ReloadIcon className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <LockClosedIcon className="h-3.5 w-3.5" />
-                              )}
-                              <span className="ml-1">
-                                {lockingMemberId === member.id
-                                  ? "Đang khóa..."
-                                  : "Khóa tài khoản"}
-                              </span>
+                              <option value="">Chọn vị trí...</option>
+                              {positions.map((pos) => (
+                                <option key={pos.id} value={pos.id}>
+                                  {pos.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handleAssignPosition(member.id)}
+                              disabled={!selectedPositionId}
+                              className="p-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+                            >
+                              <CheckCircledIcon />
                             </button>
-                          )}
-                        </>
-                      )}
-                    {isLockedTabActive &&
-                      isCurrentUserAdmin &&
-                      member.locked && (
-                        <button
-                          onClick={() =>
-                            handleUnlockAccountTrigger(
-                              member as DisplayLockedMemberInfo
-                            )
-                          }
-                          disabled={unlockingMemberId === member.id}
-                          className={`${unlockButtonClasses} w-full sm:w-auto justify-center mt-2 cursor-pointer ${
-                            unlockingMemberId === member.id ? "cursor-wait" : ""
-                          }`}
-                          title={`Mở khóa tài khoản của ${member.displayName}`}
-                        >
-                          {unlockingMemberId === member.id ? (
-                            <ReloadIcon className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <LockOpen1Icon className="h-3.5 w-3.5" />
-                          )}
-                          <span className="ml-1">
-                            {unlockingMemberId === member.id
-                              ? "Đang mở..."
-                              : "Mở khóa"}
-                          </span>
-                        </button>
-                      )}
-                  </div>
+                            <button
+                              onClick={() => setAssigningPositionTo(null)}
+                              className="p-1.5 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-xs"
+                            >
+                              <CrossCircledIcon />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 w-full">
+                            <button
+                              onClick={() =>
+                                handleAssignPositionClick(member.id)
+                              }
+                              className={`${assignButtonClasses} flex-grow justify-center`}
+                              disabled={member.locked}
+                            >
+                              {member.positionName
+                                ? `Đổi: ${member.positionName}`
+                                : "Gán vị trí"}
+                            </button>
+                            {member.positionName && (
+                              <button
+                                onClick={() =>
+                                  handleRemovePosition(
+                                    member.id,
+                                    member.displayName
+                                  )
+                                }
+                                className={removeButtonClasses}
+                                title={`Xóa vị trí: ${member.positionName}`}
+                                disabled={member.locked}
+                              >
+                                <TrashIcon />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {assigningOrganizerRoleTo === member.id ? (
+                          <div className="flex items-center gap-1 w-full">
+                            <select
+                              value={selectedOrganizerRoleId}
+                              onChange={(e) =>
+                                setSelectedOrganizerRoleId(e.target.value)
+                              }
+                              className="flex-grow p-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm bg-white"
+                            >
+                              <option value="">Chọn vai trò BTC...</option>
+                              {organizerRoles.map((role) => (
+                                <option key={role.id} value={role.id}>
+                                  {role.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() =>
+                                handleAssignOrganizerRole(member.id)
+                              }
+                              disabled={!selectedOrganizerRoleId}
+                              className="p-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+                            >
+                              <CheckCircledIcon />
+                            </button>
+                            <button
+                              onClick={() =>
+                                setAssigningOrganizerRoleTo(null)
+                              }
+                              className="p-1.5 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-xs"
+                            >
+                              <CrossCircledIcon />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 w-full">
+                            <button
+                              onClick={() =>
+                                handleAssignOrganizerRoleClick(member.id)
+                              }
+                              className={`${assignButtonClasses} flex-grow justify-center`}
+                              disabled={member.locked}
+                            >
+                              {member.organizerRoleName
+                                ? `Đổi: ${member.organizerRoleName}`
+                                : "Gán vai trò BTC"}
+                            </button>
+                            {member.organizerRoleName && (
+                              <button
+                                onClick={() =>
+                                  handleRemoveOrganizerRole(
+                                    member.id,
+                                    member.displayName
+                                  )
+                                }
+                                className={removeButtonClasses}
+                                title={`Xóa vai trò: ${member.organizerRoleName}`}
+                                disabled={member.locked}
+                              >
+                                <TrashIcon />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {isCurrentUserAdmin && user && user.id !== member.id && (
+                      <button
+                        onClick={() =>
+                          member.locked
+                            ? handleUnlockAccountTrigger(member)
+                            : handleLockAccountTrigger(member)
+                        }
+                        className={`${
+                          member.locked ? unlockButtonClasses : lockButtonClasses
+                        } w-full justify-center`}
+                        disabled={
+                          lockingMemberId === member.id ||
+                          unlockingMemberId === member.id
+                        }
+                      >
+                        {member.locked ? (
+                          <>
+                            <LockOpen1Icon className="mr-1" /> Mở khóa
+                          </>
+                        ) : (
+                          <>
+                            <LockClosedIcon className="mr-1" /> Khóa TK
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>{" "}
                 </div>
               );
             }
@@ -1461,7 +1611,6 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                     member.locked ? "opacity-60 border-l-4 border-red-400" : ""
                   }`}
                 >
-                  {" "}
                   <img
                     src={
                       member.avatar ||
@@ -1469,35 +1618,28 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                         member.displayName
                       )}&background=random&color=fff&size=128`
                     }
-                    alt={`Avatar của ${member.displayName}`}
-                    width={80}
-                    height={80}
-                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-300 mb-3 cursor-pointer"
-                    onClick={() => handleViewProfile(member.id)}
-                  />{" "}
+                    alt={member.displayName}
+                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-200 mb-3 bg-gray-200"
+                  />
                   <h3
-                    className="font-semibold text-base md:text-lg text-gray-800 truncate w-full cursor-pointer"
+                    className="font-semibold text-gray-800 text-base truncate w-full"
                     title={member.displayName}
-                    onClick={() => handleViewProfile(member.id)}
                   >
-                    {" "}
-                    {member.displayName}{" "}
+                    {member.displayName}
                     {member.locked && (
-                      <span className="text-xs text-red-500 font-semibold ml-1">
-                        (Bị khóa)
-                      </span>
-                    )}{" "}
-                  </h3>{" "}
+                      <span className="text-red-500 text-xs ml-1">(Khóa)</span>
+                    )}
+                  </h3>
                   {member.email && (
                     <p
-                      className="text-gray-600 text-xs md:text-sm truncate w-full"
+                      className="text-gray-500 text-xs truncate w-full"
                       title={member.email}
                     >
                       {member.email}
                     </p>
-                  )}{" "}
+                  )}
                   <p
-                    className={`text-xs md:text-sm font-medium mt-1 ${
+                    className={`text-xs font-medium mt-0.5 ${
                       member.roleName === "ADMIN"
                         ? "text-red-600"
                         : member.roleName === "USER"
@@ -1507,238 +1649,33 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                         : "text-gray-500"
                     }`}
                   >
-                    {" "}
-                    {roleDisplayMap[member.roleName] || member.roleName}{" "}
-                  </p>{" "}
+                    {roleDisplayMap[member.roleName] || member.roleName}
+                  </p>
                   {(member.positionName || member.organizerRoleName) && (
-                    <p
-                      className="text-xs text-gray-500 mt-0.5 w-full truncate"
-                      title={`${member.positionName || ""}${
-                        member.positionName && member.organizerRoleName
-                          ? " / "
-                          : ""
-                      }${member.organizerRoleName || ""}`}
-                    >
-                      {" "}
+                    <div className="mt-1 text-xs text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full w-full truncate">
                       {member.positionName}
                       {member.positionName && member.organizerRoleName && " / "}
-                      {member.organizerRoleName}{" "}
-                    </p>
-                  )}{" "}
-                  <div className="mt-4 w-full space-y-2">
-                    {" "}
-                    {isCurrentUserAdmin &&
-                      (member.roleName === "USER" ||
-                        member.roleName === "GUEST") &&
-                      user &&
-                      member.id !== user.id && (
-                        <>
-                          {" "}
-                          {assigningPositionTo === member.id ? (
-                            <div className="p-2.5 border border-sky-300 rounded-md bg-sky-50 w-full shadow-sm text-left">
-                              {" "}
-                              <label
-                                htmlFor={`position-select-card-${member.id}`}
-                                className="block text-xs font-medium text-sky-700 mb-1.5"
-                              >
-                                Vị trí:
-                              </label>{" "}
-                              <div className="flex items-center gap-2">
-                                {" "}
-                                <select
-                                  id={`position-select-card-${member.id}`}
-                                  value={selectedPositionId}
-                                  onChange={(e) =>
-                                    setSelectedPositionId(e.target.value)
-                                  }
-                                  className="flex-grow p-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 bg-white shadow-sm"
-                                >
-                                  {" "}
-                                  <option value="" disabled>
-                                    {positions.length > 0
-                                      ? "-- Chọn --"
-                                      : loading
-                                      ? "..."
-                                      : "Không có"}
-                                  </option>{" "}
-                                  {positions.map((pos) => (
-                                    <option key={pos.id} value={pos.id}>
-                                      {pos.name}
-                                    </option>
-                                  ))}{" "}
-                                </select>{" "}
-                                <button
-                                  onClick={() =>
-                                    handleAssignPosition(member.id)
-                                  }
-                                  disabled={!selectedPositionId}
-                                  className="p-1.5 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50 font-medium"
-                                >
-                                  <CheckCircledIcon className="w-4 h-4" />
-                                </button>{" "}
-                                <button
-                                  onClick={() => {
-                                    setAssigningPositionTo(null);
-                                    setSelectedPositionId("");
-                                  }}
-                                  className="p-1.5 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400 font-medium"
-                                >
-                                  <CrossCircledIcon className="w-4 h-4" />
-                                </button>{" "}
-                              </div>{" "}
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 w-full">
-                              {" "}
-                              <button
-                                onClick={() =>
-                                  handleAssignPositionClick(member.id)
-                                }
-                                className={`${assignButtonClasses} w-full cursor-pointer justify-center text-xs py-2`}
-                                title={
-                                  member.positionName
-                                    ? `Đổi vị trí: ${member.positionName}`
-                                    : "Phân vị trí"
-                                }
-                              >
-                                {" "}
-                                <Component1Icon className="h-4 w-4 mr-1" />
-                                {member.positionName
-                                  ? "Đổi vị trí"
-                                  : "Phân vị trí"}{" "}
-                              </button>{" "}
-                              {member.positionName && (
-                                <button
-                                  onClick={() =>
-                                    handleRemovePosition(
-                                      member.id,
-                                      member.displayName
-                                    )
-                                  }
-                                  className={`${removeButtonClasses} p-2`}
-                                  title={`Xóa vị trí ${member.positionName}`}
-                                >
-                                  <TrashIcon className="h-4 w-4" />
-                                </button>
-                              )}{" "}
-                            </div>
-                          )}{" "}
-                          {assigningOrganizerRoleTo === member.id ? (
-                            <div className="p-2.5 border border-purple-300 rounded-md bg-purple-50 w-full shadow-sm text-left mt-2">
-                              {" "}
-                              <label
-                                htmlFor={`role-select-card-${member.id}`}
-                                className="block text-xs font-medium text-purple-700 mb-1.5"
-                              >
-                                Vai trò BTC:
-                              </label>{" "}
-                              <div className="flex items-center gap-2">
-                                {" "}
-                                <select
-                                  id={`role-select-card-${member.id}`}
-                                  value={selectedOrganizerRoleId}
-                                  onChange={(e) =>
-                                    setSelectedOrganizerRoleId(e.target.value)
-                                  }
-                                  className="flex-grow p-1.5 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm"
-                                >
-                                  {" "}
-                                  <option value="" disabled>
-                                    {organizerRoles.length > 0
-                                      ? "-- Chọn --"
-                                      : loading
-                                      ? "..."
-                                      : "Không có"}
-                                  </option>{" "}
-                                  {organizerRoles.map((role) => (
-                                    <option key={role.id} value={role.id}>
-                                      {role.name}
-                                    </option>
-                                  ))}{" "}
-                                </select>{" "}
-                                <button
-                                  onClick={() =>
-                                    handleAssignOrganizerRole(member.id)
-                                  }
-                                  disabled={!selectedOrganizerRoleId}
-                                  className="p-1.5 bg-green-500 text-white text-xs rounded hover:bg-green-600 disabled:opacity-50 font-medium"
-                                >
-                                  <CheckCircledIcon className="w-4 h-4" />
-                                </button>{" "}
-                                <button
-                                  onClick={() => {
-                                    setAssigningOrganizerRoleTo(null);
-                                    setSelectedOrganizerRoleId("");
-                                  }}
-                                  className="p-1.5 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400 font-medium"
-                                >
-                                  <CrossCircledIcon className="w-4 h-4" />
-                                </button>{" "}
-                              </div>{" "}
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 w-full mt-1.5">
-                              {" "}
-                              <button
-                                onClick={() =>
-                                  handleAssignOrganizerRoleClick(member.id)
-                                }
-                                className={`bg-purple-50 cursor-pointer text-purple-700 border border-purple-300 hover:bg-purple-100 hover:border-purple-400 ${actionButtonBaseClasses} w-full justify-center text-xs py-2`}
-                                title={
-                                  member.organizerRoleName
-                                    ? `Đổi vai trò : ${member.organizerRoleName}`
-                                    : "Phân vai trò "
-                                }
-                              >
-                                {" "}
-                                <ListBulletIcon className="h-4 w-4 mr-1" />
-                                {member.organizerRoleName
-                                  ? "Đổi vai trò "
-                                  : "Phân vai trò "}{" "}
-                              </button>{" "}
-                              {member.organizerRoleName && (
-                                <button
-                                  onClick={() =>
-                                    handleRemoveOrganizerRole(
-                                      member.id,
-                                      member.displayName
-                                    )
-                                  }
-                                  className={`${removeButtonClasses} p-2 cursor-pointer`}
-                                  title={`Xóa vai trò ${member.organizerRoleName}`}
-                                >
-                                  <TrashIcon className="h-4 w-4" />
-                                </button>
-                              )}{" "}
-                            </div>
-                          )}{" "}
-                          {!member.locked && (
-                            <button
-                              onClick={() => handleLockAccountTrigger(member)}
-                              disabled={lockingMemberId === member.id}
-                              className={`${lockButtonClasses} w-full cursor-pointer justify-center mt-1.5 text-xs py-2 ${
-                                lockingMemberId === member.id
-                                  ? "cursor-wait"
-                                  : ""
-                              }`}
-                              title={`Khóa tài khoản`}
-                            >
-                              {" "}
-                              {lockingMemberId === member.id ? (
-                                <ReloadIcon className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <LockClosedIcon className="h-4 w-4" />
-                              )}{" "}
-                              <span className="ml-1">
-                                {lockingMemberId === member.id
-                                  ? "Đang khóa..."
-                                  : "Khóa tài khoản"}
-                              </span>{" "}
-                            </button>
-                          )}{" "}
-                        </>
-                      )}{" "}
-                  </div>{" "}
+                      {member.organizerRoleName}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => handleViewProfile(member.id)}
+                    className="mt-3 text-xs text-pink-600 hover:text-pink-800 font-medium py-1 px-3 border border-pink-200 rounded-md hover:bg-pink-50 transition-colors"
+                  >
+                    Xem chi tiết
+                  </button>
+                  {isCurrentUserAdmin &&
+                    user &&
+                    user.id !== member.id &&
+                    !member.locked && (
+                      <button
+                        onClick={() => handleLockAccountTrigger(member)}
+                        className={`${lockButtonClasses} mt-2 w-full max-w-[150px] justify-center`}
+                        disabled={lockingMemberId === member.id}
+                      >
+                        <LockClosedIcon className="mr-1" /> Khóa TK
+                      </button>
+                    )}
                 </div>
               );
             }
@@ -1748,7 +1685,6 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                   key={member.id}
                   className="p-4 bg-white rounded-lg shadow-xl border border-orange-300 flex flex-col items-center text-center"
                 >
-                  {" "}
                   <img
                     src={
                       member.avatar ||
@@ -1756,118 +1692,66 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                         member.displayName
                       )}&background=random&color=fff&size=128`
                     }
-                    alt={`Avatar của ${member.displayName}`}
-                    width={80}
-                    height={80}
-                    className="w-20 h-20 rounded-full object-cover border-2 border-orange-200 mb-3 cursor-pointer"
-                    onClick={() => handleViewProfile(member.id)}
-                  />{" "}
+                    alt={member.displayName}
+                    className="w-20 h-20 rounded-full object-cover border-2 border-orange-200 mb-3 bg-gray-200"
+                  />
                   <h3
-                    className="font-semibold text-base md:text-lg text-gray-800 truncate w-full cursor-pointer"
+                    className="font-semibold text-gray-800 text-base truncate w-full"
                     title={member.displayName}
-                    onClick={() => handleViewProfile(member.id)}
                   >
-                    {" "}
                     {member.displayName}{" "}
-                    <span className="text-xs text-orange-600 font-semibold ml-1">
-                      (Bị khóa)
-                    </span>{" "}
-                  </h3>{" "}
+                    <span className="text-orange-600 text-xs">(Bị khóa)</span>
+                  </h3>
                   {member.email && (
                     <p
-                      className="text-gray-600 text-xs md:text-sm truncate w-full"
+                      className="text-gray-500 text-xs truncate w-full"
                       title={member.email}
                     >
                       {member.email}
                     </p>
-                  )}{" "}
-                  <p
-                    className={`text-xs md:text-sm font-medium mt-1 ${
-                      member.roleName === "ADMIN"
-                        ? "text-red-600"
-                        : member.roleName === "USER"
-                        ? "text-green-600"
-                        : member.roleName === "GUEST"
-                        ? "text-blue-600"
-                        : "text-gray-500"
-                    }`}
+                  )}
+                  <div className="text-left text-xs text-gray-600 mt-2 space-y-0.5 bg-orange-50 p-2 rounded-md w-full">
+                    <p title={member.lockReason || ""}>
+                      <strong>Lý do:</strong> {member.lockReason || "Không có"}
+                    </p>
+                    <p>
+                      <strong>Khóa lúc:</strong>{" "}
+                      {formatDateNullable(member.lockedAt)}
+                    </p>
+                    <p title={member.lockedByDisplayName}>
+                      <strong>Người khóa:</strong> {member.lockedByDisplayName}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleViewProfile(member.id)}
+                    className="mt-3 text-xs text-pink-600 hover:text-pink-800 font-medium py-1 px-3 border border-pink-200 rounded-md hover:bg-pink-50 transition-colors"
                   >
-                    {" "}
-                    {roleDisplayMap[member.roleName] || member.roleName}{" "}
-                  </p>{" "}
-                  <div className="mt-3 pt-3 border-t border-gray-200 w-full text-left text-xs space-y-1">
-                    {" "}
-                    <p
-                      className="text-gray-600"
-                      title={member.lockReason || ""}
+                    Xem chi tiết
+                  </button>
+                  {isCurrentUserAdmin && (
+                    <button
+                      onClick={() => handleUnlockAccountTrigger(member)}
+                      className={`${unlockButtonClasses} mt-2 w-full max-w-[150px] justify-center`}
+                      disabled={unlockingMemberId === member.id}
                     >
-                      <strong>Lý do khóa:</strong>{" "}
-                      <span className="text-gray-800">
-                        {member.lockReason || "Không có"}
-                      </span>
-                    </p>{" "}
-                    <p className="text-gray-600">
-                      <strong>Khóa vào lúc:</strong>{" "}
-                      <span className="text-gray-800">
-                        {formatDateNullable(member.lockedAt)}
-                      </span>
-                    </p>{" "}
-                    <p
-                      className="text-gray-600"
-                      title={member.lockedByDisplayName}
-                    >
-                      <strong>Người khóa:</strong>{" "}
-                      <span className="text-gray-800">
-                        {member.lockedByDisplayName}
-                      </span>
-                    </p>{" "}
-                  </div>{" "}
-                  {isCurrentUserAdmin && member.locked && (
-                    <div className="mt-4 w-full">
-                      {" "}
-                      <button
-                        onClick={() =>
-                          handleUnlockAccountTrigger(
-                            member as DisplayLockedMemberInfo
-                          )
-                        }
-                        disabled={unlockingMemberId === member.id}
-                        className={`${unlockButtonClasses} w-full justify-center text-xs py-2  cursor-pointer${
-                          unlockingMemberId === member.id ? "cursor-wait" : ""
-                        }`}
-                        title={`Mở khóa tài khoản của ${member.displayName}`}
-                      >
-                        {" "}
-                        {unlockingMemberId === member.id ? (
-                          <ReloadIcon className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <LockOpen1Icon className="h-4 w-4" />
-                        )}{" "}
-                        <span className="ml-1">
-                          {unlockingMemberId === member.id
-                            ? "Đang mở..."
-                            : "Mở khóa "}
-                        </span>{" "}
-                      </button>{" "}
-                    </div>
-                  )}{" "}
+                      <LockOpen1Icon className="mr-1" /> Mở khóa
+                    </button>
+                  )}
                 </div>
               );
             }
             return null;
           })
         ) : (
-          <p className="text-center text-gray-500 italic py-4">
-            {" "}
+          <p className="text-center text-gray-500 italic py-4 col-span-full">
             {searchTerm
               ? "Không tìm thấy tài khoản nào khớp."
               : tab === "locked"
               ? "Không có tài khoản nào bị khóa."
-              : "Không có thành viên nào."}{" "}
+              : "Không có thành viên nào."}
           </p>
         )}
       </div>
-
       {confirmDialogProps && (
         <ConfirmDialog
           isOpen={isConfirmOpen}
@@ -1897,10 +1781,10 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
           userProfile={selectedUserProfile}
           currentUser={user}
           onTriggerLockAccount={
-            handleLockAccountTrigger as (userToLock: ApiUser) => void
+            handleLockAccountTrigger as (userToLock: FullApiUser) => void
           }
           onTriggerUnlockAccount={
-            handleUnlockAccountTrigger as (userToUnlock: ApiUser) => void
+            handleUnlockAccountTrigger as (userToUnlock: FullApiUser) => void
           }
           isLockingTargetUser={lockingMemberId === selectedUserProfile?.id}
           isUnlockingTargetUser={unlockingMemberId === selectedUserProfile?.id}

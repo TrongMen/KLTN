@@ -3,14 +3,9 @@
 import React, { useMemo, useState, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "react-hot-toast";
-import { EventDisplayInfo, User } from "../homeuser";
+import { EventDisplayInfo } from "../homeadmin"; // Điều chỉnh đường dẫn nếu cần
 import {
-  PersonIcon,
-  IdCardIcon,
-  CheckIcon,
-  Cross2Icon,
-  ReloadIcon,
-  Pencil1Icon,
+  ReloadIcon, // Thêm ReloadIcon
   CheckCircledIcon,
   ClockIcon,
   CalendarIcon,
@@ -18,8 +13,8 @@ import {
   ListBulletIcon,
   GridIcon,
   InfoCircledIcon,
-  ChevronLeftIcon, // Added
-  ChevronRightIcon, // Added
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@radix-ui/react-icons";
 
 interface AdminHomeTabContentProps {
@@ -39,6 +34,7 @@ interface AdminHomeTabContentProps {
   selectedEvent: EventDisplayInfo | null;
   onEventClick: (event: EventDisplayInfo) => void;
   onBackToList: () => void;
+  onRefreshEvents: () => Promise<void>; // Prop mới cho hàm refresh
 }
 
 type EventStatus = "upcoming" | "ongoing" | "ended";
@@ -53,23 +49,16 @@ const getEventStatus = (eventDateStr: string): EventStatus => {
       now.getDate()
     );
     const eventDate = new Date(eventDateStr);
-    if (isNaN(eventDate.getTime())) {
-      return "upcoming";
-    }
+    if (isNaN(eventDate.getTime())) return "upcoming";
     const eventDateStart = new Date(
       eventDate.getFullYear(),
       eventDate.getMonth(),
       eventDate.getDate()
     );
-    if (eventDateStart < todayStart) {
-      return "ended";
-    } else if (eventDateStart > todayStart) {
-      return "upcoming";
-    } else {
-      return "ongoing";
-    }
+    if (eventDateStart < todayStart) return "ended";
+    else if (eventDateStart > todayStart) return "upcoming";
+    else return "ongoing";
   } catch (e) {
-    console.error("Error parsing event date for status:", e);
     return "upcoming";
   }
 };
@@ -152,7 +141,7 @@ const getMonthRange = (
   return { startOfMonth: start, endOfMonth: end };
 };
 
-const ITEMS_PER_PAGE_OPTIONS = [6, 12, 36]; // Define options
+const ITEMS_PER_PAGE_OPTIONS = [6, 12, 36];
 
 const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   events,
@@ -171,29 +160,28 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   selectedEvent,
   onEventClick,
   onBackToList,
+  onRefreshEvents, // Nhận prop mới
 }) => {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
-  // --- Pagination State ---
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(
     ITEMS_PER_PAGE_OPTIONS[0]
   );
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false); // State loading cho nút refresh
 
-  // --- Event Processing (Filtering & Sorting) ---
   const processedEvents = useMemo(() => {
     let evts = [...events];
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
-
-    if (timeFilterOption === "upcoming") {
+    if (timeFilterOption === "upcoming")
       evts = evts.filter((e) => getEventStatus(e.date) === "upcoming");
-    } else if (timeFilterOption === "ongoing") {
+    else if (timeFilterOption === "ongoing")
       evts = evts.filter((e) => getEventStatus(e.date) === "ongoing");
-    } else if (timeFilterOption === "ended") {
+    else if (timeFilterOption === "ended")
       evts = evts.filter((e) => getEventStatus(e.date) === "ended");
-    } else if (timeFilterOption === "today") {
+    else if (timeFilterOption === "today")
       evts = evts.filter((e) => {
         try {
           const d = new Date(e.date);
@@ -202,7 +190,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           return false;
         }
       });
-    } else if (timeFilterOption === "thisWeek") {
+    else if (timeFilterOption === "thisWeek") {
       const { startOfWeek, endOfWeek } = getWeekRange(new Date());
       evts = evts.filter((e) => {
         try {
@@ -257,28 +245,21 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           (e.status && e.status.toLowerCase().includes(l))
       );
     }
-    if (sortOption === "za") {
+    if (sortOption === "za")
       evts.sort((a, b) =>
         b.title.localeCompare(a.title, "vi", { sensitivity: "base" })
       );
-    } else if (sortOption === "az") {
+    else if (sortOption === "az")
       evts.sort((a, b) =>
         a.title.localeCompare(b.title, "vi", { sensitivity: "base" })
       );
-    } else {
+    else {
       evts.sort((a, b) => {
         try {
-          const statusA = getEventStatus(a.date);
-          const statusB = getEventStatus(b.date);
           const dateA = new Date(a.date).getTime();
           const dateB = new Date(b.date).getTime();
           if (isNaN(dateA) || isNaN(dateB)) return 0;
-          if (dateB !== dateA) return dateB - dateA;
-          if (statusB === "ongoing" && statusA !== "ongoing") return 1;
-          if (statusA === "ongoing" && statusB !== "ongoing") return -1;
-          if (statusB === "upcoming" && statusA === "ended") return 1;
-          if (statusA === "upcoming" && statusB === "ended") return -1;
-          return 0;
+          return dateB - dateA;
         } catch {
           return 0;
         }
@@ -294,27 +275,21 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     endDateFilter,
   ]);
 
-  // --- Pagination Calculation ---
   const totalItems = processedEvents.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
-  // Effect to reset/adjust page
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
+    if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [totalPages, currentPage]);
 
-  // Calculate items for the current page
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedEvents = processedEvents.slice(startIndex, endIndex);
 
-  // --- Handlers ---
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
     setStartDateFilter(newStartDate);
-    setCurrentPage(1); // Reset page
+    setCurrentPage(1);
     if (endDateFilter && newStartDate > endDateFilter) {
       setEndDateFilter("");
       toast("Ngày bắt đầu không thể sau ngày kết thúc.", { icon: "⚠️" });
@@ -326,7 +301,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       toast.error("Ngày kết thúc không thể trước ngày bắt đầu.");
     } else {
       setEndDateFilter(newEndDate);
-      setCurrentPage(1); /* Reset page */
+      setCurrentPage(1);
     }
   };
   const handleItemsPerPageChange = (
@@ -339,38 +314,45 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     setCurrentPage(newPage);
   };
 
-  // --- Render Logic ---
-  if (isLoading) {
-    return (
-      <p className="text-center text-gray-500 italic py-6">
-        {" "}
-        Đang tải sự kiện...{" "}
-      </p>
-    );
-  }
-  if (error) {
-    return (
-      <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-        {" "}
-        Lỗi tải sự kiện: {error}{" "}
-      </p>
-    );
-  }
+  const handleRefresh = async () => {
+    setIsRefreshing(true); // Bắt đầu loading nút refresh
+    try {
+      await onRefreshEvents(); // Gọi hàm fetch từ props
+      toast.success("Đã làm mới danh sách sự kiện!");
+    } catch (error) {
+      console.error("Lỗi khi làm mới sự kiện (AdminHomeTabContent):", error);
+      toast.error("Không thể làm mới sự kiện.");
+    } finally {
+      setIsRefreshing(false); // Kết thúc loading nút refresh
+    }
+  };
 
   return (
     <div>
-      {/* --- Controls --- */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600 shrink-0">
-          {" "}
-          Trang chủ Sự kiện (Admin){" "}
+          Trang chủ Sự kiện (Admin)
         </h1>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
-          {/* Sort */}
+          {/* Thêm nút Làm mới */}
+          <div className="flex-grow sm:flex-grow-0">
+            <button
+              onClick={handleRefresh}
+              disabled={isLoading || isRefreshing} // Disable nếu đang tải hoặc đang refresh
+              title="Làm mới danh sách sự kiện"
+              className="w-full h-full p-2 border cursor-pointer border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
+            >
+              {isRefreshing ? ( // Hiển thị icon xoay nếu đang refresh
+                <ReloadIcon className="w-5 h-5 animate-spin text-indigo-600" />
+              ) : (
+                <ReloadIcon className="w-5 h-5 text-indigo-600" />
+              )}
+              <span className="ml-2 hidden sm:inline">Làm mới</span>
+            </button>
+          </div>
           <div className="flex-grow sm:flex-grow-0">
             <label htmlFor="sortOptionAdminHome" className="sr-only">
-              {" "}
-              Sắp xếp{" "}
+              Sắp xếp
             </label>
             <select
               id="sortOptionAdminHome"
@@ -381,16 +363,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              {/* <option value="date">📅 Gần nhất</option> */}
+              <option value="date-desc">📅 Mới nhất</option>
               <option value="az">🔤 A - Z</option>
               <option value="za">🔤 Z - A</option>
             </select>
           </div>
-          {/* Time Filter */}
           <div className="flex-grow sm:flex-grow-0">
             <label htmlFor="timeFilterOptionAdminHome" className="sr-only">
-              {" "}
-              Lọc thời gian{" "}
+              Lọc thời gian
             </label>
             <select
               id="timeFilterOptionAdminHome"
@@ -401,17 +381,16 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              <option value="all">♾️ Tất cả</option>
+              <option value="all">♾️ Tất cả</option>{" "}
               <option value="upcoming">☀️ Sắp diễn ra</option>
-              <option value="ongoing">🟢 Đang diễn ra</option>
+              <option value="ongoing">🟢 Đang diễn ra</option>{" "}
               <option value="ended">🏁 Đã kết thúc</option>
-              <option value="today">📅 Hôm nay</option>
+              <option value="today">📅 Hôm nay</option>{" "}
               <option value="thisWeek">🗓️ Tuần này</option>
-              <option value="thisMonth">🗓️ Tháng này</option>
+              <option value="thisMonth">🗓️ Tháng này</option>{" "}
               <option value="dateRange">🔢 Khoảng ngày</option>
             </select>
           </div>
-          {/* Items Per Page */}
           <div className="flex-grow sm:flex-grow-0">
             <label htmlFor="itemsPerPageSelectAdmin" className="sr-only">
               Sự kiện mỗi trang
@@ -424,13 +403,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             >
               {ITEMS_PER_PAGE_OPTIONS.map((option) => (
                 <option key={option} value={option}>
-                  {" "}
-                  {option} / trang{" "}
+                  {option} / trang
                 </option>
               ))}
             </select>
           </div>
-          {/* View Toggle */}
           <div className="flex items-center gap-2 flex-shrink-0 self-center ">
             <button
               onClick={() => setViewMode("card")}
@@ -460,7 +437,6 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         </div>
       </div>
 
-      {/* Date Range Picker */}
       {timeFilterOption === "dateRange" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
           {" "}
@@ -502,8 +478,6 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           </div>{" "}
         </div>
       )}
-
-      {/* Search Input */}
       <div className="relative w-full mb-6">
         {" "}
         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
@@ -523,15 +497,13 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         />{" "}
       </div>
 
-      {/* --- Event Display Area --- */}
       {isLoading ? (
         <p className="text-center text-gray-500 italic py-6">
           Đang tải sự kiện...
         </p>
       ) : error ? (
         <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-          {" "}
-          Lỗi tải sự kiện: {error}{" "}
+          Lỗi tải sự kiện: {error}
         </p>
       ) : selectedEvent ? (
         <div className="p-6 border rounded-lg shadow-lg bg-gray-50 mb-6">
@@ -572,8 +544,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 />
               ) : (
                 <div className="w-full h-48 md:h-64 lg:h-80 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-5xl font-semibold border">
-                  {" "}
-                  {selectedEvent.title?.charAt(0).toUpperCase() || "?"}{" "}
+                  {selectedEvent.title?.charAt(0).toUpperCase() || "?"}
                 </div>
               )}{" "}
             </div>{" "}
@@ -582,8 +553,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                 {" "}
                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex-1">
-                  {" "}
-                  {selectedEvent.title}{" "}
+                  {selectedEvent.title}
                 </h2>{" "}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-shrink-0 mt-1 sm:mt-0">
                   {" "}
@@ -595,8 +565,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                           status
                         )} flex-shrink-0`}
                       >
-                        {" "}
-                        {getStatusIcon(status)} {getStatusText(status)}{" "}
+                        {getStatusIcon(status)} {getStatusText(status)}
                       </span>
                     );
                   })()}{" "}
@@ -606,9 +575,8 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                         selectedEvent.status
                       )} flex-shrink-0`}
                     >
-                      {" "}
                       <InfoCircledIcon className="w-3 h-3" />{" "}
-                      {selectedEvent.status}{" "}
+                      {selectedEvent.status}
                     </span>
                   )}{" "}
                 </div>{" "}
@@ -616,57 +584,44 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
                 {" "}
                 <p>
-                  {" "}
                   <strong className="font-medium text-gray-900 w-24 inline-block">
-                    {" "}
-                    📅 Ngày:{" "}
+                    📅 Ngày:
                   </strong>{" "}
-                  {new Date(selectedEvent.date).toLocaleDateString(
-                    "vi-VN"
-                  )}{" "}
+                  {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}
                 </p>{" "}
                 {selectedEvent.time && (
                   <p>
-                    {" "}
                     <strong className="font-medium text-gray-900 w-24 inline-block">
-                      {" "}
-                      🕒 Thời gian:{" "}
+                      🕒 Thời gian:
                     </strong>{" "}
                     {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
                       hour: "2-digit",
                       minute: "2-digit",
-                    })}{" "}
+                    })}
                   </p>
                 )}{" "}
                 <p>
-                  {" "}
                   <strong className="font-medium text-gray-900 w-24 inline-block">
-                    {" "}
-                    📍 Địa điểm:{" "}
+                    📍 Địa điểm:
                   </strong>{" "}
-                  {selectedEvent.location}{" "}
+                  {selectedEvent.location}
                 </p>{" "}
                 <p>
-                  {" "}
                   <strong className="font-medium text-gray-900 w-24 inline-block">
-                    {" "}
-                    👤 Người tạo:{" "}
+                    👤 Người tạo:
                   </strong>{" "}
                   {selectedEvent.createdBy
                     ? `ID: ${selectedEvent.createdBy}`
-                    : "N/A"}{" "}
+                    : "N/A"}
                 </p>{" "}
                 {selectedEvent.purpose && (
                   <p>
-                    {" "}
                     <strong className="font-medium text-gray-900 w-24 inline-block align-top">
-                      {" "}
-                      🎯 Mục đích:{" "}
+                      🎯 Mục đích:
                     </strong>{" "}
                     <span className="inline-block max-w-[calc(100%-6rem)]">
-                      {" "}
-                      {selectedEvent.purpose}{" "}
-                    </span>{" "}
+                      {selectedEvent.purpose}
+                    </span>
                   </p>
                 )}{" "}
               </div>{" "}
@@ -675,36 +630,33 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 <div>
                   {" "}
                   <p className="font-medium text-gray-900 mb-1">
-                    {" "}
-                    📜 Nội dung:{" "}
+                    📜 Nội dung:
                   </p>{" "}
                   <p className="text-gray-700 whitespace-pre-wrap">
-                    {" "}
                     {selectedEvent.content ||
                       selectedEvent.description ||
-                      "Không có nội dung chi tiết."}{" "}
+                      "Không có nội dung chi tiết."}
                   </p>{" "}
                 </div>{" "}
                 <div>
                   {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
-                    {" "}
-                    👥 Ban tổ chức:{" "}
+                    👥 Ban tổ chức:
                   </strong>{" "}
                   {selectedEvent.organizers &&
                   selectedEvent.organizers.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
-                      {" "}
                       {selectedEvent.organizers.map((org, index) => (
-                        <li key={`${org.userId}-${index}`}>
-                          {" "}
+                        <li
+                          key={`<span class="math-inline">\{org\.userId\}\-</span>{index}`}
+                        >
                           {org.roleName || org.positionName
-                            ? `${org.roleName || ""}${
-                                org.roleName && org.positionName ? " - " : ""
-                              }${org.positionName || ""}`
-                            : `Thành viên ${index + 1}`}{" "}
+                            ? `<span class="math-inline">\{org\.roleName \|\| ""\}</span>{org.roleName && org.positionName ? " - " : ""}${
+                                org.positionName || ""
+                              }`
+                            : `Thành viên ${index + 1}`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
@@ -713,23 +665,22 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 <div>
                   {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
-                    {" "}
-                    👤 Người tham gia (Vai trò/Chức vụ):{" "}
+                    👤 Người tham gia (Vai trò/Chức vụ):
                   </strong>{" "}
                   {selectedEvent.participants &&
                   selectedEvent.participants.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
-                      {" "}
                       {selectedEvent.participants.map((p, index) => (
-                        <li key={`${p.userId}-${index}`}>
-                          {" "}
+                        <li
+                          key={`<span class="math-inline">\{p\.userId\}\-</span>{index}`}
+                        >
                           {p.roleName || p.positionName
-                            ? `${p.roleName || ""}${
-                                p.roleName && p.positionName ? " - " : ""
-                              }${p.positionName || ""}`
-                            : `Người tham gia ${index + 1}`}{" "}
+                            ? `<span class="math-inline">\{p\.roleName \|\| ""\}</span>{p.roleName && p.positionName ? " - " : ""}${
+                                p.positionName || ""
+                              }`
+                            : `Người tham gia ${index + 1}`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
@@ -738,20 +689,17 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 <div>
                   {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
-                    {" "}
-                    ✅ Người tham dự (Đã đăng ký):{" "}
+                    ✅ Người tham dự (Đã đăng ký):
                   </strong>{" "}
                   {selectedEvent.attendees &&
                   selectedEvent.attendees.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
-                      {" "}
                       {selectedEvent.attendees.map((att) => (
                         <li key={att.userId}>
-                          {" "}
                           {att.fullName || `ID: ${att.userId}`}{" "}
-                          {att.studentCode && ` (${att.studentCode})`}{" "}
+                          {att.studentCode && ` (${att.studentCode})`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có ai đăng ký.</p>
@@ -760,18 +708,26 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               </div>{" "}
               <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end gap-3">
                 {" "}
-                <button className="px-4 py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition text-sm font-medium">
-                  {" "}
-                  Sửa{" "}
+                <button
+                  onClick={() => toast.info("Chức năng sửa đang phát triển")}
+                  className="px-4 py-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition text-sm font-medium"
+                >
+                  Sửa
                 </button>{" "}
-                <button className="px-4 py-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition text-sm font-medium">
-                  {" "}
-                  Xóa{" "}
+                <button
+                  onClick={() => toast.info("Chức năng xoá đang phát triển")}
+                  className="px-4 py-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition text-sm font-medium"
+                >
+                  Xóa
                 </button>{" "}
                 {selectedEvent.status === "PENDING" && (
-                  <button className="px-4 py-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition text-sm font-medium">
-                    {" "}
-                    Duyệt{" "}
+                  <button
+                    onClick={() =>
+                      toast.info("Chức năng duyệt đang phát triển")
+                    }
+                    className="px-4 py-2 rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition text-sm font-medium"
+                  >
+                    Duyệt
                   </button>
                 )}{" "}
               </div>{" "}
@@ -820,8 +776,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                           />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
-                            {" "}
-                            {event.title?.charAt(0).toUpperCase() || "?"}{" "}
+                            {event.title?.charAt(0).toUpperCase() || "?"}
                           </div>
                         )}{" "}
                         <span
@@ -829,9 +784,8 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                             timeStatus
                           )} shadow-sm`}
                         >
-                          {" "}
                           {getStatusIcon(timeStatus)}{" "}
-                          {getStatusText(timeStatus)}{" "}
+                          {getStatusText(timeStatus)}
                         </span>{" "}
                         {event.status && (
                           <span
@@ -839,9 +793,8 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               event.status
                             )} shadow-sm`}
                           >
-                            {" "}
                             <InfoCircledIcon className="w-3 h-3" />{" "}
-                            {event.status}{" "}
+                            {event.status}
                           </span>
                         )}{" "}
                       </div>{" "}
@@ -853,18 +806,15 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                         >
                           {" "}
                           <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
-                            {" "}
-                            {event.title}{" "}
+                            {event.title}
                           </h2>{" "}
                           <div className="space-y-0.5 mb-2">
                             {" "}
                             <p className="text-sm text-gray-600 flex items-center gap-1">
-                              {" "}
-                              <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />{" "}
-                              {new Date(event.date).toLocaleDateString("vi-VN")}{" "}
+                              <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+                              {new Date(event.date).toLocaleDateString("vi-VN")}
                             </p>{" "}
                             <p className="text-sm text-gray-600 flex items-center gap-1">
-                              {" "}
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 className="h-3.5 w-3.5 text-gray-400"
@@ -873,29 +823,27 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                                 stroke="currentColor"
                                 strokeWidth={2}
                               >
-                                {" "}
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                />{" "}
+                                />
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                                 />
-                              </svg>{" "}
-                              {event.location}{" "}
+                              </svg>
+                              {event.location}
                             </p>{" "}
                           </div>{" "}
                           <div className="text-xs text-gray-500 flex items-center gap-x-3 mt-1">
-                            {" "}
                             {event.organizers && (
                               <span>👥 BTC: {event.organizers.length}</span>
                             )}{" "}
                             {event.attendees && (
                               <span>✅ Đã ĐK: {event.attendees.length}</span>
-                            )}{" "}
+                            )}
                           </div>{" "}
                         </div>{" "}
                         <div className="flex-grow"></div>{" "}
@@ -904,9 +852,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              /* Handle Edit */ toast.info(
-                                "Chức năng sửa đang phát triển"
-                              );
+                              toast.info("Chức năng sửa đang phát triển");
                             }}
                             className="px-2.5 py-1 rounded text-xs bg-blue-50 text-blue-600 hover:bg-blue-100"
                           >
@@ -915,9 +861,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              /* Handle Delete */ toast.info(
-                                "Chức năng xoá đang phát triển"
-                              );
+                              toast.info("Chức năng xoá đang phát triển");
                             }}
                             className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100"
                           >
@@ -957,24 +901,21 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-md bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 font-semibold mr-3 flex-shrink-0 border">
-                              {" "}
-                              {event.title?.charAt(0).toUpperCase() || "?"}{" "}
+                              {event.title?.charAt(0).toUpperCase() || "?"}
                             </div>
                           )}{" "}
                           <div className="flex-1 min-w-0">
                             {" "}
                             <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1">
-                              {" "}
-                              {event.title}{" "}
+                              {event.title}
                             </p>{" "}
                             <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                               {" "}
                               <span
                                 className={getStatusBadgeClasses(timeStatus)}
                               >
-                                {" "}
                                 {getStatusIcon(timeStatus)}{" "}
-                                {getStatusText(timeStatus)}{" "}
+                                {getStatusText(timeStatus)}
                               </span>{" "}
                               {event.status && (
                                 <span
@@ -982,20 +923,17 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                                     event.status
                                   )}`}
                                 >
-                                  {" "}
                                   <InfoCircledIcon className="w-3 h-3" />{" "}
-                                  {event.status}{" "}
+                                  {event.status}
                                 </span>
                               )}{" "}
                               <span className="inline-flex items-center gap-1">
-                                {" "}
-                                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />{" "}
+                                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
                                 {new Date(event.date).toLocaleDateString(
                                   "vi-VN"
-                                )}{" "}
+                                )}
                               </span>{" "}
                               <span className="inline-flex items-center gap-1">
-                                {" "}
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
                                   className="h-3.5 w-3.5 text-gray-400"
@@ -1004,30 +942,27 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                                   stroke="currentColor"
                                   strokeWidth={2}
                                 >
-                                  {" "}
                                   <path
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                     d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                  />{" "}
+                                  />
                                   <path
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                  />{" "}
-                                </svg>{" "}
-                                {event.location}{" "}
+                                  />
+                                </svg>
+                                {event.location}
                               </span>{" "}
                               {event.organizers && (
                                 <span className="inline-flex items-center gap-1">
-                                  {" "}
-                                  👥 {event.organizers.length} BTC{" "}
+                                  👥 {event.organizers.length} BTC
                                 </span>
                               )}{" "}
                               {event.attendees && (
                                 <span className="inline-flex items-center gap-1">
-                                  {" "}
-                                  ✅ {event.attendees.length} ĐK{" "}
+                                  ✅ {event.attendees.length} ĐK
                                 </span>
                               )}{" "}
                             </div>{" "}
@@ -1047,9 +982,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              /* Handle Edit */ toast.info(
-                                "Chức năng sửa đang phát triển"
-                              );
+                              toast.info("Chức năng sửa đang phát triển");
                             }}
                             className="px-2.5 py-1 rounded text-xs bg-blue-50 text-blue-600 hover:bg-blue-100"
                           >
@@ -1058,9 +991,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              /* Handle Delete */ toast.info(
-                                "Chức năng xoá đang phát triển"
-                              );
+                              toast.info("Chức năng xoá đang phát triển");
                             }}
                             className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100"
                           >
@@ -1075,38 +1006,36 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             )
           ) : (
             <p className="text-gray-500 text-center col-span-1 md:col-span-2 lg:col-span-3 py-6 italic">
-              {" "}
-              Không tìm thấy sự kiện nào khớp với bộ lọc.{" "}
+              Không tìm thấy sự kiện nào khớp với bộ lọc.
             </p>
-          )}
-          {/* --- Pagination Controls --- */}
+          )}{" "}
           {processedEvents.length > 0 && totalPages > 1 && (
             <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
+              {" "}
               <span className="text-sm text-gray-600">
                 Trang <span className="font-semibold">{currentPage}</span> /{" "}
                 <span className="font-semibold">{totalPages}</span> (Tổng:{" "}
                 {totalItems} sự kiện)
-              </span>
+              </span>{" "}
               <div className="flex items-center gap-2">
+                {" "}
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
                   className="px-3 py-1.5 rounded-md border cursor-pointer bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                 >
-                  {" "}
-                  <ChevronLeftIcon className="w-4 h-4" /> Trước{" "}
-                </button>
+                  <ChevronLeftIcon className="w-4 h-4" /> Trước
+                </button>{" "}
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
                   className="px-3 py-1.5 rounded-md border cursor-pointer bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                 >
-                  {" "}
-                  Sau <ChevronRightIcon className="w-4 h-4" />{" "}
-                </button>
-              </div>
+                  Sau <ChevronRightIcon className="w-4 h-4" />
+                </button>{" "}
+              </div>{" "}
             </div>
-          )}
+          )}{" "}
         </div>
       )}
     </div>

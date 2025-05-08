@@ -936,6 +936,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
             />
           </div>
         )}
+        
 
         {/* Thông tin chi tiết */}
         <div className="space-y-3 text-sm text-gray-700 mb-4">

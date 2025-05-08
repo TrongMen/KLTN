@@ -20,8 +20,8 @@ import {
   ArchiveIcon,
   ListBulletIcon,
   GridIcon,
-  ChevronLeftIcon, // For pagination
-  ChevronRightIcon, // For pagination
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@radix-ui/react-icons";
 
 interface HomeTabContentProps {
@@ -45,6 +45,7 @@ interface HomeTabContentProps {
   timeFilterOption: string;
   setTimeFilterOption: (value: string) => void;
   refreshToken?: () => Promise<string | null>;
+  onRefreshEvents: () => Promise<void>;
 }
 
 type EventStatus = "upcoming" | "ongoing" | "ended";
@@ -168,18 +169,16 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   timeFilterOption,
   setTimeFilterOption,
   refreshToken,
+  onRefreshEvents,
 }) => {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [startDateFilter, setStartDateFilter] = useState<string>("");
   const [endDateFilter, setEndDateFilter] = useState<string>("");
-
-  // --- Pagination State ---
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(
     ITEMS_PER_PAGE_OPTIONS[0]
-  ); // Default items per page
+  );
 
-  // --- Event Processing (Filtering & Sorting) ---
   const processedEvents = useMemo(() => {
     let evts = [...allEvents];
     const todayStart = new Date();
@@ -293,30 +292,23 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     endDateFilter,
   ]);
 
-  // --- Pagination Calculation ---
   const totalItems = processedEvents.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage)); // Ensure totalPages is at least 1
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
-  // Effect to reset to page 1 or adjust page if filters/itemsPerPage change totalPages
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
     }
-    // Optional: Reset to page 1 whenever filters change? Depends on desired UX
-    // Uncomment below to always go to page 1 on filter/sort/search/items change
-    // setCurrentPage(1);
-  }, [totalPages, currentPage]); // Rerun when totalPages changes
+  }, [totalPages, currentPage]);
 
-  // Calculate items for the current page
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedEvents = processedEvents.slice(startIndex, endIndex);
 
-  // --- Handlers ---
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
     setStartDateFilter(newStartDate);
-    setCurrentPage(1); // Reset page on filter change
+    setCurrentPage(1);
     if (endDateFilter && newStartDate > endDateFilter) {
       setEndDateFilter("");
       toast("Ngày bắt đầu không thể sau ngày kết thúc.", { icon: "⚠️" });
@@ -328,7 +320,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       toast.error("Ngày kết thúc không thể trước ngày bắt đầu.");
     } else {
       setEndDateFilter(newEndDate);
-      setCurrentPage(1); // Reset page on filter change
+      setCurrentPage(1);
     }
   };
 
@@ -336,47 +328,56 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     e: React.ChangeEvent<HTMLSelectElement>
   ) => {
     setItemsPerPage(Number(e.target.value));
-    setCurrentPage(1); // Reset to page 1 when items per page changes
+    setCurrentPage(1);
   };
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
-    // Optional: Scroll to top when changing page
-    // window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- Render Logic ---
-  if (isLoadingEvents) {
-    return (
-      <p className="text-center text-gray-500 italic py-6">
-        {" "}
-        Đang tải sự kiện...{" "}
-      </p>
-    );
-  }
+  const handleRefresh = async () => {
+    try {
+      await onRefreshEvents();
+      toast.success("Đã làm mới danh sách sự kiện!");
+    } catch (error) {
+      console.error("Lỗi khi làm mới sự kiện thủ công:", error);
+      toast.error("Không thể làm mới sự kiện.");
+    }
+  };
+
   if (errorEvents) {
     return (
       <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-        {" "}
-        Lỗi tải sự kiện: {errorEvents}{" "}
+        Lỗi tải sự kiện: {errorEvents}
       </p>
     );
   }
 
   return (
     <div>
-      {/* --- Controls --- */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600 shrink-0">
-          {" "}
-          🎉 Trang chủ{" "}
+          🎉 Trang chủ
         </h1>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
-          {/* Sort */}
+          <div className="flex-grow sm:flex-grow-0">
+            <button
+              onClick={handleRefresh}
+              disabled={isLoadingEvents}
+              title="Làm mới danh sách sự kiện"
+              className="w-full h-full p-2 border cursor-pointer border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
+            >
+              {isLoadingEvents ? (
+                <ReloadIcon className="w-5 h-5 animate-spin text-indigo-600" />
+              ) : (
+                <ReloadIcon className="w-5 h-5 text-indigo-600" />
+              )}
+              <span className="ml-2 hidden sm:inline">Làm mới</span>
+            </button>
+          </div>
           <div className="flex-grow sm:flex-grow-0">
             <label htmlFor="sortOptionGuest" className="sr-only">
-              {" "}
-              Sắp xếp{" "}
+              Sắp xếp
             </label>
             <select
               id="sortOptionGuest"
@@ -387,16 +388,13 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              {/* <option value="date">📅 Gần nhất</option> */}
               <option value="az">🔤 A - Z</option>
               <option value="za">🔤 Z - A</option>
             </select>
           </div>
-          {/* Time Filter */}
           <div className="flex-grow sm:flex-grow-0">
             <label htmlFor="timeFilterOptionGuest" className="sr-only">
-              {" "}
-              Lọc thời gian{" "}
+              Lọc thời gian
             </label>
             <select
               id="timeFilterOptionGuest"
@@ -417,7 +415,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               <option value="dateRange">🔢 Khoảng ngày</option>
             </select>
           </div>
-          {/* Items Per Page */}
           <div className="flex-grow sm:flex-grow-0">
             <label htmlFor="itemsPerPageSelect" className="sr-only">
               Sự kiện mỗi trang
@@ -430,13 +427,11 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             >
               {ITEMS_PER_PAGE_OPTIONS.map((option) => (
                 <option key={option} value={option}>
-                  {" "}
-                  {option} / trang{" "}
+                  {option} / trang
                 </option>
               ))}
             </select>
           </div>
-          {/* View Toggle */}
           <div className="flex items-center gap-2 flex-shrink-0 self-center">
             <button
               onClick={() => setViewMode("card")}
@@ -447,38 +442,32 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
               }`}
             >
-              {" "}
-              <GridIcon className="h-5 w-5" />{" "}
+              <GridIcon className="h-5 w-5" />
             </button>
             <button
               onClick={() => setViewMode("list")}
               title="Chế độ danh sách"
-              className={`p-2 rounded-md border transition  cursor-pointer ${
+              className={`p-2 rounded-md border transition cursor-pointer ${
                 viewMode === "list"
                   ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
                   : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
               }`}
             >
-              {" "}
-              <ListBulletIcon className="h-5 w-5" />{" "}
+              <ListBulletIcon className="h-5 w-5" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* --- Date Range Filter (Conditional) --- */}
       {timeFilterOption === "dateRange" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
-          {" "}
           <div>
-            {" "}
             <label
               htmlFor="startDateFilterHome"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              {" "}
-              Từ ngày{" "}
-            </label>{" "}
+              Từ ngày
+            </label>
             <input
               type="date"
               id="startDateFilterHome"
@@ -486,17 +475,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               onChange={handleStartDateChange}
               max={endDateFilter || undefined}
               className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />{" "}
-          </div>{" "}
+            />
+          </div>
           <div>
-            {" "}
             <label
               htmlFor="endDateFilterHome"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              {" "}
-              Đến ngày{" "}
-            </label>{" "}
+              Đến ngày
+            </label>
             <input
               type="date"
               id="endDateFilterHome"
@@ -504,18 +491,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               onChange={handleEndDateChange}
               min={startDateFilter || undefined}
               className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />{" "}
-          </div>{" "}
+            />
+          </div>
         </div>
       )}
 
-      {/* --- Search Input --- */}
       <div className="relative w-full mb-6">
-        {" "}
         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-          {" "}
-          🔍{" "}
-        </span>{" "}
+          🔍
+        </span>
         <input
           id="searchGuest"
           type="text"
@@ -526,23 +510,20 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             setSearch(e.target.value);
             setCurrentPage(1);
           }}
-        />{" "}
+        />
       </div>
 
-      {/* --- Event Display Area --- */}
-      {isLoadingEvents ? (
-        <p className="text-center text-gray-500 italic py-6">
-          {" "}
-          Đang tải sự kiện...{" "}
-        </p>
+      {isLoadingEvents && !selectedEvent ? (
+         <div className="flex justify-center items-center min-h-[200px]">
+            <ReloadIcon className="w-8 h-8 animate-spin text-indigo-600" />
+            <p className="ml-3 text-gray-500 italic">Đang cập nhật danh sách sự kiện...</p>
+         </div>
       ) : selectedEvent ? (
         <div className="p-6 border rounded-lg shadow-lg bg-gray-50 mb-6">
-          {" "}
           <button
             onClick={onBackToList}
             className="mb-4 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer p-1 rounded hover:bg-indigo-50"
           >
-            {" "}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               className="h-4 w-4 mr-1"
@@ -551,19 +532,16 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               stroke="currentColor"
               strokeWidth={2}
             >
-              {" "}
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 d="M15 19l-7-7 7-7"
-              />{" "}
-            </svg>{" "}
-            Quay lại{" "}
-          </button>{" "}
+              />
+            </svg>
+            Quay lại
+          </button>
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
-            {" "}
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
-              {" "}
               {selectedEvent.avatarUrl ? (
                 <Image
                   src={selectedEvent.avatarUrl}
@@ -574,19 +552,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                 />
               ) : (
                 <div className="w-full h-48 md:h-64 lg:h-80 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-5xl font-semibold border">
-                  {" "}
-                  {selectedEvent.title?.charAt(0).toUpperCase() || "?"}{" "}
+                  {selectedEvent.title?.charAt(0).toUpperCase() || "?"}
                 </div>
-              )}{" "}
-            </div>{" "}
+              )}
+            </div>
             <div className="flex-grow space-y-4">
-              {" "}
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                {" "}
                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex-1">
-                  {" "}
-                  {selectedEvent.title}{" "}
-                </h2>{" "}
+                  {selectedEvent.title}
+                </h2>
                 {(() => {
                   const status = getEventStatus(selectedEvent.date);
                   return (
@@ -595,159 +569,129 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         status
                       )} mt-1 sm:mt-0 flex-shrink-0`}
                     >
-                      {" "}
-                      {getStatusIcon(status)} {getStatusText(status)}{" "}
+                      {getStatusIcon(status)} {getStatusText(status)}
                     </span>
                   );
-                })()}{" "}
-              </div>{" "}
+                })()}
+              </div>
               <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
-                {" "}
                 <p>
-                  {" "}
                   <strong className="font-medium text-gray-900 w-24 inline-block">
-                    {" "}
-                    📅 Ngày:{" "}
-                  </strong>{" "}
+                    📅 Ngày:
+                  </strong>
                   {new Date(selectedEvent.date).toLocaleDateString(
                     "vi-VN"
-                  )}{" "}
-                </p>{" "}
+                  )}
+                </p>
                 {selectedEvent.time && (
                   <p>
-                    {" "}
                     <strong className="font-medium text-gray-900 w-24 inline-block">
-                      {" "}
-                      🕒 Thời gian:{" "}
-                    </strong>{" "}
+                      🕒 Thời gian:
+                    </strong>
                     {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
                       hour: "2-digit",
                       minute: "2-digit",
-                    })}{" "}
+                    })}
                   </p>
-                )}{" "}
+                )}
                 <p>
-                  {" "}
                   <strong className="font-medium text-gray-900 w-24 inline-block">
-                    {" "}
-                    📍 Địa điểm:{" "}
-                  </strong>{" "}
-                  {selectedEvent.location}{" "}
-                </p>{" "}
+                    📍 Địa điểm:
+                  </strong>
+                  {selectedEvent.location}
+                </p>
                 <p>
-                  {" "}
                   <strong className="font-medium text-gray-900 w-24 inline-block">
-                    {" "}
-                    👤 Người tạo:{" "}
-                  </strong>{" "}
+                    👤 Người tạo:
+                  </strong>
                   {selectedEvent.createdBy
                     ? `ID: ${selectedEvent.createdBy}`
-                    : "N/A"}{" "}
-                </p>{" "}
+                    : "N/A"}
+                </p>
                 {selectedEvent.purpose && (
                   <p>
-                    {" "}
                     <strong className="font-medium text-gray-900 w-24 inline-block align-top">
-                      {" "}
-                      🎯 Mục đích:{" "}
-                    </strong>{" "}
+                      🎯 Mục đích:
+                    </strong>
                     <span className="inline-block max-w-[calc(100%-6rem)]">
-                      {" "}
-                      {selectedEvent.purpose}{" "}
-                    </span>{" "}
+                      {selectedEvent.purpose}
+                    </span>
                   </p>
-                )}{" "}
-              </div>{" "}
+                )}
+              </div>
               <div className="space-y-3 text-sm">
-                {" "}
                 <div>
-                  {" "}
                   <p className="font-medium text-gray-900 mb-1">
-                    {" "}
-                    📜 Nội dung:{" "}
-                  </p>{" "}
+                    📜 Nội dung:
+                  </p>
                   <p className="text-gray-700 whitespace-pre-wrap">
-                    {" "}
                     {selectedEvent.content ||
                       selectedEvent.description ||
-                      "Không có nội dung chi tiết."}{" "}
-                  </p>{" "}
-                </div>{" "}
+                      "Không có nội dung chi tiết."}
+                  </p>
+                </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
-                    {" "}
-                    👥 Ban tổ chức:{" "}
-                  </strong>{" "}
+                    👥 Ban tổ chức:
+                  </strong>
                   {selectedEvent.organizers &&
                   selectedEvent.organizers.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
-                      {" "}
                       {selectedEvent.organizers.map((org, index) => (
                         <li key={`${org.userId}-${index}`}>
-                          {" "}
                           {org.roleName || org.positionName
                             ? `${org.roleName || ""}${
                                 org.roleName && org.positionName ? " - " : ""
                               }${org.positionName || ""}`
-                            : `Thành viên ${index + 1}`}{" "}
+                            : `Thành viên ${index + 1}`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
-                  )}{" "}
-                </div>{" "}
+                  )}
+                </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
-                    {" "}
-                    👤 Người tham gia (Vai trò/Chức vụ):{" "}
-                  </strong>{" "}
+                    👤 Người tham gia (Vai trò/Chức vụ):
+                  </strong>
                   {selectedEvent.participants &&
                   selectedEvent.participants.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
-                      {" "}
                       {selectedEvent.participants.map((p, index) => (
                         <li key={`${p.userId}-${index}`}>
-                          {" "}
                           {p.roleName || p.positionName
                             ? `${p.roleName || ""}${
                                 p.roleName && p.positionName ? " - " : ""
                               }${p.positionName || ""}`
-                            : `Người tham gia ${index + 1}`}{" "}
+                            : `Người tham gia ${index + 1}`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
-                  )}{" "}
-                </div>{" "}
+                  )}
+                </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
-                    {" "}
-                    ✅ Người tham dự (Đã đăng ký):{" "}
-                  </strong>{" "}
+                    ✅ Người tham dự (Đã đăng ký):
+                  </strong>
                   {selectedEvent.attendees &&
                   selectedEvent.attendees.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
-                      {" "}
                       {selectedEvent.attendees.map((att) => (
                         <li key={att.userId}>
-                          {" "}
-                          {att.fullName || `ID: ${att.userId}`}{" "}
-                          {att.studentCode && ` (${att.studentCode})`}{" "}
+                          {att.fullName || `ID: ${att.userId}`}
+                          {att.studentCode && ` (${att.studentCode})`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có ai đăng ký.</p>
-                  )}{" "}
-                </div>{" "}
-              </div>{" "}
+                  )}
+                </div>
+              </div>
               <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
-                {" "}
                 {(() => {
                   const isCreated = createdEventIds.has(selectedEvent.id);
                   const isRegistered = registeredEventIds.has(selectedEvent.id);
@@ -763,8 +707,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         className="px-4 py-2 rounded-lg bg-gray-200 text-gray-600 cursor-not-allowed text-sm font-medium"
                         disabled
                       >
-                        {" "}
-                        ✨ Sự kiện của bạn{" "}
+                        ✨ Sự kiện của bạn
                       </button>
                     );
                   } else if (showRegisterBtn) {
@@ -788,24 +731,20 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           isLoadingCreatedEventIds
                         }
                       >
-                        {" "}
                         {isRegistered ? (
                           <>
-                            {" "}
-                            <CheckCircledIcon className="mr-1.5" /> Đã đăng ký{" "}
+                            <CheckCircledIcon className="mr-1.5" /> Đã đăng ký
                           </>
                         ) : processing ? (
                           <>
-                            {" "}
-                            <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />{" "}
-                            ...{" "}
+                            <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />
+                            ...
                           </>
                         ) : (
                           <>
-                            {" "}
-                            <Pencil1Icon className="mr-1.5" /> Đăng ký{" "}
+                            <Pencil1Icon className="mr-1.5" /> Đăng ký
                           </>
-                        )}{" "}
+                        )}
                       </button>
                     );
                   } else if (status === "ended") {
@@ -814,8 +753,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
                         disabled
                       >
-                        {" "}
-                        Đã kết thúc{" "}
+                        Đã kết thúc
                       </button>
                     );
                   } else if (!user && status !== "ended") {
@@ -829,24 +767,21 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         }}
                         className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
                       >
-                        {" "}
-                        Đăng nhập để đăng ký{" "}
+                        Đăng nhập để đăng ký
                       </button>
                     );
                   }
                   return null;
-                })()}{" "}
-              </div>{" "}
-            </div>{" "}
-          </div>{" "}
+                })()}
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="mt-1 mb-6">
-          {" "}
           {processedEvents.length > 0 ? (
             viewMode === "card" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {" "}
                 {paginatedEvents.map((event) => {
                   const isRegistered = registeredEventIds.has(event.id);
                   const isCreatedByUser = createdEventIds.has(event.id);
@@ -861,12 +796,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                       key={event.id}
                       className="bg-white shadow-md rounded-xl overflow-hidden transform transition hover:scale-[1.02] hover:shadow-lg flex flex-col border border-gray-200 hover:border-indigo-300"
                     >
-                      {" "}
                       <div
                         className="w-full h-40 bg-gray-200 relative cursor-pointer"
                         onClick={() => onEventClick(event)}
                       >
-                        {" "}
                         {event.avatarUrl ? (
                           <Image
                             src={event.avatarUrl}
@@ -889,39 +822,31 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
-                            {" "}
-                            {event.title?.charAt(0).toUpperCase() || "?"}{" "}
+                            {event.title?.charAt(0).toUpperCase() || "?"}
                           </div>
-                        )}{" "}
+                        )}
                         <span
                           className={`absolute top-2 right-2 ${getStatusBadgeClasses(
                             status
                           )} shadow-sm`}
                         >
-                          {" "}
-                          {getStatusIcon(status)} {getStatusText(status)}{" "}
-                        </span>{" "}
-                      </div>{" "}
+                          {getStatusIcon(status)} {getStatusText(status)}
+                        </span>
+                      </div>
                       <div className="p-4 flex flex-col flex-grow">
-                        {" "}
                         <div
                           onClick={() => onEventClick(event)}
                           className="cursor-pointer mb-3"
                         >
-                          {" "}
                           <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
-                            {" "}
-                            {event.title}{" "}
-                          </h2>{" "}
+                            {event.title}
+                          </h2>
                           <div className="space-y-0.5 mb-2">
-                            {" "}
                             <p className="text-sm text-gray-600 flex items-center gap-1">
-                              {" "}
-                              <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />{" "}
-                              {new Date(event.date).toLocaleDateString("vi-VN")}{" "}
-                            </p>{" "}
+                              <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+                              {new Date(event.date).toLocaleDateString("vi-VN")}
+                            </p>
                             <p className="text-sm text-gray-600 flex items-center gap-1">
-                              {" "}
                               <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 className="h-3.5 w-3.5 text-gray-400"
@@ -930,41 +855,37 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 stroke="currentColor"
                                 strokeWidth={2}
                               >
-                                {" "}
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                />{" "}
+                                />
                                 <path
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
                                   d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                                 />
-                              </svg>{" "}
-                              {event.location}{" "}
-                            </p>{" "}
-                          </div>{" "}
+                              </svg>
+                              {event.location}
+                            </p>
+                          </div>
                           <div className="text-xs text-gray-500 flex items-center gap-x-3 mt-1">
-                            {" "}
                             {event.organizers && (
                               <span>👥 BTC: {event.organizers.length}</span>
-                            )}{" "}
+                            )}
                             {event.attendees && (
                               <span>✅ Đã ĐK: {event.attendees.length}</span>
-                            )}{" "}
-                          </div>{" "}
-                        </div>{" "}
-                        <div className="flex-grow"></div>{" "}
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-grow"></div>
                         <div className="mt-auto pt-3 border-t border-gray-100">
-                          {" "}
                           {isCreatedByUser ? (
                             <button
                               className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-600 cursor-not-allowed text-sm font-medium"
                               disabled
                             >
-                              {" "}
-                              ✨ Sự kiện của bạn{" "}
+                              ✨ Sự kiện của bạn
                             </button>
                           ) : showRegisterButton ? (
                             <button
@@ -986,26 +907,23 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 isLoadingCreatedEventIds
                               }
                             >
-                              {" "}
                               {isRegistered ? (
                                 <span>✅ Đã đăng ký</span>
                               ) : processing ? (
                                 <>
-                                  {" "}
-                                  <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />{" "}
-                                  ...{" "}
+                                  <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />
+                                  ...
                                 </>
                               ) : (
                                 <span>📝 Đăng ký</span>
-                              )}{" "}
+                              )}
                             </button>
                           ) : status === "ended" ? (
                             <button
                               className="w-full px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
                               disabled
                             >
-                              {" "}
-                              Đã kết thúc{" "}
+                              Đã kết thúc
                             </button>
                           ) : !user && status !== "ended" ? (
                             <button
@@ -1017,21 +935,18 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               }}
                               className="w-full px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
                             >
-                              {" "}
-                              Đăng nhập để đăng ký{" "}
+                              Đăng nhập để đăng ký
                             </button>
-                          ) : null}{" "}
-                        </div>{" "}
-                      </div>{" "}
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   );
-                })}{" "}
+                })}
               </div>
             ) : (
               <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
-                {" "}
                 <ul className="divide-y divide-gray-200">
-                  {" "}
                   {paginatedEvents.map((event) => {
                     const isRegistered = registeredEventIds.has(event.id);
                     const isCreatedByUser = createdEventIds.has(event.id);
@@ -1046,12 +961,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         key={event.id}
                         className="px-4 py-3 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors"
                       >
-                        {" "}
                         <div
                           className="flex items-center flex-1 min-w-0 mb-2 sm:mb-0 sm:pr-4 cursor-pointer"
                           onClick={() => onEventClick(event)}
                         >
-                          {" "}
                           {event.avatarUrl ? (
                             <Image
                               src={event.avatarUrl}
@@ -1062,31 +975,24 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-md bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 font-semibold mr-3 flex-shrink-0 border">
-                              {" "}
-                              {event.title?.charAt(0).toUpperCase() || "?"}{" "}
+                              {event.title?.charAt(0).toUpperCase() || "?"}
                             </div>
-                          )}{" "}
+                          )}
                           <div className="flex-1 min-w-0">
-                            {" "}
                             <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1">
-                              {" "}
-                              {event.title}{" "}
-                            </p>{" "}
+                              {event.title}
+                            </p>
                             <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              {" "}
                               <span className={getStatusBadgeClasses(status)}>
-                                {" "}
-                                {getStatusIcon(status)} {getStatusText(status)}{" "}
-                              </span>{" "}
+                                {getStatusIcon(status)} {getStatusText(status)}
+                              </span>
                               <span className="inline-flex items-center gap-1">
-                                {" "}
-                                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />{" "}
+                                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
                                 {new Date(event.date).toLocaleDateString(
                                   "vi-VN"
-                                )}{" "}
-                              </span>{" "}
+                                )}
+                              </span>
                               <span className="inline-flex items-center gap-1">
-                                {" "}
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
                                   className="h-3.5 w-3.5 text-gray-400"
@@ -1095,44 +1001,39 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                   stroke="currentColor"
                                   strokeWidth={2}
                                 >
-                                  {" "}
                                   <path
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                     d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                  />{" "}
+                                  />
                                   <path
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                  />{" "}
-                                </svg>{" "}
-                                {event.location}{" "}
-                              </span>{" "}
+                                  />
+                                </svg>
+                                {event.location}
+                              </span>
                               {event.organizers && (
                                 <span className="inline-flex items-center gap-1">
-                                  {" "}
-                                  👥 {event.organizers.length} BTC{" "}
+                                  👥 {event.organizers.length} BTC
                                 </span>
-                              )}{" "}
+                              )}
                               {event.attendees && (
                                 <span className="inline-flex items-center gap-1">
-                                  {" "}
-                                  ✅ {event.attendees.length} ĐK{" "}
+                                  ✅ {event.attendees.length} ĐK
                                 </span>
-                              )}{" "}
-                            </div>{" "}
-                          </div>{" "}
-                        </div>{" "}
+                              )}
+                            </div>
+                          </div>
+                        </div>
                         <div className="flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
-                          {" "}
                           {isCreatedByUser ? (
                             <button
                               className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-gray-200 text-gray-600 cursor-not-allowed text-xs font-medium"
                               disabled
                             >
-                              {" "}
-                              ✨ Sự kiện của bạn{" "}
+                              ✨ Sự kiện của bạn
                             </button>
                           ) : showRegisterButton ? (
                             <button
@@ -1154,26 +1055,23 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 isLoadingCreatedEventIds
                               }
                             >
-                              {" "}
                               {isRegistered ? (
                                 <span>✅ Đã đăng ký</span>
                               ) : processing ? (
                                 <>
-                                  {" "}
-                                  <ReloadIcon className="animate-spin -ml-1 mr-1.5 h-3 w-3" />{" "}
-                                  ...{" "}
+                                  <ReloadIcon className="animate-spin -ml-1 mr-1.5 h-3 w-3" />
+                                  ...
                                 </>
                               ) : (
                                 <span>📝 Đăng ký</span>
-                              )}{" "}
+                              )}
                             </button>
                           ) : status === "ended" ? (
                             <button
                               className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs font-medium"
                               disabled
                             >
-                              {" "}
-                              Đã kết thúc{" "}
+                              Đã kết thúc
                             </button>
                           ) : !user && status !== "ended" ? (
                             <button
@@ -1185,24 +1083,21 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               }}
                               className="w-full sm:w-auto px-3 py-1.5 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-xs font-medium"
                             >
-                              {" "}
-                              Đăng nhập để đăng ký{" "}
+                              Đăng nhập để đăng ký
                             </button>
-                          ) : null}{" "}
-                        </div>{" "}
+                          ) : null}
+                        </div>
                       </li>
                     );
-                  })}{" "}
-                </ul>{" "}
+                  })}
+                </ul>
               </div>
             )
           ) : (
             <p className="text-gray-500 text-center col-span-1 md:col-span-2 lg:col-span-3 py-6 italic">
-              {" "}
-              Không tìm thấy sự kiện nào khớp với bộ lọc.{" "}
+              Không tìm thấy sự kiện nào khớp với bộ lọc.
             </p>
           )}
-          {/* --- Pagination Controls --- */}
           {processedEvents.length > 0 && totalPages > 1 && (
             <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
               <span className="text-sm text-gray-600">

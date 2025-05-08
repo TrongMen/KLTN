@@ -3,8 +3,8 @@
 import React from "react";
 import Image from "next/image";
 import { Cross1Icon, LockClosedIcon, ReloadIcon } from "@radix-ui/react-icons";
-import { ApiUser } from "../tabs/MembersTabContent";
-import { User as MainUserType } from "../homeuser";
+import { ApiUser } from "../app/component/tabs/MembersTabContent";
+import { User as MainUserType } from "../app/component/homeuser";
 
 interface UserProfileModalProps {
   isOpen: boolean;

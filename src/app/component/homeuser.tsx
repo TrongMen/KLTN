@@ -145,7 +145,6 @@ export default function UserHome() {
   const [timeFilterOption, setTimeFilterOption] = useState("upcoming");
   const [showContactModal, setShowContactModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
-  
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [confirmationState, setConfirmationState] = useState<{
     isOpen: boolean;
@@ -169,7 +168,7 @@ export default function UserHome() {
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
   const [isSubmittingNews, setIsSubmittingNews] = useState(false);
   const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
-
+  const [sessionStatus, setSessionStatus] = useState<'active' | 'expired' | 'error'>('active');
   const socketRef = useRef<Socket | null>(null);
 
   const router = useRouter();
@@ -488,14 +487,10 @@ export default function UserHome() {
           });
 
           if (userRes.status === 401 || userRes.status === 403) {
-            console.log(
-              "Token expired or invalid, attempting refresh for user info..."
-            );
             const nt = await refreshToken();
             if (nt && isMounted) {
               tokenForSubFetches = nt;
               localStorage.setItem("authToken", nt);
-              console.log("Retrying user info fetch with new token...");
               userRes = await fetch(userInfoUrl, {
                 headers: { Authorization: `Bearer ${nt}` },
                 cache: "no-store",
@@ -577,7 +572,6 @@ export default function UserHome() {
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
-      console.log(`SOCKET (UserHome): Đang kết nối cho user: ${user.id}`);
       const socket = io("ws://localhost:9099", {
         path: "/socket.io",
         query: { userId: user.id },
@@ -596,7 +590,6 @@ export default function UserHome() {
         console.error("SOCKET (UserHome): Lỗi kết nối:", error)
       );
       socket.on("notification", (data: any) => {
-        console.log("SOCKET (UserHome): Nhận được thông báo:", data);
         if (data && typeof data === "object") {
           toast(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
             duration: 5000,
@@ -623,7 +616,6 @@ export default function UserHome() {
       });
       return () => {
         if (socketRef.current) {
-          console.log("SOCKET (UserHome): Ngắt kết nối...");
           socketRef.current.off("connect");
           socketRef.current.off("disconnect");
           socketRef.current.off("connect_error");
@@ -634,7 +626,6 @@ export default function UserHome() {
       };
     } else {
       if (socketRef.current) {
-        console.log("SOCKET (UserHome): Ngắt kết nối do user null.");
         socketRef.current.disconnect();
         socketRef.current = null;
       }
@@ -778,7 +769,6 @@ export default function UserHome() {
 
   const handleLogout = async () => {
     if (socketRef.current) {
-      console.log("SOCKET (UserHome): Ngắt kết nối khi logout...");
       socketRef.current.disconnect();
       socketRef.current = null;
     }
@@ -808,6 +798,7 @@ export default function UserHome() {
   const refreshNewsList = useCallback(() => {
     fetchNews();
   }, [fetchNews]);
+
   const handleNotificationClick = () => {
     setShowNotificationDropdown((prev) => !prev);
   };
@@ -901,13 +892,11 @@ export default function UserHome() {
         currentToken &&
         refreshToken
       ) {
-        console.log("Token expired or invalid, attempting refresh...");
         const newToken = await refreshToken();
         if (newToken) {
           currentToken = newToken;
           localStorage.setItem("authToken", newToken);
           headers["Authorization"] = `Bearer ${currentToken}`;
-          console.log("Retrying API call with new token...");
           response = await fetch(API_URL, {
             method: method,
             headers: headers,
@@ -964,6 +953,10 @@ export default function UserHome() {
       setEditingNewsItem(null);
     }
   };
+
+  const handleSessionExpired = useCallback(() => {
+    setSessionStatus('expired');
+}, [setSessionStatus]);
 
   const isPageLoading = !isInitialized || isLoadingUser;
 
@@ -1083,13 +1076,12 @@ export default function UserHome() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-          <span
+            <span
               className="cursor-pointer hover:text-gray-300 transition-colors"
               onClick={() => setShowAboutModal(true)}
             >
-                Giới thiệu
-              </span>
-           
+              Giới thiệu
+            </span>
             <span
               className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
@@ -1173,6 +1165,7 @@ export default function UserHome() {
                 timeFilterOption={timeFilterOption}
                 setTimeFilterOption={setTimeFilterOption}
                 refreshToken={refreshToken}
+                onRefreshEvents={fetchAllEvents}
               />
             )}
             {activeTab === "news" && (
@@ -1185,6 +1178,7 @@ export default function UserHome() {
                 onOpenEditModal={handleOpenEditModal}
                 onNewsDeleted={refreshNewsList}
                 refreshToken={refreshToken}
+                onRefreshNews={fetchNews}
               />
             )}
             {user && activeTab === "myNews" && (
@@ -1229,6 +1223,8 @@ export default function UserHome() {
                 user={user}
                 userRole={user.roles?.[0]?.name?.toUpperCase() || "UNKNOWN"}
                 currentUserEmail={user.email || null}
+                refreshToken={refreshToken} 
+                onSessionExpired={handleSessionExpired}
               />
             )}
             {user && activeTab === "chatList" && (
@@ -1253,7 +1249,7 @@ export default function UserHome() {
           <button
             ref={notificationButtonRef}
             onClick={handleNotificationClick}
-            className="relative flex items-center cursor-pointer  justify-center h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150"
+            className="relative flex items-center cursor-pointer justify-center h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition ease-in-out duration-150"
             aria-label="Thông báo"
             aria-haspopup="true"
             aria-expanded={showNotificationDropdown}
@@ -1297,8 +1293,8 @@ export default function UserHome() {
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
       {showAboutModal && (
-              <AboutModal onClose={() => setShowAboutModal(false)} />
-            )}
+          <AboutModal onClose={() => setShowAboutModal(false)} />
+        )}
       <CreateNewsModal
         isOpen={isNewsModalOpen}
         onClose={handleCloseModal}

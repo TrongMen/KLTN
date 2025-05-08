@@ -14,7 +14,7 @@ import {
   ParticipantSection,
   type ParticipantSectionHandle,
 } from "../../../sections/ParticipantSection";
-import EventList from "../ListEvenUser";
+import EventList from "../../../sections/ListEvenUser";
 import { User as MainUserType } from "../homeuser";
 
 export type ApiUser = {
@@ -281,7 +281,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         resetFormState();
       }
     },
-    [user, resetFormState, avatarPreviewUrl]
+    [resetFormState, avatarPreviewUrl]
   );
 
   const cancelEdit = () => handleSetEditingEvent(null);
@@ -291,7 +291,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     const formData = new FormData();
     formData.append("file", avatarFile);
     const avatarApiUrl = `http://localhost:8080/identity/api/events/${eventId}/avatar`;
-    console.log(`[PATCH] Uploading avatar to ${avatarApiUrl}`);
 
     try {
       const avatarResponse = await fetch(avatarApiUrl, {
@@ -304,7 +303,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         let errorDetails = "";
         try {
           const errorText = await avatarResponse.text();
-          console.error("Avatar Upload Server Raw Error Text:", errorText);
           errorDetails = errorText.trim();
           if (errorDetails.startsWith("{") || errorDetails.startsWith("[")) {
             try {
@@ -312,12 +310,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
               if (jsonData && jsonData.message) errorMsg = jsonData.message;
               else if (errorDetails)
                 errorMsg = `${errorMsg}: ${errorDetails.slice(0, 200)}`;
-              console.error(
-                "Avatar Upload Server Parsed Error JSON:",
-                jsonData
-              );
             } catch (jsonParseError) {
-              console.warn("Failed to parse error response as JSON.");
               if (errorDetails)
                 errorMsg = `${errorMsg}: ${errorDetails.slice(0, 200)}`;
             }
@@ -325,7 +318,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
             errorMsg = `${errorMsg}: ${errorDetails.slice(0, 200)}`;
           }
         } catch (readError) {
-          console.error("Could not read error response body:", readError);
+          //
         }
         throw new Error(errorMsg);
       }
@@ -333,24 +326,18 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       if (avatarResult.code === 1000 && avatarResult.result?.avatarUrl) {
         toast.success("Upload avatar thành công!");
       } else {
-        console.error(
-          "Avatar Upload Success Response Unexpected Format:",
-          avatarResult
-        );
         throw new Error(
           avatarResult.message ||
             "Upload thành công nhưng dữ liệu trả về không đúng định dạng."
         );
       }
     } catch (error: any) {
-      console.error("Avatar upload error caught:", error);
       toast.error(
         `Upload avatar thất bại: ${error.message || "Lỗi không xác định"}`
       );
     }
   };
 
-  // ******** CẬP NHẬT LOGIC TRONG HÀM NÀY ********
   const handleSubmitEvent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -440,21 +427,16 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       location: currentEventData.location,
       content: currentEventData.content,
       permissions: currentEventData.permissions || [],
-      organizers: formattedOrganizers, // Gửi danh sách mới/đã cập nhật
-      participants: formattedParticipants, // Gửi danh sách mới/đã cập nhật
+      organizers: formattedOrganizers,
+      participants: formattedParticipants,
     };
 
     if (!isEditing) {
-      // --- Logic Tạo mới ---
       requestBodyBase.createdBy = user?.id;
-      // organizers, participants đã thêm ở trên
-      requestBodyBase.attendees = []; // Thêm mảng rỗng khi tạo mới
+      requestBodyBase.attendees = [];
     } else {
-      // --- Logic Chỉnh sửa (PUT) ---
-      requestBodyBase.id = editingEventId; // Body của PUT cần ID
-      // Luôn đặt status là PENDING khi cập nhật
+      requestBodyBase.id = editingEventId;
       requestBodyBase.status = "PENDING";
-      // Thêm updatedByUserId vào query params của URL
       if (user?.id) {
         url = `${url}?updatedByUserId=${user.id}`;
       } else {
@@ -463,9 +445,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         return;
       }
     }
-
-    console.log(`[${method}] Request to ${url}`);
-    console.log("Request Body:", JSON.stringify(requestBodyBase, null, 2));
 
     try {
       const response = await fetch(url, {
@@ -481,11 +460,9 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         try {
           const d = await response.json();
           msg = d?.message || msg;
-          console.error("Server Error:", d);
         } catch (e) {
           try {
             const t = await response.text();
-            console.error("Server Error Text:", t);
             msg = `${msg}: ${t.slice(0, 100)}`;
           } catch (_) {}
         }
@@ -496,7 +473,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
 
       if (result.code === 1000) {
         const eventIdForResult = isEditing ? editingEventId : result.result?.id;
-        // Hiển thị message từ API nếu có, nếu không thì báo thành công chung
         toast.success(
           result.message ||
             `${isEditing ? "Cập nhật" : "Thêm"} sự kiện thành công!`
@@ -505,7 +481,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         if (eventIdForResult && avatarFile) {
           await uploadAvatar(eventIdForResult, token);
         } else if (!eventIdForResult && avatarFile) {
-          console.warn("Không thể upload avatar vì không có eventId.");
+         //
         }
 
         handleSetEditingEvent(null);
@@ -517,7 +493,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         );
       }
     } catch (error: any) {
-      console.error("Submit error:", error);
       toast.error(
         error.message || `Lỗi khi ${isEditing ? "cập nhật" : "thêm"}`
       );
@@ -525,7 +500,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       setIsLoading(false);
     }
   };
-  // ******** KẾT THÚC CẬP NHẬT ********
 
   const isPageLoading = isFetchingUsers;
 
@@ -537,8 +511,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         </h2>
         {isPageLoading ? (
           <div className="text-center py-10 text-gray-500">
-            {" "}
-            Đang tải dữ liệu...{" "}
+            Đang tải dữ liệu...
           </div>
         ) : (
           <form onSubmit={handleSubmitEvent} className="space-y-6">
@@ -548,7 +521,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   htmlFor="name"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
                   Tên sự kiện <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -561,47 +533,88 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   required
                 />
               </div>
-              <div className="space-y-2">
-                <label
-                  htmlFor="avatar"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  {" "}
+
+              {/* ========== KHỐI CHỌN AVATAR ĐƯỢC THIẾT KẾ LẠI ========== */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Avatar sự kiện
                 </label>
-                <div className="flex items-center space-x-4">
-                  {(avatarPreviewUrl ||
-                    (editingEventId && currentEventData.avatarUrl)) && (
-                    <Image
-                      src={avatarPreviewUrl || currentEventData.avatarUrl || ""}
-                      alt="Xem trước avatar"
-                      width={80}
-                      height={80}
-                      className="rounded-lg object-cover border bg-gray-100"
-                    />
-                  )}
+                <div className="mt-1 flex items-start space-x-4">
+                  <div
+                    className={`w-24 h-24 rounded-md border-2 flex items-center justify-center text-gray-400 overflow-hidden
+                    ${ (avatarPreviewUrl || (editingEventId && currentEventData.avatarUrl))
+                        ? 'border-gray-300'
+                        : 'border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100'
+                    } cursor-pointer relative group`}
+                    onClick={() => avatarInputRef.current?.click()}
+                    title="Nhấn để chọn hoặc thay đổi ảnh"
+                  >
+                    {(avatarPreviewUrl || (editingEventId && currentEventData.avatarUrl)) ? (
+                      <Image
+                        src={avatarPreviewUrl || currentEventData.avatarUrl || ""}
+                        alt="Xem trước avatar"
+                        layout="fill"
+                        objectFit="cover"
+                        className="rounded-md"
+                      />
+                    ) : (
+                      <div className="text-center p-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                        </svg>
+                        <p className="mt-1 text-xs">Chọn ảnh</p>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black bg-opacity-25 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="white" className="w-6 h-6">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.174C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.174 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+                      </svg>
+                    </div>
+                  </div>
                   <input
-                    id="avatar"
+                    id="avatar-upload"
                     type="file"
                     name="avatar"
                     ref={avatarInputRef}
                     accept="image/png, image/jpeg, image/gif"
                     onChange={handleAvatarChange}
-                    className="block w-full text-sm text-gray-500 border border-gray-300 rounded cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-l file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    className="hidden"
                   />
+                  {(avatarFile || avatarPreviewUrl) && (
+                    <div className="flex flex-col justify-center h-24">
+                       {avatarFile && (
+                          <p className="text-xs text-gray-600 mb-1 max-w-[150px] truncate" title={avatarFile.name}>
+                              {avatarFile.name}
+                          </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAvatarFile(null);
+                          if (avatarPreviewUrl) {
+                            URL.revokeObjectURL(avatarPreviewUrl);
+                            setAvatarPreviewUrl(null);
+                          }
+                          if (avatarInputRef.current) {
+                            avatarInputRef.current.value = "";
+                          }
+                        }}
+                        className="text-xs px-3 py-1.5 border border-red-400 text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {avatarFile && !avatarPreviewUrl && (
-                  <p className="text-xs text-gray-600 mt-1">
-                    Đã chọn: {avatarFile.name}
-                  </p>
-                )}
               </div>
+              {/* ========== KẾT THÚC KHỐI CHỌN AVATAR ========== */}
+
               <div>
                 <label
                   htmlFor="time"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
                   Ngày giờ <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -619,7 +632,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   htmlFor="location"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
                   Địa điểm <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -634,8 +646,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {" "}
-                  Người tạo{" "}
+                  Người tạo
                 </label>
                 <input
                   type="text"
@@ -652,7 +663,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   htmlFor="purpose"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
                   Mục đích <span className="text-red-500">*</span>
                 </label>
                 <textarea
@@ -670,7 +680,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   htmlFor="content"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
                   Nội dung <span className="text-red-500">*</span>
                 </label>
                 <textarea
@@ -685,7 +694,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {" "}
                   Đối tượng tham gia <span className="text-red-500">*</span>
                 </label>
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -694,13 +702,12 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                       key={p}
                       className="inline-flex items-center cursor-pointer"
                     >
-                      {" "}
                       <input
                         type="checkbox"
                         checked={currentEventData.permissions?.includes(p)}
                         onChange={() => handlePermissionChange(p)}
                         className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />{" "}
+                      />
                       <span className="ml-2 text-sm text-gray-700">{p}</span>
                     </label>
                   ))}
@@ -736,8 +743,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   onClick={cancelEdit}
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 cursor-pointer text-sm"
                 >
-                  {" "}
-                  Hủy bỏ{" "}
+                  Hủy bỏ
                 </button>
               )}
               <button
@@ -785,12 +791,10 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       </div>
       <div className="mt-12">
         <h2 className="text-xl font-semibold mb-4 text-gray-700">
-          {" "}
-          Danh sách sự kiện đã tạo{" "}
+          Danh sách sự kiện đã tạo
         </h2>
         {isFetchingEvents ? (
           <div className="text-center py-10 text-gray-500">
-            {" "}
             Đang tải danh sách...
           </div>
         ) : (

@@ -2212,7 +2212,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                           {" "}
                           <button
                             onClick={() => setActiveInfoTab("media")}
-                            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1 ${
+                            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1 cursor-pointer ${
                               activeInfoTab === "media"
                                 ? "border-purple-500 text-purple-600"
                                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -2227,7 +2227,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                           </button>{" "}
                           <button
                             onClick={() => setActiveInfoTab("files")}
-                            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1 ${
+                            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1  cursor-pointer ${
                               activeInfoTab === "files"
                                 ? "border-purple-500 text-purple-600"
                                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -2242,7 +2242,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
                           </button>{" "}
                           <button
                             onClick={() => setActiveInfoTab("audio")}
-                            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1 ${
+                            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1 cursor-pointer ${
                               activeInfoTab === "audio"
                                 ? "border-purple-500 text-purple-600"
                                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"

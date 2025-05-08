@@ -127,10 +127,13 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
       }
       setImagePreview(URL.createObjectURL(file));
     } else {
+      // This case might not be hit if a file is always selected or input is reset
+      // but good for robustness
       setImageFile(null);
       if (imagePreview && imagePreview.startsWith("blob:")) {
         URL.revokeObjectURL(imagePreview);
       }
+      // If user cancels file dialog, and we had an initial image, restore it.
       setImagePreview(
         editMode && initialData?.imageUrl ? initialData.imageUrl : null
       );
@@ -152,9 +155,11 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
       URL.revokeObjectURL(imagePreview);
     }
     setImageFile(null);
-    setImagePreview(
-      editMode && initialData?.imageUrl ? initialData.imageUrl : null
-    );
+    // When clearing, if in edit mode and had an initial image, decide if we want to show "no image" or revert to initial.
+    // For now, clearing means no image selected for upload, and preview becomes null.
+    // If you want to revert to initialData.imageUrl, change the line below.
+    // For this implementation, clearImageSelection removes any active preview.
+    setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -162,7 +167,6 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
     setContent(reason);
   };
 
-  // Di chuyển hàm handleSubmit ra ngoài return nhưng vẫn trong component
   const handleFormSubmitInternal = (e: React.FormEvent) => {
     e.preventDefault();
     const tempDiv = document.createElement("div");
@@ -182,7 +186,6 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
     return null;
   }
 
-  // Đảm bảo return statement và JSX không có ký tự lạ
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 animate-fade-in">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl p-0 flex flex-col max-h-[90vh] transition-all duration-300 ease-out">
@@ -199,7 +202,6 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
           </button>
         </div>
 
-        {/* Sử dụng onSubmit trên form */}
         <form
           onSubmit={handleFormSubmitInternal}
           className="overflow-y-auto flex-grow p-6 space-y-6"
@@ -268,33 +270,42 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
             </select>
           </div>
 
+          {/* ========== KHỐI CHỌN ẢNH ĐƯỢC CẬP NHẬT ========== */}
           <div>
-            <label
-              htmlFor="newsImage"
-              className="block text-sm font-medium text-gray-700 mb-1.5"
-            >
-              Ảnh bìa (Tùy chọn)
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Ảnh bìa (Tùy chọn, tối đa 5MB)
             </label>
-            <div className="flex items-center gap-4 mb-3">
-              <label className="flex-grow cursor-pointer px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 transition duration-150 ease-in-out">
-                <span className="truncate">
-                  {imageFile ? imageFile.name : "Chọn ảnh (tối đa 5MB)"}
-                </span>
-                <input
-                  id="newsImage"
-                  name="newsImage"
-                  type="file"
-                  className="sr-only"
-                  accept="image/png, image/jpeg, image/gif, image/webp"
-                  onChange={handleImageChange}
-                  ref={fileInputRef}
-                />
-              </label>
+            <div className="flex items-center space-x-3 mb-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-grow cursor-pointer px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 transition duration-150 ease-in-out text-left"
+              >
+                <div className="flex items-center">
+                  <ImageIcon className="h-5 w-5 mr-2 text-gray-500 flex-shrink-0" />
+                  <span className="truncate">
+                    {imageFile
+                      ? imageFile.name
+                      : imagePreview && !imageFile && editMode && initialData?.imageUrl
+                      ? "Ảnh hiện tại được giữ lại"
+                      : "Chọn ảnh"}
+                  </span>
+                </div>
+              </button>
+              <input
+                id="newsImageInput"
+                name="newsImageInput"
+                type="file"
+                className="sr-only"
+                accept="image/png, image/jpeg, image/gif, image/webp"
+                onChange={handleImageChange}
+                ref={fileInputRef}
+              />
               {imagePreview && (
                 <button
                   type="button"
                   onClick={clearImageSelection}
-                  className="text-sm text-red-600 hover:text-red-800 transition duration-150 ease-in-out flex-shrink-0"
+                  className="px-3 py-2 cursor-pointer border border-red-300 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition duration-150 ease-in-out text-sm flex-shrink-0"
                 >
                   Xóa ảnh
                 </button>
@@ -317,13 +328,14 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
                     objectFit: "contain",
                     margin: "0 auto",
                   }}
+                  className="rounded"
                 />
               </div>
             )}
           </div>
-      
+          {/* ========== KẾT THÚC KHỐI CHỌN ẢNH ========== */}
+
           <div className="flex justify-end items-center gap-3 pt-5 border-t mt-auto">
-           
             <button
               type="button"
               onClick={onClose}
@@ -355,7 +367,6 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
             </button>
           </div>
         </form>
-        {/* Footer không còn ở đây nữa */}
       </div>
     </div>
   );

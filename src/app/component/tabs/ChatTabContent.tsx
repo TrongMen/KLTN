@@ -2502,7 +2502,7 @@ const ChatTabContent: React.FC<ChatTabContentProps> = ({ currentUser }) => {
 
   // Main Return
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg shadow overflow-hidden">
+    <div className="flex flex-col h-180 bg-white rounded-lg shadow overflow-hidden">
       <div className="flex justify-between items-center p-4 border-b flex-shrink-0">
         <h2 className="text-xl md:text-2xl font-bold text-purple-600">
           {" "}

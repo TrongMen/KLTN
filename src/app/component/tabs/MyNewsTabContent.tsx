@@ -1524,7 +1524,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
 
 
   return (
-    <div className="flex flex-col h-full p-3 md:p-5 bg-gray-50">
+    <div className="flex flex-col h-270 p-3 md:p-5 bg-gray-50">
       <div className="flex flex-wrap gap-x-6 gap-y-2 mb-5 border-b border-gray-200 flex-shrink-0">
         <button
           onClick={() => {

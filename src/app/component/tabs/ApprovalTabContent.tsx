@@ -6,11 +6,11 @@ import {
   User as MainUserType,
   NewsItem as MainNewsItem,
   EventDisplayInfo as MainEventInfo,
-} from "../homeadmin";
-import ApprovalItemDetailModal from "./ApprovalItemDetailModal"; // Import modal mới
-import { ConfirmationDialog } from "../../../utils/ConfirmationDialog"; // Import nếu dùng
+} from "../../homeadmin"; 
+import ApprovalItemDetailModal from "./ApprovalItemDetailModal";
+import { ReloadIcon } from "@radix-ui/react-icons";
 
-// Interfaces (Adapting types)
+
 type EventType = MainEventInfo & {
   status?: string;
   rejectionReason?: string | null;
@@ -41,7 +41,7 @@ interface ApprovalTabContentProps {
   refreshToken?: () => Promise<string | null>;
 }
 
-// --- Helper Functions ---
+
 const isToday = (date: Date): boolean => {
   const today = new Date();
   return (
@@ -88,13 +88,13 @@ const formatDateForInput = (date: Date | null | undefined): string => {
   return "";
 };
 const stripHtml = (html: string): string => {
-  if (typeof document === "undefined") return html;
+  if (typeof document === "undefined") return html; 
   const tmp = document.createElement("DIV");
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || "";
 };
 
-// --- Main Tab Component ---
+
 const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
   user,
   refreshToken,
@@ -117,7 +117,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
   >(null);
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<
     EventType | NewsItemType | null
-  >(null); // State for detail view
+  >(null); 
 
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState<"az" | "za">("az");
@@ -128,7 +128,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
-  // --- Data Fetching ---
+  
   const fetchApiData = useCallback(
     async <T extends { id: string }>(endpoint: string): Promise<T[]> => {
       const token = localStorage.getItem("authToken");
@@ -207,8 +207,10 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
       setPendingNews(pendingN);
       setApprovedNews(approvedN);
       setRejectedNews(rejectedN);
+      toast.success("Đã làm mới danh sách phê duyệt!");
     } catch (error) {
       console.error("Error fetching all data:", error);
+      toast.error("Làm mới danh sách thất bại.");
     } finally {
       setIsLoading(false);
     }
@@ -218,7 +220,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     fetchAllData();
   }, [fetchAllData]);
 
-  // --- API Call Functions ---
+  
   const handleApprove = async (
     item: EventType | NewsItemType,
     itemType: "event" | "news"
@@ -340,7 +342,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     }
   };
 
-  // --- Filtering and Sorting ---
+  
   const displayedItems = useMemo(() => {
     let currentList: Array<EventType | NewsItemType> = [];
     const sourceList =
@@ -365,7 +367,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
       if (!itemDateStr) return false;
       try {
         const itemDate = new Date(itemDateStr);
-        if (isNaN(itemDate.getTime())) return false;
+        if (isNaN(itemDate.getTime())) return false; 
         switch (dateFilter) {
           case "today":
             return isToday(itemDate);
@@ -377,8 +379,8 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
             if (
               !startDate ||
               !endDate ||
-              isNaN(startDate.getTime()) ||
-              isNaN(endDate.getTime())
+              isNaN(startDate.getTime()) || 
+              isNaN(endDate.getTime()) 
             )
               return false;
             const startOfDay = new Date(startDate);
@@ -443,7 +445,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     endDate,
   ]);
 
-  // --- Click Handlers ---
+  
   const handleItemClick = (item: EventType | NewsItemType) => {
     setSelectedItemForDetail(item);
   };
@@ -452,13 +454,13 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     setSelectedItemForDetail(null);
   };
 
-  // --- Rendering Functions ---
+  
   const renderList = (
     items: Array<EventType | NewsItemType>,
     itemType: "event" | "news",
     showActions = false
   ) => {
-    const listHeightClass = "max-h-[calc(100vh-100px)]";
+    const listHeightClass = "max-h-[calc(100vh-100px)]"; 
     const currentItems = items as any[];
 
     if (isLoading)
@@ -745,9 +747,24 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
 
   return (
     <div className="flex flex-col h-full p-3 md:p-5 bg-gray-50 rounded-lg shadow-inner">
-      <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-4 flex-shrink-0">
-        Phê duyệt
-      </h2>
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 gap-2">
+        <h2 className="text-xl md:text-2xl font-bold text-gray-800">
+          Phê duyệt
+        </h2>
+        <button
+          onClick={fetchAllData}
+          disabled={isLoading}
+          className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-auto sm:ml-4"
+          title="Làm mới danh sách phê duyệt"
+        >
+          {isLoading ? (
+            <ReloadIcon className="w-5 h-5 animate-spin text-yellow-600" />
+          ) : (
+            <ReloadIcon className="w-5 h-5 text-yellow-600" />
+          )}
+          {/* <span className="ml-2 hidden sm:inline">Làm mới</span> */}
+        </button>
+      </div>
       <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-200 pb-2 flex-shrink-0">
         <button
           onClick={() => setActiveSubTab("events")}

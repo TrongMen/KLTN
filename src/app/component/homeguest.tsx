@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
 import { io, Socket } from "socket.io-client";
 import UserMenu from "./menu";
 import ContactModal from "./modals/ContactModal";
@@ -22,7 +21,7 @@ import NewsTabContent from "./tabs/NewsTabContent";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
-import { BellIcon } from "@radix-ui/react-icons";
+import { BellIcon, ReloadIcon } from "@radix-ui/react-icons"; // Import ReloadIcon
 
 // --- Interfaces ---
 interface Role {
@@ -101,17 +100,6 @@ export interface NewsItem {
   rejectionReason?: string | null;
 }
 
-// Đảm bảo NotificationItem được định nghĩa hoặc import chính xác
-// export interface NotificationItem {
-//   id: string;
-//   title: string;
-//   content: string;
-//   type: string;
-//   read: boolean;
-//   createdAt: string;
-//   relatedId?: string;
-//   userId: string;
-// }
 
 interface ConfirmationDialogProps {
   isOpen: boolean;
@@ -268,8 +256,9 @@ export default function HomeGuest() {
   const router = useRouter();
   const { refreshToken, isInitialized } = useRefreshToken();
 
-  // --- Fetch Functions (Giữ nguyên phần lớn, xem lại fetchNotifications) ---
+  // --- Fetch Functions ---
 
+  // fetchNews với toast
   const fetchNews = useCallback(async () => {
     setIsLoadingNews(true);
     setErrorNews(null);
@@ -301,10 +290,7 @@ export default function HomeGuest() {
           const err = await res.json();
           msg = err.message || msg;
         } catch (_) {}
-        console.error("Failed to fetch news (HomeGuest):", msg);
-        setErrorNews(msg);
-        setNewsItems([]);
-        return;
+        throw new Error(msg);
       }
       const d = await res.json();
       if (d.code === 1000 && Array.isArray(d.result)) {
@@ -328,20 +314,21 @@ export default function HomeGuest() {
           rejectionReason: item.rejectionReason,
         }));
         setNewsItems(fmt);
+        toast.success("Đã làm mới bảng tin!"); // Toast success
       } else {
-        console.error("Invalid news data format (HomeGuest):", d.message);
-        setErrorNews(d.message || "Lỗi định dạng dữ liệu tin tức");
-        setNewsItems([]);
+         throw new Error(d.message || "Lỗi định dạng dữ liệu tin tức");
       }
     } catch (e: any) {
       console.error("Lỗi fetchNews (HomeGuest):", e);
       setErrorNews(e.message || "Lỗi tải tin tức.");
       setNewsItems([]);
+      toast.error(`Làm mới thất bại: ${e.message || 'Lỗi không xác định'}`); // Toast error
     } finally {
       setIsLoadingNews(false);
     }
   }, [refreshToken]);
 
+  // fetchAllEvents với toast
   const fetchAllEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     setErrorEvents(null);
@@ -397,12 +384,14 @@ export default function HomeGuest() {
             attendees: e.attendees || [],
           }));
         setAllEvents(fmt);
+        toast.success("Đã làm mới danh sách sự kiện!"); // Toast success
       } else {
         throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
       }
     } catch (e: any) {
       console.error("Lỗi fetchAllEvents (HomeGuest):", e);
       setErrorEvents(e.message || "Lỗi tải sự kiện.");
+      toast.error(`Làm mới thất bại: ${e.message || 'Lỗi không xác định'}`); // Toast error
     } finally {
       setIsLoadingEvents(false);
     }
@@ -724,37 +713,32 @@ export default function HomeGuest() {
       console.log(`SOCKET: Đang kết nối cho user: ${user.id}`);
       // Tạo kết nối mới
       const socket = io("ws://localhost:9099", {
-        // Sử dụng ws:// hoặc wss:// nếu cần
-        path: "/socket.io", // Đường dẫn handshake
+        path: "/socket.io", 
         query: {
-          userId: user.id, // Truyền userId qua query params
+          userId: user.id, 
         },
-        transports: ["websocket"], // Ưu tiên websocket
-        reconnectionAttempts: 5, // Số lần thử kết nối lại
-        reconnectionDelay: 3000, // Thời gian chờ giữa các lần thử (ms)
+        transports: ["websocket"], 
+        reconnectionAttempts: 5, 
+        reconnectionDelay: 3000, 
       });
       socketRef.current = socket; // Lưu instance vào ref
 
       // Lắng nghe các sự kiện từ socket
       socket.on("connect", () => {
         console.log("SOCKET: Đã kết nối - ID:", socket.id);
-        // toast.success("Đã kết nối máy chủ thông báo.", { id: 'socket-connect' });
       });
 
       socket.on("disconnect", (reason) => {
         console.log("SOCKET: Đã ngắt kết nối - Lý do:", reason);
         if (reason === "io server disconnect") {
-          // Server chủ động ngắt
           toast.error("Mất kết nối máy chủ thông báo.", {
             id: "socket-disconnect",
           });
         }
-        // reason === "io client disconnect" -> client tự ngắt (logout, unmount)
       });
 
       socket.on("connect_error", (error) => {
         console.error("SOCKET: Lỗi kết nối:", error);
-        // Hiển thị lỗi một lần để tránh spam toast
         toast.error("Không thể kết nối máy chủ thông báo.", {
           id: "socket-error",
         });
@@ -763,62 +747,48 @@ export default function HomeGuest() {
       // --- Lắng nghe sự kiện 'notification' ---
       socket.on("notification", (data: any) => {
         console.log("SOCKET: Nhận được thông báo:", data);
-
-        // Xử lý dữ liệu nhận được
         if (data && typeof data === "object") {
-          // Hiển thị toast thông báo
           toast(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
             duration: 5000,
           });
-
-          // Tạo đối tượng NotificationItem từ dữ liệu nhận được
-          // Cần đảm bảo cấu trúc data phù hợp hoặc điều chỉnh lại
           const newNotification: NotificationItem = {
-            id: data.id || `socket-${Date.now()}`, // Cung cấp ID tạm nếu thiếu
+            id: data.id || `socket-${Date.now()}`, 
             title: data.title || "Thông báo",
             content: data.content || "",
             type: data.type || "SYSTEM",
-            read: data.read !== undefined ? data.read : false, // Mặc định là chưa đọc
+            read: data.read !== undefined ? data.read : false, 
             createdAt: data.createdAt || new Date().toISOString(),
             relatedId: data.relatedId,
-            userId: data.userId || user.id, // Đảm bảo userId được gán
+            userId: data.userId || user.id, 
           };
-
-          // Thêm thông báo mới vào đầu danh sách và giới hạn số lượng
           setNotifications((prevNotifications) =>
-            [newNotification, ...prevNotifications].slice(0, 15)
-          ); // Giữ lại tối đa 15 thông báo gần nhất
-
-          // Optional: Có thể gọi lại fetchNotifications để đồng bộ hoàn toàn,
-          // nhưng cách trên giúp hiển thị real-time nhanh hơn.
-          // fetchNotifications(user.id, localStorage.getItem("authToken"));
+            [newNotification, ...prevNotifications].slice(0, 15) 
+          );
         } else {
           console.warn("SOCKET: Dữ liệu thông báo không hợp lệ:", data);
         }
       });
 
-      // Hàm cleanup: sẽ chạy khi user.id thay đổi hoặc component unmount
+      // Hàm cleanup
       return () => {
         if (socketRef.current) {
           console.log("SOCKET: Ngắt kết nối...");
-          socketRef.current.off("connect"); // Gỡ bỏ các listener
+          socketRef.current.off("connect"); 
           socketRef.current.off("disconnect");
           socketRef.current.off("connect_error");
-          socketRef.current.off("notification"); // Quan trọng: gỡ listener notification
-          socketRef.current.disconnect(); // Ngắt kết nối
-          socketRef.current = null; // Xóa ref
+          socketRef.current.off("notification"); 
+          socketRef.current.disconnect(); 
+          socketRef.current = null; 
         }
       };
     } else {
-      // Nếu không có user ID (đã logout hoặc chưa đăng nhập), đảm bảo socket đã ngắt kết nối
       if (socketRef.current) {
         console.log("SOCKET: Ngắt kết nối do không có user.");
         socketRef.current.disconnect();
         socketRef.current = null;
       }
     }
-    // Dependencies: Effect này chạy lại khi user.id thay đổi hoặc setNotifications thay đổi (mặc dù setNotifications thường ổn định)
-  }, [user?.id, setNotifications]); // Thêm setNotifications vì nó được dùng trong listener
+  }, [user?.id, setNotifications]); // Dependency là user.id
 
   // Effect for handling clicks outside notification dropdown (Giữ nguyên)
   useEffect(() => {
@@ -842,13 +812,11 @@ export default function HomeGuest() {
 
   // Cập nhật handleLogout để ngắt kết nối socket
   const handleLogout = async () => {
-    // --- Ngắt kết nối Socket trước khi logout ---
     if (socketRef.current) {
       console.log("SOCKET: Ngắt kết nối khi logout...");
       socketRef.current.disconnect();
       socketRef.current = null;
     }
-    // --- Kết thúc phần thêm ---
     try {
       const token = localStorage.getItem("authToken");
       if (token) {
@@ -1028,11 +996,6 @@ export default function HomeGuest() {
 
   const handleNotificationClick = () => {
     setShowNotificationDropdown((prev) => !prev);
-    // Optional: Refetch khi mở dropdown nếu cần
-    // if (!showNotificationDropdown && user?.id) {
-    //     const token = localStorage.getItem("authToken");
-    //     fetchNotifications(user.id, token);
-    // }
   };
 
   const handleMarkAsRead = async (notificationId: string) => {
@@ -1169,7 +1132,7 @@ export default function HomeGuest() {
     { id: "chatList", label: "💬 Danh sách chat", requiresAuth: true },
   ];
 
-  // --- Render Logic (Giữ nguyên) ---
+  // --- Render Logic ---
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
       <Toaster toastOptions={{ duration: 4000 }} position="top-center" />
@@ -1181,8 +1144,8 @@ export default function HomeGuest() {
               className="cursor-pointer hover:text-gray-300 transition-colors"
               onClick={() => setShowAboutModal(true)}
             >
-                Giới thiệu
-              </span>
+              Giới thiệu
+            </span>
             
             <span
               className="cursor-pointer hover:text-gray-300 transition-colors"
@@ -1209,7 +1172,7 @@ export default function HomeGuest() {
       </nav>
 
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200">
-        <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
+        <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3"> {/* Use items-center */}
           {tabs.map((tab) => {
             const showTab =
               !tab.requiresAuth ||
@@ -1253,6 +1216,22 @@ export default function HomeGuest() {
                 (Đăng nhập để xem các mục khác)
               </span>
             )}
+           {/* Nút Làm mới */}
+          {/* {(activeTab === 'home' || activeTab === 'news') && (
+            <button
+              onClick={activeTab === 'home' ? fetchAllEvents : fetchNews}
+              disabled={activeTab === 'home' ? isLoadingEvents : isLoadingNews}
+              className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-4" // Added ml-4 for spacing
+              title={`Làm mới ${activeTab === 'home' ? 'sự kiện' : 'tin tức'}`}
+            >
+              {(activeTab === 'home' ? isLoadingEvents : isLoadingNews) ? (
+                <ReloadIcon className={`w-5 h-5 animate-spin ${activeTab === 'home' ? 'text-indigo-600' : 'text-green-600'}`} />
+              ) : (
+                <ReloadIcon className={`w-5 h-5 ${activeTab === 'home' ? 'text-indigo-600' : 'text-green-600'}`} />
+              )}
+              <span className="ml-2 hidden sm:inline">Làm mới</span>
+            </button>
+          )} */}
         </div>
       </div>
 
@@ -1387,8 +1366,8 @@ export default function HomeGuest() {
       )}
 
       {showAboutModal && (
-              <AboutModal onClose={() => setShowAboutModal(false)} />
-            )}
+            <AboutModal onClose={() => setShowAboutModal(false)} />
+          )}
     </div>
   );
 }

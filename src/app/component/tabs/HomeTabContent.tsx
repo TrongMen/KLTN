@@ -372,7 +372,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               ) : (
                 <ReloadIcon className="w-5 h-5 text-indigo-600" />
               )}
-              <span className="ml-2 hidden sm:inline">Làm mới</span>
+              {/* <span className="ml-2 hidden sm:inline">Làm mới</span> */}
             </button>
           </div>
           <div className="flex-grow sm:flex-grow-0">

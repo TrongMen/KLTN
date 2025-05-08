@@ -191,7 +191,7 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
                 ) : (
                 <ReloadIcon className="w-5 h-5 text-green-600" />
                 )}
-                <span className="ml-2 hidden sm:inline">Làm mới</span>
+                {/* <span className="ml-2 hidden sm:inline">Làm mới</span> */}
             </button>
             {user && (user.roles?.some(role => role.name === "ADMIN" || role.name === "MANAGER" || role.name === "USER")) && (
              <button

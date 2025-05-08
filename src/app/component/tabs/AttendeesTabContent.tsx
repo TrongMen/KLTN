@@ -20,6 +20,15 @@ import {
   PersonIcon,
   IdCardIcon,
   Link2Icon,
+  ReloadIcon, // Import ReloadIcon
+  MagnifyingGlassIcon,
+  CalendarIcon,
+  Component1Icon,
+  ListBulletIcon,
+  DownloadIcon,
+  InfoCircledIcon,
+  ExclamationTriangleIcon,
+  ArchiveIcon
 } from "@radix-ui/react-icons";
 
 interface ApprovedEvent {
@@ -56,7 +65,7 @@ interface ConfirmationDialogProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
-  confirmVariant?: "primary" | "danger";
+  confirmVariant?: "primary" | "danger" | "warning";
 }
 
 interface QrCodeModalProps {
@@ -148,16 +157,19 @@ function ConfirmationDialog({
 }: ConfirmationDialogProps) {
   if (!isOpen) return null;
   const confirmButtonClasses = useMemo(() => {
-    let base =
+    let b =
       "flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ";
     if (confirmVariant === "danger") {
-      base +=
+      b +=
         "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 cursor-pointer";
+    } else if (confirmVariant === "warning") {
+      b +=
+        "bg-yellow-500 hover:bg-yellow-600 text-white focus:ring-yellow-400 cursor-pointer";
     } else {
-      base +=
+      b +=
         "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 cursor-pointer";
     }
-    return base;
+    return b;
   }, [confirmVariant]);
   const cancelButtonClasses =
     "flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2";
@@ -177,7 +189,11 @@ function ConfirmationDialog({
         <h3
           id="dialog-title"
           className={`text-lg font-bold mb-3 ${
-            confirmVariant === "danger" ? "text-red-700" : "text-gray-800"
+            confirmVariant === "danger"
+              ? "text-red-700"
+              : confirmVariant === "warning"
+              ? "text-yellow-700"
+              : "text-gray-800"
           }`}
         >
           {title}
@@ -312,8 +328,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
 
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false); // State for refresh button
 
-  const fetchUserApprovedEvents = useCallback(async () => {
+  const fetchUserApprovedEvents = useCallback(async (showToast = false) => { // Added showToast
     if (!user?.id) {
       setEventError("Không tìm thấy thông tin người dùng.");
       setIsLoadingEvents(false);
@@ -347,19 +364,28 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             createdAt: e.createdAt,
           }));
         setUserApprovedEvents(approved);
+        if (showToast) { // Show toast on success if requested
+          toast.success("Đã làm mới danh sách sự kiện!");
+        }
       } else {
         setUserApprovedEvents([]);
         console.warn("API creator events returned unexpected data:", data);
+         if (showToast) { // Show error toast if requested
+           toast.error("Làm mới thất bại: Dữ liệu không hợp lệ.");
+         }
       }
     } catch (e: any) {
       console.error("Lỗi fetch UserApprovedEvents:", e);
       setEventError(e.message || "Lỗi không xác định khi tải sự kiện");
+      if (showToast) { // Show error toast if requested
+        toast.error(`Làm mới thất bại: ${e.message || 'Lỗi không xác định'}`);
+      }
     } finally {
       setIsLoadingEvents(false);
     }
   }, [user]);
 
-  const fetchAttendees = useCallback(async (eventId: string) => {
+  const fetchAttendees = useCallback(async (eventId: string, showToast = false) => { // Added showToast
     setIsLoadingAttendees(true);
     setAttendeeError(null);
     try {
@@ -376,7 +402,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
           const d = await res.json();
           m = d.message || m;
         } catch (_) {}
-        throw new Error(`${m} (${res.status})`);
+        throw new Error(`<span class="math-inline">\{m\} \(</span>{res.status})`);
       }
       const data = await res.json();
       if (data.code === 1000 && Array.isArray(data.result)) {
@@ -390,6 +416,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         setOriginalAttendance(initialAttendance);
         setAttendanceChanges(initialAttendance);
         setSelectedForDelete(new Set());
+         if (showToast) { // Show toast on success if requested
+            toast.success("Đã làm mới danh sách người tham gia!");
+        }
       } else {
         setAttendees([]);
         setOriginalAttendance({});
@@ -404,6 +433,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setAttendees([]);
       setOriginalAttendance({});
       setAttendanceChanges({});
+       if (showToast) { // Show error toast if requested
+          toast.error(`Làm mới thất bại: ${err.message || 'Lỗi không xác định'}`);
+       }
     } finally {
       setIsLoadingAttendees(false);
     }
@@ -433,7 +465,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             m = `${m}: ${txt.slice(0, 100)}`;
           } catch (_) {}
         }
-        throw new Error(`${m} (${res.status})`);
+        throw new Error(`<span class="math-inline">\{m\} \(</span>{res.status})`);
       }
 
       const blob = await res.blob();
@@ -467,7 +499,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   }, []);
 
   useEffect(() => {
-    fetchUserApprovedEvents();
+    fetchUserApprovedEvents(); // Fetch events on initial load
   }, [fetchUserApprovedEvents]);
 
   useEffect(() => {
@@ -488,14 +520,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setIsQrModalOpen(false);
       setIsScannerOpen(false);
 
-      fetchAttendees(selectedEventId);
+      fetchAttendees(selectedEventId); // Fetch attendees for selected event
 
-      fetchQrCodeImage(selectedEventId)
+      fetchQrCodeImage(selectedEventId) // Fetch QR code for selected event
         .then((newUrl) => {
           qrUrlToRevoke = newUrl;
         })
         .catch(() => {});
     } else {
+      // Reset states when no event is selected
       setAttendees([]);
       setOriginalAttendance({});
       setAttendanceChanges({});
@@ -511,12 +544,36 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setIsScannerOpen(false);
     }
 
+    // Cleanup function to revoke object URL
     return () => {
       if (qrUrlToRevoke) {
         window.URL.revokeObjectURL(qrUrlToRevoke);
       }
     };
   }, [selectedEventId, fetchAttendees, fetchQrCodeImage]);
+
+  // Added handleRefresh function
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    const toastId = toast.loading("Đang làm mới...");
+    try {
+        if (selectedEventId) {
+            await fetchAttendees(selectedEventId, true); // Pass true to show toast
+            // Toast handled inside fetchAttendees now
+            toast.dismiss(toastId); // Dismiss loading toast
+        } else {
+            await fetchUserApprovedEvents(true); // Pass true to show toast
+            // Toast handled inside fetchUserApprovedEvents now
+             toast.dismiss(toastId); // Dismiss loading toast
+        }
+    } catch (error: any) {
+         // Log the error, toast already shown in fetch functions if showToast was true
+         console.error("Refresh failed:", error);
+         toast.error("Làm mới thất bại.", { id: toastId }); // General error if needed
+    } finally {
+        setIsRefreshing(false);
+    }
+  };
 
   const handleSelectEvent = (eventId: string) => {
     setSelectedEventId(eventId);
@@ -535,14 +592,14 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const handleSetMode = (newMode: "view" | "attendance" | "delete") => {
     setMode(newMode);
     if (newMode === "view") {
-        setSelectedForDelete(new Set());
-        setAttendanceChanges({ ...originalAttendance }); // Reset changes when going back to view
+      setSelectedForDelete(new Set());
+      setAttendanceChanges({ ...originalAttendance });
     } else if (newMode === 'attendance') {
-        setAttendanceChanges({ ...originalAttendance }); // Reset changes when entering attendance mode
-        setSelectedForDelete(new Set()); // Clear delete selection
+      setAttendanceChanges({ ...originalAttendance });
+      setSelectedForDelete(new Set());
     } else if (newMode === 'delete') {
-        setAttendanceChanges({ ...originalAttendance }); // Reset attendance changes
-        setSelectedForDelete(new Set()); // Clear delete selection initially
+      setAttendanceChanges({ ...originalAttendance });
+      setSelectedForDelete(new Set());
     }
   };
 
@@ -585,16 +642,11 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     if (!selectedEventId || isProcessing) return;
     const changes: { userId: string; status: boolean }[] = [];
     Object.keys(attendanceChanges).forEach((id) => {
-        // Ensure both keys exist before comparing
-        if (id in originalAttendance && attendanceChanges[id] !== originalAttendance[id]) {
-            changes.push({ userId: id, status: attendanceChanges[id] });
-        } else if (!(id in originalAttendance) && attendanceChanges[id] === true) {
-            // Case: User was not in original list (maybe added?), mark as attending
-            // This case might need specific handling depending on your logic
-            // For now, let's assume we only update existing ones based on comparison
-            // changes.push({ userId: id, status: attendanceChanges[id] });
-            console.warn(`User ID ${id} found in changes but not in original attendance.`);
-        }
+      if (id in originalAttendance && attendanceChanges[id] !== originalAttendance[id]) {
+          changes.push({ userId: id, status: attendanceChanges[id] });
+      } else if (!(id in originalAttendance) && attendanceChanges[id] === true) {
+          console.warn(`User ID ${id} found in changes but not in original attendance.`);
+      }
     });
 
     if (changes.length === 0) {
@@ -613,7 +665,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     }
 
     const promises = changes.map(({ userId, status }) => {
-      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}?isAttending=${status}`;
+      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}?isAttending=${status}`;
       return fetch(url, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
@@ -627,15 +679,12 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             } catch (_) {}
             return { status: "rejected", reason: m, userId };
           }
-          // Check API response body for success confirmation if needed
            try {
-              const updateResult = await res.json();
-              if (updateResult.code !== 1000 && updateResult.message) {
-                  return { status: "rejected", reason: updateResult.message, userId };
-              }
-           } catch(e) {
-               // Ignore if response is not JSON or empty, assume OK status is enough
-           }
+             const updateResult = await res.json();
+             if (updateResult.code !== 1000 && updateResult.message) {
+                 return { status: "rejected", reason: updateResult.message, userId };
+             }
+           } catch(e) {}
           return { status: "fulfilled", value: { userId, status } };
         })
         .catch((err) => ({ status: "rejected", reason: err.message, userId }));
@@ -667,11 +716,11 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
           id: ok === 0 ? loadId : undefined,
         });
     } else if (ok === 0 && fail === 0) {
-         toast.dismiss(loadId);
+        toast.dismiss(loadId);
     }
 
     if (selectedEventId) {
-      await fetchAttendees(selectedEventId);
+      await fetchAttendees(selectedEventId); // Fetch again to get latest confirmed data
     }
 
     setIsProcessing(false);
@@ -691,7 +740,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     }
 
     const promises = idsToDelete.map((userId) => {
-      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}`;
+      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}`;
       return fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -705,16 +754,16 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             } catch (_) {}
             return { status: "rejected", reason: m, userId };
           }
-          try {
-            const deleteResult = await res.json();
-            if (deleteResult.code !== 1000 && deleteResult.message) {
-              return {
-                status: "rejected",
-                reason: deleteResult.message,
-                userId,
-              };
-            }
-          } catch (e) {}
+           try {
+             const deleteResult = await res.json();
+             if (deleteResult.code !== 1000 && deleteResult.message) {
+                 return {
+                   status: "rejected",
+                   reason: deleteResult.message,
+                   userId,
+                 };
+             }
+           } catch (e) {}
           return { status: "fulfilled", value: userId };
         })
         .catch((err) => ({ status: "rejected", reason: err.message, userId }));
@@ -750,7 +799,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     }
 
     if (selectedEventId) {
-      await fetchAttendees(selectedEventId);
+      await fetchAttendees(selectedEventId); // Refresh list after delete
     }
 
     setSelectedForDelete(new Set());
@@ -1000,16 +1049,34 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
 
   return (
     <div className="flex flex-col h-full p-3 md:p-5 bg-gray-50">
-      <h2 className="text-xl md:text-2xl font-bold text-teal-600 mb-4 pb-3 border-b border-gray-200 flex-shrink-0">
-        {selectedEventId
-          ? `Quản lý tham gia: ${selectedEventName || "..."}`
-          : "Chọn sự kiện để quản lý"}
-      </h2>
+      {/* Header with Title and Refresh Button */}
+      <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 flex-wrap gap-2">
+        <h2 className="text-xl md:text-2xl font-bold text-teal-600">
+          {selectedEventId
+            ? `Quản lý tham gia: ${selectedEventName || "..."}`
+            : "Chọn sự kiện để quản lý"}
+        </h2>
+        <button
+          onClick={handleRefresh}
+          disabled={isLoadingEvents || isLoadingAttendees || isProcessing || isRefreshing || isExporting}
+          className="p-2 border cursor-pointer border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-auto sm:ml-4"
+          title={selectedEventId ? "Làm mới danh sách tham gia" : "Làm mới danh sách sự kiện"}
+        >
+          {isRefreshing ? (
+            <ReloadIcon className="w-5 h-5 animate-spin text-teal-600" />
+          ) : (
+            <ReloadIcon className="w-5 h-5 text-teal-600" />
+          )}
+          {/* <span className="ml-2 hidden sm:inline">Làm mới</span>   */}
+        </button>
+      </div>
 
       {!selectedEventId && (
         <>
+          {/* Event Filters */}
           <div className="mb-5 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
+              {/* Search Input */}
               <div className="relative lg:col-span-1 xl:col-span-1">
                 <label
                   htmlFor="searchEvents"
@@ -1018,7 +1085,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   Tìm sự kiện
                 </label>
                 <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                  🔍
+                  <MagnifyingGlassIcon/> {/* Updated Icon */}
                 </span>
                 <input
                   type="text"
@@ -1029,6 +1096,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   className="w-full p-2 pl-10 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm"
                 />
               </div>
+              {/* Sort Select */}
               <div>
                 <label
                   htmlFor="sortEvents"
@@ -1043,11 +1111,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     setEventSortOrder(e.target.value as "az" | "za")
                   }
                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 h-[40px] shadow-sm bg-white appearance-none pr-8"
+                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1.5em 1.5em' }}
                 >
                   <option value="az">A - Z</option>
                   <option value="za">Z - A</option>
                 </select>
               </div>
+              {/* Time Filter Select */}
               <div>
                 <label
                   htmlFor="timeFilterEvents"
@@ -1069,6 +1139,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     )
                   }
                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 h-[40px] shadow-sm bg-white appearance-none pr-8"
+                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1.5em 1.5em' }}
                 >
                   <option value="all">Tất cả</option>
                   <option value="today">Hôm nay</option>
@@ -1077,6 +1148,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   <option value="dateRange">Khoảng ngày</option>
                 </select>
               </div>
+              {/* View Mode Buttons */}
               <div className="flex items-end justify-start md:justify-end gap-2 lg:col-start-auto xl:col-start-4">
                 <label className="block text-xs font-medium text-gray-600 mb-1 invisible">
                   Chế độ xem
@@ -1091,18 +1163,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                     }`}
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
+                    <ListBulletIcon className="h-5 w-5" />
                   </button>
                   <button
                     onClick={() => setEventViewMode("card")}
@@ -1113,62 +1174,52 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                     }`}
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v10H5V5z"
-                        clipRule="evenodd"
-                        fillRule="evenodd"
-                      />
-                      <path d="M7 7h6v2H7V7zm0 4h6v2H7v-2z" />
-                    </svg>
+                     <Component1Icon className="h-5 w-5" />
                   </button>
                 </div>
               </div>
             </div>
+            {/* Date Range Inputs */}
+             {eventTimeFilter === "dateRange" && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
+                <div>
+                  <label
+                    htmlFor="startDateFilterEvents"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    <span className="inline-block mr-1">🗓️</span> Từ ngày
+                  </label>
+                  <input
+                    type="date"
+                    id="startDateFilterEvents"
+                    value={eventStartDateFilter}
+                    onChange={handleEventStartDateChange}
+                    max={eventEndDateFilter || undefined}
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm bg-white"
+                    aria-label="Ngày bắt đầu lọc sự kiện"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="endDateFilterEvents"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    <span className="inline-block mr-1">🗓️</span> Đến ngày
+                  </label>
+                  <input
+                    type="date"
+                    id="endDateFilterEvents"
+                    value={eventEndDateFilter}
+                    onChange={handleEventEndDateChange}
+                    min={eventStartDateFilter || undefined}
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm bg-white"
+                    aria-label="Ngày kết thúc lọc sự kiện"
+                  />
+                </div>
+              </div>
+            )}
           </div>
-          {eventTimeFilter === "dateRange" && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 p-3 bg-teal-50 rounded-lg border border-teal-200 shadow-sm">
-              <div>
-                <label
-                  htmlFor="startDateFilterEvents"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  <span className="inline-block mr-1">🗓️</span> Từ ngày
-                </label>
-                <input
-                  type="date"
-                  id="startDateFilterEvents"
-                  value={eventStartDateFilter}
-                  onChange={handleEventStartDateChange}
-                  max={eventEndDateFilter || undefined}
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm bg-white"
-                  aria-label="Ngày bắt đầu lọc sự kiện"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="endDateFilterEvents"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  <span className="inline-block mr-1">🗓️</span> Đến ngày
-                </label>
-                <input
-                  type="date"
-                  id="endDateFilterEvents"
-                  value={eventEndDateFilter}
-                  onChange={handleEventEndDateChange}
-                  min={eventStartDateFilter || undefined}
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm bg-white"
-                  aria-label="Ngày kết thúc lọc sự kiện"
-                />
-              </div>
-            </div>
-          )}
+          {/* Event List/Card View */}
           <div className="overflow-y-auto flex-grow mb-4 pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             {isLoadingEvents ? (
               <p className="text-center text-gray-500 italic py-5">
@@ -1265,63 +1316,65 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
 
       {selectedEventId && (
         <>
-          <div className="mb-4 flex-shrink-0">
-            <button
-              onClick={handleBackToEventList}
-              className="text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer p-1 rounded hover:bg-blue-50"
-            >
-              <ArrowLeftIcon className="h-4 w-4 mr-1" /> Quay lại chọn sự kiện
-            </button>
-          </div>
-
-          <div className="mb-4 p-3 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-end">
-              <div className="relative sm:col-span-1">
-                <label
+          {/* Back Button */}
+           <div className="mb-4 flex-shrink-0">
+             <button
+               onClick={handleBackToEventList}
+               className="text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer p-1 rounded hover:bg-blue-50"
+             >
+               <ArrowLeftIcon className="h-4 w-4 mr-1" /> Quay lại chọn sự kiện
+             </button>
+           </div>
+           {/* Attendee Filters and Controls */}
+           <div className="mb-4 p-3 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
+             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-end">
+               <div className="relative sm:col-span-1">
+                 <label
                   htmlFor="searchAttendees"
                   className="block text-xs font-medium text-gray-600 mb-1"
-                >
+                 >
                   Tìm người tham gia
-                </label>
-                <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                  🔍
-                </span>
-                <input
-                  type="text"
-                  id="searchAttendees"
-                  placeholder="Tên, MSSV..."
-                  value={attendeeSearchTerm}
-                  onChange={(e) => setAttendeeSearchTerm(e.target.value)}
-                  className="w-full p-2 pl-10 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm"
-                />
-              </div>
-              <div className="sm:col-span-1">
-                <label
+                 </label>
+                 <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
+                   <MagnifyingGlassIcon/>
+                 </span>
+                 <input
+                   type="text"
+                   id="searchAttendees"
+                   placeholder="Tên, MSSV..."
+                   value={attendeeSearchTerm}
+                   onChange={(e) => setAttendeeSearchTerm(e.target.value)}
+                   className="w-full p-2 pl-10 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm"
+                 />
+               </div>
+               <div className="sm:col-span-1">
+                 <label
                   htmlFor="sortAttendees"
                   className="block text-xs font-medium text-gray-600 mb-1"
-                >
+                 >
                   Sắp xếp người tham gia
-                </label>
-                <select
-                  id="sortAttendees"
-                  value={attendeeSortOrder}
-                  onChange={(e) =>
-                    setAttendeeSortOrder(
-                      e.target.value as "az" | "za" | "status"
-                    )
-                  }
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 h-[40px] shadow-sm bg-white appearance-none pr-8"
-                >
-                  <option value="az"> A - Z</option>
-                  <option value="za"> Z - A</option>
-                  <option value="status">Trạng thái điểm danh</option>
-                </select>
-              </div>
-              <div className="flex items-end justify-start sm:justify-end gap-2 sm:col-span-1">
-                <label className="block text-xs font-medium text-gray-600 mb-1 invisible">
-                  Chế độ xem
-                </label>
-                <div className="flex w-full sm:w-auto">
+                 </label>
+                 <select
+                   id="sortAttendees"
+                   value={attendeeSortOrder}
+                   onChange={(e) =>
+                     setAttendeeSortOrder(
+                       e.target.value as "az" | "za" | "status"
+                     )
+                   }
+                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 h-[40px] shadow-sm bg-white appearance-none pr-8"
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1.5em 1.5em' }}
+                 >
+                   <option value="az"> A - Z</option>
+                   <option value="za"> Z - A</option>
+                   <option value="status">Trạng thái điểm danh</option>
+                 </select>
+               </div>
+               <div className="flex items-end justify-start sm:justify-end gap-2 sm:col-span-1">
+                 <label className="block text-xs font-medium text-gray-600 mb-1 invisible">
+                   Chế độ xem
+                 </label>
+                 <div className="flex w-full sm:w-auto">
                   <button
                     onClick={() => setAttendeeViewMode("list")}
                     title="Danh sách"
@@ -1331,18 +1384,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                     }`}
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
+                    <ListBulletIcon className="h-5 w-5"/>
                   </button>
                   <button
                     onClick={() => setAttendeeViewMode("card")}
@@ -1353,25 +1395,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                     }`}
                   >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v10H5V5z"
-                        clipRule="evenodd"
-                        fillRule="evenodd"
-                      />
-                      <path d="M7 7h6v2H7V7zm0 4h6v2H7v-2z" />
-                    </svg>
+                    <Component1Icon className="h-5 w-5"/>
                   </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
+                 </div>
+               </div>
+             </div>
+           </div>
+           {/* Attendee List/Card View */}
           <div className="overflow-y-auto flex-grow mb-4 pr-1 min-h-[300px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             {isLoadingAttendees ? (
               <p className="text-center text-gray-500 italic py-5">
@@ -1382,9 +1412,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                 {attendeeError}
               </p>
             ) : !selectedEventId ? (
-                <p className="text-center text-gray-400 italic py-5">
-                    Vui lòng chọn sự kiện để xem danh sách tham gia.
-                </p>
+              <p className="text-center text-gray-400 italic py-5">
+                  Vui lòng chọn sự kiện để xem danh sách tham gia.
+              </p>
             ) : processedAttendees.length === 0 ? (
               <p className="text-center text-gray-500 italic py-5">
                 {attendeeSearchTerm
@@ -1536,7 +1566,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                 {isAttending ? "Có mặt" : "Vắng"}
                               </span>
                             )}
-                            {mode === "attendance" && hasChanged && (
+                             {mode === "attendance" && hasChanged && (
                                 <span
                                   className={`flex-shrink-0 p-1 rounded-full ml-2 ${
                                     isCheckedForAttendance
@@ -1545,9 +1575,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   }`}
                                 >
                                   {isCheckedForAttendance ? (
-                                    <CheckIcon className="w-3 h-3" />
+                                      <CheckIcon className="w-3 h-3" />
                                   ) : (
-                                    <Cross2Icon className="w-3 h-3" />
+                                      <Cross2Icon className="w-3 h-3" />
                                   )}
                                 </span>
                               )}
@@ -1558,15 +1588,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {processedAttendees.map((attendee) => {
-                       const isSelectedForDelete = selectedForDelete.has(
-                        attendee.userId
-                      );
-                      const isCheckedForAttendance =
-                        attendanceChanges[attendee.userId] ?? false;
-                      const isAttending =
-                        originalAttendance[attendee.userId] ?? false;
-                       const hasChanged = mode === 'attendance' && isCheckedForAttendance !== isAttending;
-                       const isRowProcessing = isProcessing;
+                          const isSelectedForDelete = selectedForDelete.has(
+                            attendee.userId
+                          );
+                          const isCheckedForAttendance =
+                            attendanceChanges[attendee.userId] ?? false;
+                          const isAttending =
+                            originalAttendance[attendee.userId] ?? false;
+                          const hasChanged = mode === 'attendance' && isCheckedForAttendance !== isAttending;
+                          const isRowProcessing = isProcessing;
 
                       return (
                         <div
@@ -1575,8 +1605,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             mode === "delete" && isSelectedForDelete
                               ? "border-red-300 bg-red-50"
                               : hasChanged
-                                ? (isCheckedForAttendance ? "border-green-300 bg-green-50" : "border-gray-300 bg-gray-100")
-                                : "border-gray-200 hover:bg-gray-50"
+                              ? (isCheckedForAttendance ? "border-green-300 bg-green-50" : "border-gray-300 bg-gray-100")
+                              : "border-gray-200 hover:bg-gray-50"
                           } ${isRowProcessing ? "opacity-70" : ""}`}
                         >
                           <div className="flex items-start gap-3 mb-2 flex-grow">
@@ -1637,41 +1667,40 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                 </p>
                               )}
                             </div>
-                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                {(mode === "view" || mode === "attendance") &&
-                                !isRowProcessing && (
-                                    <span
+                             <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                {(mode === "view" || mode === "attendance") && !isRowProcessing && (
+                                  <span
                                     className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                        isAttending
+                                      isAttending
                                         ? "bg-green-100 text-green-700"
                                         : "bg-gray-200 text-gray-600"
                                     }`}
-                                    >
+                                  >
                                     {isAttending ? "Có mặt" : "Vắng"}
-                                    </span>
+                                  </span>
                                 )}
                                 {mode === "attendance" && hasChanged && (
-                                    <span
-                                    className={`p-1 rounded-full ${
+                                   <span
+                                      className={`p-1 rounded-full ${
                                         isCheckedForAttendance
-                                        ? "bg-green-200 text-green-700"
-                                        : "bg-red-100 text-red-600"
-                                    }`}
+                                          ? "bg-green-200 text-green-700"
+                                          : "bg-red-100 text-red-600"
+                                      }`}
                                     >
-                                    {isCheckedForAttendance ? (
-                                        <CheckIcon className="w-3 h-3" />
-                                    ) : (
-                                        <Cross2Icon className="w-3 h-3" />
-                                    )}
+                                      {isCheckedForAttendance ? (
+                                          <CheckIcon className="w-3 h-3" />
+                                      ) : (
+                                          <Cross2Icon className="w-3 h-3" />
+                                      )}
                                     </span>
                                 )}
-                            </div>
+                              </div>
                           </div>
                           <div
                             className={`space-y-1 text-xs text-gray-600 ${
-                                mode === 'view' ? 'pl-[52px]' : 'pl-3' // Adjust padding based on mode for alignment
+                               mode === 'view' ? 'pl-[52px]' : 'pl-3' // Adjust padding based on mode
                              }`}
-                          >
+                           >
                             {attendee.studentCode && (
                               <p className="flex items-center gap-1">
                                 <IdCardIcon className="w-3 h-3 text-blue-500 flex-shrink-0" />
@@ -1757,15 +1786,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         viewBox="0 0 24 24"
                         stroke="currentColor"
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15l-4-4h3V9h2v4h3l-4 4z"
-                        />
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15l-4-4h3V9h2v4h3l-4 4z"/>
                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7m-4 0V5a2 2 0 00-2-2H7a2 2 0 00-2 2v2m14 0H3" />
                       </svg>
-                      Quét Mã QR
+                       Quét Mã QR
                     </button>
 
                     <button
@@ -1773,7 +1797,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                       disabled={isProcessing || attendees.length === 0}
                       className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 shadow-sm border border-red-200"
                     >
-                      <TrashIcon /> Xóa người
+                       <TrashIcon /> Xóa người
                     </button>
                   </div>
                 )}
@@ -1791,7 +1815,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                       disabled={
                         isProcessing ||
                         Object.keys(attendanceChanges).every(
-                          (k) => (k in originalAttendance) && attendanceChanges[k] === originalAttendance[k]
+                           (k) => (k in originalAttendance) && attendanceChanges[k] === originalAttendance[k]
                         )
                       }
                       className={`px-4 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium cursor-pointer ${
@@ -1825,41 +1849,28 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                           : "bg-red-600 hover:bg-red-700"
                       }`}
                     >
-                      <TrashIcon /> Xóa ({selectedForDelete.size})
+                       <TrashIcon /> Xóa ({selectedForDelete.size})
                     </button>
                   </div>
                 )}
               </div>
 
               <div>
-                <button
-                  onClick={() => handleExportClick(selectedEventId)}
-                  disabled={
-                    isExporting ||
-                    isLoadingAttendees ||
-                    attendees.length === 0 ||
-                    isProcessing
-                  }
-                  className={`px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 shadow-sm border border-blue-200 ${
-                    isExporting ? "animate-pulse" : ""
-                  }`}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
+                 <button
+                    onClick={() => handleExportClick(selectedEventId)}
+                    disabled={
+                     isExporting ||
+                     isLoadingAttendees ||
+                     attendees.length === 0 ||
+                     isProcessing
+                   }
+                   className={`px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 shadow-sm border border-blue-200 ${isExporting ? "animate-pulse" : ""}`}
+                 >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  {isExporting ? "Đang xuất..." : "Xuất DS tham gia (Excel)"}
-                </button>
+                   {isExporting ? "Đang xuất..." : "Xuất DS tham gia (Excel)"}
+                 </button>
               </div>
             </div>
           )}
@@ -1884,27 +1895,26 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         }
       />
 
-      <QrCodeModal
+       <QrCodeModal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
         qrCodeUrl={qrCodeUrl}
         isLoadingQrCode={isLoadingQrCode}
         qrCodeError={qrCodeError}
         eventName={selectedEventName}
-      />
+       />
 
-      <QrScannerModal
+       <QrScannerModal
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         eventId={selectedEventId}
         eventName={selectedEventName}
-        // Pass a callback to refresh attendee list after successful scan if needed
         onScanSuccess={() => {
             if(selectedEventId) {
-                fetchAttendees(selectedEventId); // Refresh list after scan
+                fetchAttendees(selectedEventId, true); // Refresh list after scan and show toast
             }
         }}
-      />
+       />
     </div>
   );
 };

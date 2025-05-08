@@ -32,7 +32,7 @@ import {
   RefreshTokenResponse,
 } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
-import { ConfirmationDialog } from "../../utils/ConfirmationDialog"; // Assuming ConfirmationDialog is reusable
+import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
 
 interface Role {
   name: string;
@@ -179,7 +179,7 @@ export default function HomeAdmin() {
       setNotifications([]);
       setActiveTab("home");
       router.push("/login?sessionExpired=true&role=admin");
-      setSessionStatus("active");
+      setSessionStatus("active"); 
     } else if (sessionStatus === "error") {
       toast.error("Đã có lỗi trong phiên làm việc, vui lòng thử lại.");
       setSessionStatus("active");
@@ -393,7 +393,7 @@ export default function HomeAdmin() {
       }
 
       try {
-        const limit = 10;
+        const limit = 10; 
         const url = `http://localhost:8080/identity/api/notifications?userId=${userId}&limit=${limit}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers, cache: "no-store" });
@@ -512,7 +512,7 @@ export default function HomeAdmin() {
               const fetchedUser: User = userData.result;
               if (!fetchedUser.roles?.some((r) => r.name === "ADMIN")) {
                 toast.error("Truy cập bị từ chối. Bạn không phải Admin.");
-                setSessionStatus("expired"); // Trigger logout/redirect
+                setSessionStatus("expired"); 
                 return;
               } else {
                 setUser(fetchedUser);
@@ -526,7 +526,7 @@ export default function HomeAdmin() {
           if (isMounted) {
             setUser(null);
             if (error.message !== "Invalid user data structure received") {
-              setSessionStatus("expired");
+               setSessionStatus("expired");
             }
           }
         } finally {
@@ -535,19 +535,19 @@ export default function HomeAdmin() {
       } else {
         if (isMounted) {
           setIsLoadingUser(false);
-          if (isInitialized) setSessionStatus("expired");
+          if(isInitialized) setSessionStatus("expired"); 
         }
         return;
       }
-
+      
       if (
         userIdForFetches &&
         tokenForSubFetches &&
         isMounted &&
-        sessionStatus === "active"
+        sessionStatus === "active" 
       ) {
         await Promise.all([
-          fetchAdminHomeEvents(), // Now uses updated logic internally
+          fetchAdminHomeEvents(), 
           fetchNews(),
           fetchNotifications(userIdForFetches),
         ]);
@@ -610,7 +610,7 @@ export default function HomeAdmin() {
             userId: data.userId || user.id,
           };
           setNotifications((prevNotifications) =>
-            [newNotification, ...prevNotifications].slice(0, 15)
+            [newNotification, ...prevNotifications].slice(0, 15) 
           );
         } else {
           console.warn("SOCKET (Admin): Dữ liệu thông báo không hợp lệ:", data);
@@ -765,7 +765,7 @@ export default function HomeAdmin() {
       if (formData.imageFile)
         apiFormData.append("coverImage", formData.imageFile);
     } else {
-      apiFormData.append("type", "NEWS");
+      apiFormData.append("type", "NEWS"); 
       apiFormData.append("featured", "false");
       apiFormData.append("pinned", "false");
       apiFormData.append("createdById", user.id);
@@ -777,7 +777,7 @@ export default function HomeAdmin() {
       let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
       let response = await fetch(API_URL, {
         method: method,
-        headers: headers,
+        headers: headers, 
         body: apiFormData,
       });
       if (response.status === 401 || response.status === 403) {
@@ -795,7 +795,7 @@ export default function HomeAdmin() {
           headers["Authorization"] = `Bearer ${currentToken}`;
           response = await fetch(API_URL, {
             method: method,
-            headers: headers,
+            headers: headers, 
             body: apiFormData,
           });
         } else {
@@ -815,7 +815,7 @@ export default function HomeAdmin() {
         setIsNewsModalOpen(false);
         setEditingNewsItem(null);
       } else {
-        if (response.status === 401 || response.status === 403) {
+         if (response.status === 401 || response.status === 403) {
           handleAuthFailure("expired");
           return;
         }
@@ -825,11 +825,11 @@ export default function HomeAdmin() {
         );
       }
     } catch (error: any) {
-      if (
+       if (
         error.message !== "Phiên đăng nhập hết hạn." &&
         error.message !== "Lỗi xác thực."
       )
-        toast.error("Lỗi khi gửi yêu cầu: " + error.message);
+      toast.error("Lỗi khi gửi yêu cầu: " + error.message);
     } finally {
       setIsSubmittingNews(false);
     }
@@ -855,7 +855,7 @@ export default function HomeAdmin() {
   };
   const handleSessionExpired = useCallback(() => {
     setSessionStatus('expired');
-}, [setSessionStatus]);
+  }, [setSessionStatus]);
 
   const isPageLoading = !isInitialized || isLoadingUser;
   const unreadNotificationCount = useMemo(
@@ -980,6 +980,7 @@ export default function HomeAdmin() {
     { id: "attendees", label: "✅ Điểm danh / Tham gia" },
     { id: "members", label: "👥 Quản lý thành viên" },
     { id: "roles", label: "📌 Quản lý Vai trò/Chức vụ" },
+    // { id: "chatList", label: "💬 Tin nhắn CLB" }, // Tạm ẩn Chat nếu chưa sẵn sàng
   ];
 
   return (
@@ -1050,7 +1051,7 @@ export default function HomeAdmin() {
             selectedEvent={selectedEvent}
             onEventClick={handleEventClick}
             onBackToList={handleBackToList}
-            onRefreshEvents={fetchAdminHomeEvents} // Truyền hàm fetch xuống
+            onRefreshEvents={fetchAdminHomeEvents}
           />
         )}
         {activeTab === "news" && (
@@ -1063,23 +1064,30 @@ export default function HomeAdmin() {
             onOpenEditModal={handleOpenEditModal}
             onNewsDeleted={refreshNewsList}
             onRefreshNews={fetchNews}
-            // refreshToken={refreshToken} // Cân nhắc xem prop này có thực sự cần ở NewsTabContent không nếu logic đã ở HomeAdmin
+           
           />
         )}
         {activeTab === "approval" && (
           <ApprovalTabContent
             user={user}
-            onDataChange={() => fetchAdminHomeEvents()}
+            refreshToken={async () => {
+                const result = await refreshToken();
+                if (result.sessionExpired || result.error) {
+                    setSessionStatus(result.sessionExpired ? 'expired' : 'error');
+                    return null;
+                }
+                return result.token || null;
+            }}
           />
         )}
         {activeTab === "attendees" && <AttendeesTabContent user={user} />}
         {activeTab === "members" && (
           <MembersTabContent
             user={user}
-            userRole={"ADMIN"}
+            userRole={"ADMIN"} 
             currentUserEmail={user?.email || null}
-            refreshToken={refreshToken} // << Truyền hàm refreshToken
-           onSessionExpired={handleSessionExpired}
+            refreshToken={refreshToken} 
+            onSessionExpired={handleSessionExpired}
           />
         )}
         {activeTab === "roles" && <RolesTabContent user={user} />}

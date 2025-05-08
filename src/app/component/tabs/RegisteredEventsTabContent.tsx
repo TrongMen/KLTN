@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
 import {
@@ -11,9 +11,11 @@ import {
   Component1Icon,
   ListBulletIcon,
   ReaderIcon,
+  ReloadIcon, // Đã import
 } from "@radix-ui/react-icons";
-import AttendeeQrScannerModal from "../../../modals/AttendeeQrScannerModal";
+import AttendeeQrScannerModal from "../modals/AttendeeQrScannerModal";
 
+// --- Interfaces (Giữ nguyên) ---
 interface EventInfo {
   id: string;
   name: string;
@@ -65,6 +67,7 @@ interface QRCodeModalProps {
   userId: string | null;
 }
 
+// --- Components ConfirmationDialog, QRCodeModal (Giữ nguyên) ---
 function ConfirmationDialog({
   isOpen,
   title,
@@ -147,7 +150,7 @@ function QRCodeModal({
           className="absolute top-2 cursor-pointer right-2 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100"
           aria-label="Đóng"
         >
-        
+          
           <Cross2Icon className="w-5 h-5" />{" "}
         </button>
         <h3 className="text-lg font-bold mb-4 text-gray-800">
@@ -234,6 +237,8 @@ function QRCodeModal({
   );
 }
 
+
+// --- Utility Functions (Giữ nguyên) ---
 const getWeekRange = (
   refDate: Date
 ): { startOfWeek: Date; endOfWeek: Date } => {
@@ -308,7 +313,8 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
   const [errorQRCode, setErrorQRCode] = useState<string | null>(null);
   const [isAttendeeScannerOpen, setIsAttendeeScannerOpen] = useState(false);
 
-  const fetchAvailableEvents = useCallback(async () => {
+  // Cập nhật hàm fetch để nhận tham số showToastOnSuccess
+  const fetchAvailableEvents = useCallback(async (showToastOnSuccess = false) => {
     setIsLoadingAvailable(true);
     setErrorAvailable(null);
     try {
@@ -329,6 +335,10 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
       const data = await res.json();
       if (data.code === 1000 && Array.isArray(data.result)) {
         setAvailableEvents(data.result);
+        // Chỉ hiển thị toast nếu showToastOnSuccess là true
+        if (showToastOnSuccess) {
+            toast.success("Đã làm mới danh sách sự kiện!");
+        }
       } else {
         setAvailableEvents([]);
         throw new Error(data.message || "Dữ liệu không hợp lệ");
@@ -336,14 +346,18 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
     } catch (err: any) {
       setErrorAvailable(err.message || "Lỗi không xác định");
       setAvailableEvents([]);
+      // Chỉ hiển thị toast lỗi khi làm mới thủ công (nếu muốn)
+       if (showToastOnSuccess) {
+           toast.error(`Làm mới thất bại: ${err.message || 'Lỗi không xác định'}`);
+       }
     } finally {
       setIsLoadingAvailable(false);
     }
-  }, []);
+  }, []); // Dependency array trống vì không phụ thuộc state/prop nào thay đổi
 
   useEffect(() => {
-    fetchAvailableEvents();
-  }, [fetchAvailableEvents]);
+    fetchAvailableEvents(false); // Gọi lần đầu không hiển thị toast
+  }, [fetchAvailableEvents]); // Dependency là fetchAvailableEvents để đảm bảo hàm được gọi khi nó thay đổi (do useCallback)
 
   const isRegistered = useCallback(
     (eventId: string): boolean => registeredEventIds.has(eventId),
@@ -354,7 +368,8 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
     [createdEventIds]
   );
 
-  const executeRegistration = useCallback(
+  // --- Các hàm khác giữ nguyên (executeRegistration, handleRegisterClick, etc.) ---
+   const executeRegistration = useCallback(
     async (eventToRegister: EventInfo) => {
       if (
         !currentUserId ||
@@ -1344,48 +1359,44 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-200 p-3 md:p-5 bg-gray-50">
+    <div className="flex flex-col h-full p-3 md:p-5 bg-gray-50">
       <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 flex-wrap gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-green-600">
           {viewingEventDetails ? "Chi tiết sự kiện" : "Đăng ký sự kiện"}
         </h2>
         {!viewingEventDetails && (
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center ml-auto"> {/* Add ml-auto here */}
+            {/* Nút Làm mới */}
             <button
-              onClick={() => setIsAttendeeScannerOpen(true)}
-              disabled={isLoadingUserId || !currentUserId}
-              className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
-              title="Quét mã QR của sự kiện để check-in"
+              onClick={() => fetchAvailableEvents(true)} // Gọi với showToast = true
+              disabled={isLoadingAvailable || isLoadingUserId}
+              className="p-2 border border-gray-300 rounded-lg text-sm cursor-pointer focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center" // Remove ml-auto from individual button
+              title="Làm mới danh sách sự kiện"
             >
-              <ReaderIcon className="h-4 w-4" /> Quét QR Sự kiện
+              {isLoadingAvailable ? (
+                <ReloadIcon className="w-5 h-5 animate-spin text-green-600" />
+              ) : (
+                <ReloadIcon className="w-5 h-5 text-green-600" />
+              )}
+              {/* <span className="ml-2 hidden sm:inline">Làm mới</span> */}
+            </button>
+            {/* Các nút QR */}
+             <button
+                onClick={() => setIsAttendeeScannerOpen(true)}
+                disabled={isLoadingUserId || !currentUserId}
+                className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-blue-500 text-white hover:bg-blue-600 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
+                title="Quét mã QR của sự kiện để check-in"
+            >
+                <ReaderIcon className="h-4 w-4" /> Quét QR Sự kiện
             </button>
             <button
-              onClick={handleShowQRCode}
-              disabled={isLoadingUserId || !currentUserId || isLoadingQRCode}
-              className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-teal-500 text-white hover:bg-teal-600 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
-              title="Hiển thị mã QR của bạn để người khác quét"
+                onClick={handleShowQRCode}
+                disabled={isLoadingUserId || !currentUserId || isLoadingQRCode}
+                className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-teal-500 text-white hover:bg-teal-600 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
+                title="Hiển thị mã QR của bạn để người khác quét"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className={`h-4 w-4 ${isLoadingQRCode ? "animate-pulse" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                {" "}
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 4v1m6 11h2m-6.5 2H11a1 1 0 01-1-1V11a1 1 0 011-1h2a1 1 0 011 1v5.5a1.5 1.5 0 01-1.5 1.5h-1.5zM12 4V3m6 11h1m-6.5 2H11a1 1 0 01-1-1V11a1 1 0 011-1h2a1 1 0 011 1v5.5a1.5 1.5 0 01-1.5 1.5h-1.5zM12 4V3"
-                />{" "}
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 4h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2zM4 8h2v2H4zm12 0h2v2h-2zM4 12h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2zM4 16h2v2H4zm4 1h2v1H8zm4 0h2v1h-2zm4 0h2v1h-2zM4 20h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2z"
-                />{" "}
-              </svg>
-              {isLoadingQRCode ? "Đang tải..." : "Mã QR của tôi"}
+                <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isLoadingQRCode ? "animate-pulse" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}> <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6.5 2H11a1 1 0 01-1-1V11a1 1 0 011-1h2a1 1 0 011 1v5.5a1.5 1.5 0 01-1.5 1.5h-1.5zM12 4V3m6 11h1m-6.5 2H11a1 1 0 01-1-1V11a1 1 0 011-1h2a1 1 0 011 1v5.5a1.5 1.5 0 01-1.5 1.5h-1.5zM12 4V3" /> <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2zM4 8h2v2H4zm12 0h2v2h-2zM4 12h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2zM4 16h2v2H4zm4 1h2v1H8zm4 0h2v1h-2zm4 0h2v1h-2zM4 20h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2z" /> </svg>
+                {isLoadingQRCode ? "Đang tải..." : "Mã QR của tôi"}
             </button>
           </div>
         )}
@@ -1620,7 +1631,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         attendeeUserId={currentUserId}
         onCheckInSuccess={() => {
           toast.success("Check-in thành công qua QR!");
-          // fetchAvailableEvents(); // Tùy chọn refresh
+          fetchAvailableEvents(); // Refresh sau khi check-in
         }}
       />
     </div>

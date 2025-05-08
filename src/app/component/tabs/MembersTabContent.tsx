@@ -1170,7 +1170,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
           ) : (
             <ReloadIcon className="w-5 h-5 text-pink-600" />
           )}
-          <span className="ml-2 hidden sm:inline">Làm mới</span>
+          {/* <span className="ml-2 hidden sm:inline">Làm mới</span> */}
         </button>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-2 mb-5 border-b border-gray-200 flex-shrink-0">

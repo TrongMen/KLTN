@@ -1,4 +1,3 @@
-// File: ParticipantSection.tsx
 "use client";
 
 import React, {
@@ -8,56 +7,53 @@ import React, {
   forwardRef,
   useImperativeHandle,
   useRef,
+  useCallback,
 } from "react";
 import { toast } from "react-hot-toast";
+import type { ApiUser as MainApiUserType } from "../CreateEventTabContent";
 
-// --- Types ---
-// Cập nhật ApiUser để bao gồm position và organizerRole (nullable)
-type ApiUser = {
-  id: string;
-  firstName: string | null;
-  lastName: string | null;
-  username: string | null;
-  position?: { id: string; name: string } | null;
-  organizerRole?: { id: string; name: string } | null;
+
+type ApiUser = MainApiUserType & {
+    position?: { id: string; name: string } | null;
+    organizerRole?: { id: string; name: string } | null;
 };
 
-type ApiRole = { id: string; name: string }; // Dùng cho danh sách role có thể chọn
 
-type ParticipantData = { userId: string; roleId: string; positionId: string };
+type ApiRole = { id: string; name: string };
+
+export type ParticipantData = { userId: string; roleId: string; positionId: string };
 
 type ParticipantSectionProps = {
-  allUsers: ApiUser[]; // Phải chứa đủ thông tin position và organizerRole
+  allUsers: MainApiUserType[];
   existingParticipants: ParticipantData[];
+  globallyBusyUserIds: Set<string>;
+  onFormChange: () => void;
 };
 
 export type ParticipantSectionHandle = {
   getMembersData: () => ParticipantData[];
   resetForms: () => void;
+  getFormUserIds: () => string[];
 };
 
-// Cập nhật ParticipantFormRow
 type ParticipantFormRow = {
   id: number;
   userId: string;
-  positionId: string; // Lấy từ user đã chọn
-  positionName: string; // Lấy từ user đã chọn (để hiển thị)
-  roleId: string; // Lấy từ user hoặc từ select
-  roleName: string; // Lấy từ user (để hiển thị nếu có)
-  canSelectRole: boolean; // True nếu user không có role và cần chọn
+  positionId: string;
+  positionName: string;
+  roleId: string;
+  roleName: string;
+  canSelectRole: boolean;
 };
-// --- Hết Types ---
 
-// --- START: Hàm Helper ---
-const getUserDisplay = (user: ApiUser | null | undefined): string => {
+const getUserDisplay = (user: ApiUser | MainApiUserType | null | undefined): string => {
   if (!user) return "";
   const fullName = `${user.lastName || ""} ${user.firstName || ""}`.trim();
-  // Ưu tiên họ tên, sau đó đến username
   return fullName || user.username || "";
 };
 
 type SearchableUserDropdownProps = {
-  users: ApiUser[]; // Danh sách user đã được lọc
+  users: ApiUser[];
   selectedUserId: string | null;
   onChange: (userId: string) => void;
   placeholder?: string;
@@ -86,16 +82,12 @@ function SearchableUserDropdown({
       setFilteredUsers([]);
       return;
     }
+     const filterLogic = (user: ApiUser) => {
+        if (user.id === selectedUserId) return true;
+        if (disabledUserIds.has(user.id)) return false;
+        if (!searchTerm) return true;
 
-    // Hiển thị tất cả user hợp lệ khi input trống và focus/click
-    if (!searchTerm) {
-      setFilteredUsers(users);
-      return;
-    }
-
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    setFilteredUsers(
-      users.filter((user) => {
+        const lowerSearchTerm = searchTerm.toLowerCase();
         const fullName = `${user?.lastName ?? ""} ${user?.firstName ?? ""}`
           .trim()
           .toLowerCase();
@@ -104,9 +96,9 @@ function SearchableUserDropdown({
           fullName.includes(lowerSearchTerm) ||
           username.includes(lowerSearchTerm)
         );
-      })
-    );
-  }, [searchTerm, users]);
+    };
+    setFilteredUsers(users.filter(filterLogic));
+  }, [searchTerm, users, disabledUserIds, selectedUserId]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -116,7 +108,7 @@ function SearchableUserDropdown({
       ) {
         setIsDropdownOpen(false);
         const selectedUser = users?.find((u) => u.id === selectedUserId);
-        setSearchTerm(getUserDisplay(selectedUser)); // Khôi phục tên nếu click ra ngoài
+        setSearchTerm(getUserDisplay(selectedUser));
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -129,13 +121,9 @@ function SearchableUserDropdown({
   };
   const handleInputClick = () => {
     setIsDropdownOpen(true);
-    // Hiển thị tất cả user khi click vào input trống
-    if (!searchTerm) {
-      setFilteredUsers(users);
-    }
   };
   const handleUserSelect = (user: ApiUser) => {
-    if (disabledUserIds.has(user.id)) return;
+    if (disabledUserIds.has(user.id) && user.id !== selectedUserId) return;
     onChange(user.id);
     setSearchTerm(getUserDisplay(user));
     setIsDropdownOpen(false);
@@ -149,14 +137,14 @@ function SearchableUserDropdown({
         onChange={handleInputChange}
         onClick={handleInputClick}
         placeholder={placeholder}
-        className="border border-gray-300 rounded px-2 py-1 w-full focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+        className="border border-gray-300 rounded px-2 py-1 w-full focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm h-[30px]"
         autoComplete="off"
       />
       {isDropdownOpen && (
         <ul className="absolute z-10 w-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-300 rounded shadow-lg text-sm">
           {filteredUsers.length > 0 ? (
             filteredUsers.map((user) => {
-              const isDisabled = disabledUserIds.has(user.id);
+              const isDisabled = disabledUserIds.has(user.id) && user.id !== selectedUserId;
               return (
                 <li
                   key={user.id}
@@ -167,13 +155,12 @@ function SearchableUserDropdown({
                       : "cursor-pointer"
                   }`}
                 >
-                  {" "}
-                  {getUserDisplay(user)}{" "}
+                  {getUserDisplay(user)}
                   {isDisabled && (
                     <span className="text-xs text-gray-400 ml-1">
                       (Đã thêm)
                     </span>
-                  )}{" "}
+                  )}
                 </li>
               );
             })
@@ -191,28 +178,29 @@ function SearchableUserDropdown({
 export const ParticipantSection = forwardRef<
   ParticipantSectionHandle,
   ParticipantSectionProps
->(({ allUsers, existingParticipants }, ref) => {
-  const [participantForms, setParticipantForms] = useState<
-    ParticipantFormRow[]
-  >([]);
-  const [roles, setRoles] = useState<ApiRole[]>([]); 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+>(({ allUsers, existingParticipants, globallyBusyUserIds, onFormChange }, ref) => {
+  const [participantForms, setParticipantForms] = useState<ParticipantFormRow[]>([]);
+  const [roles, setRoles] = useState<ApiRole[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(true);
+  const [errorRoles, setErrorRoles] = useState<string | null>(null);
 
   const existingParticipantIds = useMemo(
     () => new Set(existingParticipants?.map((p) => p.userId) ?? []),
     [existingParticipants]
   );
 
-
-  const usersForDropdown = useMemo(() => {
-    return allUsers.filter((user) => user.position != null);
+  const usersForDropdown: ApiUser[] = useMemo(() => {
+    return allUsers.filter((user) => user.position != null) as ApiUser[];
   }, [allUsers]);
 
   useEffect(() => {
+    onFormChange();
+  }, [participantForms, onFormChange]);
+
+  useEffect(() => {
     const fetchRoles = async () => {
-      setLoading(true);
-      setError(null);
+      setLoadingRoles(true);
+      setErrorRoles(null);
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Token không tồn tại.");
@@ -220,8 +208,8 @@ export const ParticipantSection = forwardRef<
         const rRes = await fetch(
           "http://localhost:8080/identity/api/organizerrole",
           { headers }
-        ); 
-        if (!rRes.ok) throw new Error(`Lỗi tải vai trò`);
+        );
+        if (!rRes.ok) throw new Error(`Lỗi tải vai trò (${rRes.status})`);
         const rData = await rRes.json();
         if (rData?.code !== 1000) {
           throw new Error(
@@ -230,18 +218,18 @@ export const ParticipantSection = forwardRef<
         }
         setRoles(rData?.result || []);
       } catch (err: any) {
-        const msg = `Lỗi tải lựa chọn NTD: ${err.message}`;
-        setError(msg);
+        const msg = `Lỗi tải vai trò NTD: ${err.message}`;
+        setErrorRoles(msg);
         toast.error(msg);
-        console.error("Fetch error ParticipantSection:", err);
+        console.error("Fetch error ParticipantSection (Roles):", err);
       } finally {
-        setLoading(false);
+        setLoadingRoles(false);
       }
     };
     fetchRoles();
   }, []);
 
-  const addParticipantFormRow = () =>
+  const addParticipantFormRow = () => {
     setParticipantForms((prev) => [
       ...prev,
       {
@@ -250,81 +238,82 @@ export const ParticipantSection = forwardRef<
         positionId: "",
         positionName: "",
         roleId: "",
-        roleName: "", 
-        canSelectRole: false, 
+        roleName: "",
+        canSelectRole: false,
       },
     ]);
+  }
 
-  const removeParticipantFormRow = (id: number) =>
+  const removeParticipantFormRow = (id: number) => {
     setParticipantForms((prev) => prev.filter((f) => f.id !== id));
+  }
 
-  const handleParticipantChange = (
-    id: number,
-    field: keyof Omit<
-      ParticipantFormRow,
-      "id" | "positionName" | "roleName" | "canSelectRole" | "positionId"
-    >,
-    value: string
-  ) => {
-    setParticipantForms((prev) =>
-      prev.map((form) => {
-        if (form.id === id) {
-          if (field === "userId") {
-            // Tìm user được chọn trong danh sách gốc (chứa đủ thông tin)
-            const selectedUser = allUsers.find((u) => u.id === value);
-            const positionId = selectedUser?.position?.id ?? "";
-            const positionName = selectedUser?.position?.name ?? "—"; 
+  const handleParticipantChange = useCallback(
+    (
+      id: number,
+      field: keyof Omit<
+        ParticipantFormRow,
+        "id" | "positionName" | "roleName" | "canSelectRole" | "positionId"
+      >,
+      value: string
+    ) => {
+      setParticipantForms((prev) =>
+        prev.map((form) => {
+          if (form.id === id) {
+            if (field === "userId") {
+              const selectedUser = allUsers.find((u) => u.id === value) as ApiUser | undefined;
+              const positionId = selectedUser?.position?.id ?? "";
+              const positionName = selectedUser?.position?.name ?? "—";
 
-            let roleId = "";
-            let roleName = "";
-            let canSelectRole = false;
+              let roleId = "";
+              let roleName = "";
+              let canSelectRole = false;
 
-            if (selectedUser?.organizerRole) {
-              roleId = selectedUser.organizerRole.id;
-              roleName = selectedUser.organizerRole.name;
-              canSelectRole = false;
-            } else if (selectedUser) {
-              // User chưa có role -> cho phép chọn
-              roleId = ""; 
-              roleName = ""; 
-              canSelectRole = true;
-            } else {
-              roleId = "";
-              roleName = "";
-              canSelectRole = false;
+              if (selectedUser?.organizerRole) {
+                roleId = selectedUser.organizerRole.id;
+                roleName = selectedUser.organizerRole.name;
+                canSelectRole = false;
+              } else if (selectedUser) {
+                roleId = "";
+                roleName = "";
+                canSelectRole = true;
+              } else {
+                roleId = "";
+                roleName = "";
+                canSelectRole = false;
+              }
+              return {
+                ...form,
+                userId: value,
+                positionId,
+                positionName,
+                roleId,
+                roleName,
+                canSelectRole,
+              };
+            } else if (field === "roleId" && form.canSelectRole) {
+                const selectedRole = roles.find(r => r.id === value);
+              return { ...form, roleId: value, roleName: selectedRole?.name || "" };
             }
-
-            return {
-              ...form,
-              userId: value,
-              positionId,
-              positionName,
-              roleId,
-              roleName,
-              canSelectRole,
-            };
-          } else if (field === "roleId" && form.canSelectRole) {
-            // Chỉ cho phép thay đổi roleId nếu được phép chọn (canSelectRole = true)
-            return { ...form, roleId: value };
           }
-        }
-        return form;
-      })
-    );
-  };
+          return form;
+        })
+      );
+    },
+    [allUsers, roles]
+  );
 
   useImperativeHandle(
     ref,
     () => ({
       getMembersData: () => {
-        const existingIds = new Set(
-          existingParticipants?.map((p) => p.userId) ?? []
-        );
         const newMembers = participantForms
-        
           .filter(
             (form) =>
-              form.userId && form.roleId && !existingIds.has(form.userId)
+              form.userId &&
+              form.roleId &&
+              form.positionId &&
+              !existingParticipantIds.has(form.userId)
           )
           .map((form) => ({
             userId: form.userId,
@@ -342,27 +331,28 @@ export const ParticipantSection = forwardRef<
       resetForms: () => {
         setParticipantForms([]);
       },
+      getFormUserIds: () => participantForms.map(form => form.userId).filter(Boolean),
     }),
-    [participantForms, existingParticipants]
-  ); 
+    [participantForms, existingParticipantIds, roles]
+  );
 
   return (
     <div className="mt-6 border-t pt-4">
       <h3 className="text-md font-semibold mb-1 text-gray-600">
         Thêm Người tham dự
       </h3>
-      {loading && (
+      {loadingRoles && (
         <p className="text-sm text-gray-500">Đang tải danh sách vai trò...</p>
       )}
-      {error && (
-        <p className="text-sm text-red-600 bg-red-100 p-2 rounded">{error}</p>
+      {errorRoles && (
+        <p className="text-sm text-red-600 bg-red-100 p-2 rounded">{errorRoles}</p>
       )}
       <button
         type="button"
         onClick={addParticipantFormRow}
         className="mt-1 mb-2 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xl hover:bg-blue-600 transition cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
         title="Thêm dòng nhập NTD"
-        disabled={loading || !!error}
+        disabled={loadingRoles || !!errorRoles}
       >
         +
       </button>
@@ -372,32 +362,24 @@ export const ParticipantSection = forwardRef<
             key={form.id}
             className="flex flex-col sm:flex-row gap-2 items-center p-2 border rounded bg-gray-50"
           >
-            
             <div className="w-1/4 sm:flex-grow">
               <SearchableUserDropdown
-                users={usersForDropdown} 
+                users={usersForDropdown}
                 selectedUserId={form.userId}
                 onChange={(userId) =>
                   handleParticipantChange(form.id, "userId", userId)
                 }
-                disabledUserIds={existingParticipantIds}
+                disabledUserIds={globallyBusyUserIds}
                 placeholder="-- Tìm user (có vị trí) --"
               />
             </div>
-
-        
             <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
               <span className="font-medium mr-1 ">Vị trí:</span>
               <span className="font-medium mr-1 " title={form.positionName || ""}>
-                {form.positionName || "—"}{" "}
-                
+                {form.positionName || "—"}
               </span>
             </div>
-
-          
-            <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
-              {" "}
-           
+            <div className="w-full sm:flex-1 min-h-[30px] flex items-center whitespace-nowrap">
               {form.userId ? (
                 form.canSelectRole ? (
                   <select
@@ -405,7 +387,7 @@ export const ParticipantSection = forwardRef<
                     onChange={(e) =>
                       handleParticipantChange(form.id, "roleId", e.target.value)
                     }
-                    className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap" // Set height
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
                   >
                     <option value=""> Chọn vai trò </option>
                     {roles?.map((r) => (
@@ -415,33 +397,26 @@ export const ParticipantSection = forwardRef<
                     ))}
                   </select>
                 ) : (
-                  <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
-                    {" "}
-                    
+                  <div className="w-full border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center">
                     <span className="font-medium mr-1 ">
                       Vai trò:
                     </span>
                     <span className="font-medium mr-1 " title={form.roleName || ""}>
-                      {form.roleName || "Không có"}{" "}
-                      
+                      {form.roleName || "Không có"}
                     </span>
                   </div>
                 )
               ) : (
-                // Placeholder khi chưa chọn user
-                // <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
-                //   <span className="font-medium mr-1">Vai trò :</span>
-                  <span className="font-medium mr-1">Vai trò :</span>
-                  // </div>
+                <div className="w-full border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center">
+                  <span className="font-medium mr-1">Vai trò :</span> —
+                </div>
               )}
             </div>
-
             <button
               type="button"
               onClick={() => removeParticipantFormRow(form.id)}
               className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 w-full sm:w-auto cursor-pointer text-sm flex-shrink-0 h-[30px]"
             >
-              {" "}
               Xóa
             </button>
           </div>

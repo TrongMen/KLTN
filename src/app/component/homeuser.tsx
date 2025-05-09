@@ -66,6 +66,8 @@ export interface EventDisplayInfo {
     checkedInAt?: string | null;
     attending?: boolean;
   }[];
+  maxAttendees?: number | null; 
+  currentAttendeesCount?: number; 
 }
 
 export interface Role {
@@ -142,7 +144,7 @@ export default function UserHome() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState<boolean>(true);
   const [sortOption, setSortOption] = useState("date");
-  const [timeFilterOption, setTimeFilterOption] = useState("upcoming");
+  const [timeFilterOption, setTimeFilterOption] = useState("all");
   const [showContactModal, setShowContactModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
@@ -154,6 +156,7 @@ export default function UserHome() {
     confirmVariant?: "primary" | "danger";
     confirmText?: string;
     cancelText?: string;
+    onCancel?: () => void;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] =
@@ -168,11 +171,13 @@ export default function UserHome() {
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
   const [isSubmittingNews, setIsSubmittingNews] = useState(false);
   const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
-  const [sessionStatus, setSessionStatus] = useState<'active' | 'expired' | 'error'>('active');
+  const [sessionStatus, setSessionStatus] = useState<
+    "active" | "expired" | "error"
+  >("active");
   const socketRef = useRef<Socket | null>(null);
-
+  const initializedRef = useRef(false);
   const router = useRouter();
-  const { refreshToken, isInitialized } = useRefreshToken();
+  const { refreshToken } = useRefreshToken();
 
   const fetchNews = useCallback(async () => {
     setIsLoadingNews(true);
@@ -459,24 +464,22 @@ export default function UserHome() {
   );
 
   useEffect(() => {
-    if (!isInitialized) return;
-    let isMounted = true;
-    setIsLoadingUser(true);
-    setIsLoadingEvents(true);
-    setIsLoadingRegisteredIds(true);
-    setIsLoadingCreatedEventIds(true);
-    setIsLoadingNews(true);
-
-    const currentAuthToken = localStorage.getItem("authToken");
-    let userIdForFetches: string | null = null;
-    let tokenForSubFetches: string | null = currentAuthToken;
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
     const loadInitialData = async () => {
-      const eventsPromise = fetchAllEvents();
-      const newsPromise = fetchNews();
+      setIsLoadingUser(true);
+      setIsLoadingEvents(true);
+      setIsLoadingRegisteredIds(true);
+      setIsLoadingCreatedEventIds(true);
+      setIsLoadingNews(true);
 
-      if (currentAuthToken) {
-        try {
+      const currentAuthToken = localStorage.getItem("authToken");
+      let userIdForFetches: string | null = null;
+      let tokenForSubFetches: string | null = currentAuthToken;
+
+      try {
+        if (currentAuthToken) {
           const headers: HeadersInit = {
             Authorization: `Bearer ${currentAuthToken}`,
           };
@@ -488,76 +491,62 @@ export default function UserHome() {
 
           if (userRes.status === 401 || userRes.status === 403) {
             const nt = await refreshToken();
-            if (nt && isMounted) {
+            if (nt) {
               tokenForSubFetches = nt;
               localStorage.setItem("authToken", nt);
               userRes = await fetch(userInfoUrl, {
                 headers: { Authorization: `Bearer ${nt}` },
                 cache: "no-store",
               });
-            } else if (isMounted) {
-              throw new Error(
-                "Unauthorized or Refresh Failed during user fetch"
-              );
+            } else {
+              throw new Error("Unauthorized or Refresh Failed");
             }
           }
 
-          if (!userRes.ok && isMounted) {
+          if (!userRes.ok) {
             throw new Error(`Workspace user info failed: ${userRes.status}`);
           }
 
-          if (isMounted) {
-            const userData = await userRes.json();
-            if (userData.code === 1000 && userData.result?.id) {
-              const fetchedUser: User = userData.result;
-              userIdForFetches = fetchedUser.id;
-              setUser(fetchedUser);
-            } else {
-              throw new Error("Invalid user data received");
-            }
+          const userData = await userRes.json();
+          if (userData.code === 1000 && userData.result?.id) {
+            const fetchedUser: User = userData.result;
+            userIdForFetches = fetchedUser.id;
+            setUser(fetchedUser);
+          } else {
+            throw new Error("Invalid user data received");
           }
-        } catch (error: any) {
-          console.error("Lỗi fetch user info (UserHome):", error.message);
-          if (isMounted) setUser(null);
-          userIdForFetches = null;
-          tokenForSubFetches = null;
-          if (!error.message?.includes("Invalid user data")) {
-            router.push("/login?sessionExpired=true");
-          }
-        } finally {
-          if (isMounted) setIsLoadingUser(false);
-        }
-      } else {
-        if (isMounted) {
+        } else {
           setUser(null);
-          setIsLoadingUser(false);
-          setIsLoadingRegisteredIds(false);
-          setIsLoadingCreatedEventIds(false);
-          setNotifications([]);
         }
+      } catch (error: any) {
+        console.error("Lỗi fetch user info (UserHome):", error.message);
+        setUser(null);
+        userIdForFetches = null;
+        tokenForSubFetches = null;
+        if (!error.message?.includes("Invalid user data")) {
+          router.push("/login?sessionExpired=true");
+        }
+      } finally {
+        setIsLoadingUser(false);
       }
+      
+      await Promise.all([fetchAllEvents(), fetchNews()]);
 
-      await Promise.all([eventsPromise, newsPromise]);
-
-      if (userIdForFetches && tokenForSubFetches && isMounted) {
+      if (userIdForFetches && tokenForSubFetches) {
         await Promise.all([
           fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
           fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
           fetchNotifications(userIdForFetches, tokenForSubFetches),
         ]);
-      } else if (isMounted) {
+      } else {
         setIsLoadingRegisteredIds(false);
         setIsLoadingCreatedEventIds(false);
-        if (!userIdForFetches) setNotifications([]);
+        setNotifications([]);
       }
     };
 
     loadInitialData();
-    return () => {
-      isMounted = false;
-    };
   }, [
-    isInitialized,
     fetchAllEvents,
     fetchRegisteredEventIds,
     fetchUserCreatedEvents,
@@ -568,10 +557,15 @@ export default function UserHome() {
   ]);
 
   useEffect(() => {
-    if (user?.id) {
+    if (!user?.id) {
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
+      return;
+    }
+
+    if (!socketRef.current) {
       const socket = io("ws://localhost:9099", {
         path: "/socket.io",
         query: { userId: user.id },
@@ -579,16 +573,21 @@ export default function UserHome() {
         reconnectionAttempts: 5,
         reconnectionDelay: 3000,
       });
+
       socketRef.current = socket;
-      socket.on("connect", () =>
-        console.log("SOCKET (UserHome): Đã kết nối - ID:", socket.id)
-      );
-      socket.on("disconnect", (reason) =>
-        console.log("SOCKET (UserHome): Đã ngắt kết nối - Lý do:", reason)
-      );
-      socket.on("connect_error", (error) =>
-        console.error("SOCKET (UserHome): Lỗi kết nối:", error)
-      );
+
+      socket.on("connect", () => {
+        console.log("SOCKET (UserHome): Đã kết nối - ID:", socket.id);
+      });
+
+      socket.on("disconnect", (reason) => {
+        console.log("SOCKET (UserHome): Đã ngắt kết nối - Lý do:", reason);
+      });
+
+      socket.on("connect_error", (error) => {
+        console.error("SOCKET (UserHome): Lỗi kết nối:", error);
+      });
+
       socket.on("notification", (data: any) => {
         if (data && typeof data === "object") {
           toast(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
@@ -614,23 +613,19 @@ export default function UserHome() {
           );
         }
       });
-      return () => {
-        if (socketRef.current) {
-          socketRef.current.off("connect");
-          socketRef.current.off("disconnect");
-          socketRef.current.off("connect_error");
-          socketRef.current.off("notification");
-          socketRef.current.disconnect();
-          socketRef.current = null;
-        }
-      };
-    } else {
+    }
+
+    return () => {
       if (socketRef.current) {
+        socketRef.current.off("connect");
+        socketRef.current.off("disconnect");
+        socketRef.current.off("connect_error");
+        socketRef.current.off("notification");
         socketRef.current.disconnect();
         socketRef.current = null;
       }
-    }
-  }, [user?.id, setNotifications]);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -884,7 +879,7 @@ export default function UserHome() {
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
       let response = await fetch(API_URL, {
         method: method,
-        headers: headers,
+        headers: headers, 
         body: apiFormData,
       });
       if (
@@ -912,9 +907,13 @@ export default function UserHome() {
           result.message ||
             (newsId ? "Cập nhật thành công!" : "Tạo mới thành công!")
         );
-
+        
         setIsNewsModalOpen(false);
         setEditingNewsItem(null);
+        refreshNewsList(); 
+        if (activeTab === 'myNews') {
+          
+        }
       } else {
         toast.error(
           result.message ||
@@ -955,10 +954,22 @@ export default function UserHome() {
   };
 
   const handleSessionExpired = useCallback(() => {
-    setSessionStatus('expired');
-}, [setSessionStatus]);
+    setSessionStatus("expired");
+  }, []);
 
-  const isPageLoading = !isInitialized || isLoadingUser;
+
+  const handleGlobalEventRefresh = useCallback(() => {
+    console.log("UserHome: Global event refresh triggered.");
+    fetchAllEvents();
+    const currentToken = localStorage.getItem("authToken");
+    if (user?.id && currentToken) {
+      fetchUserCreatedEvents(user.id, currentToken);
+      fetchRegisteredEventIds(user.id, currentToken);
+    }
+  }, [user, fetchAllEvents, fetchUserCreatedEvents, fetchRegisteredEventIds]);
+
+
+  const isPageLoading = !initializedRef.current || isLoadingUser;
 
   const getTabButtonClasses = (tabName: ActiveTab): string => {
     const base =
@@ -1066,8 +1077,9 @@ export default function UserHome() {
     { id: "myEvents", label: "🛠 Sự kiện / Đăng ký", requiresAuth: true },
     { id: "attendees", label: "✅ Điểm danh ", requiresAuth: true },
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
-    { id: "chatList", label: "💬 Chat", requiresAuth: true },
+    { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true },
   ];
+
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
@@ -1088,13 +1100,13 @@ export default function UserHome() {
             >
               Liên hệ
             </span>
-            {isInitialized && !isLoadingUser && (
+            {initializedRef.current && !isLoadingUser && (
               <UserMenu user={user} onLogout={handleLogout} />
             )}
-            {(!isInitialized || isLoadingUser) && (
+            {(!initializedRef.current || isLoadingUser) && (
               <span className="text-gray-400">Đang tải...</span>
             )}
-            {isInitialized && !isLoadingUser && !user && (
+            {initializedRef.current && !isLoadingUser && !user && (
               <Link href="/login">
                 <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
                   Đăng nhập
@@ -1104,11 +1116,11 @@ export default function UserHome() {
           </div>
         </div>
       </nav>
-      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200">
+      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30 ">
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
           {tabs.map((tab) => {
             const showTab =
-              !tab.requiresAuth || (tab.requiresAuth && isInitialized && user);
+              !tab.requiresAuth || (tab.requiresAuth && initializedRef.current && user);
             if (!showTab) return null;
             return (
               <div key={tab.id} className="relative flex flex-col items-center">
@@ -1129,11 +1141,14 @@ export default function UserHome() {
               </div>
             );
           })}
-          {isInitialized && !user && !isLoadingUser && (
-            <span className="text-sm text-gray-500 italic p-2 self-center">
-              Đăng nhập để xem các mục khác
-            </span>
-          )}
+          {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
+            !user &&
+            initializedRef.current &&
+            !isLoadingUser && (
+              <span className="text-sm text-gray-500 italic p-2 self-center">
+                Đăng nhập để xem các mục khác
+              </span>
+            )}
         </div>
       </div>
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
@@ -1166,6 +1181,11 @@ export default function UserHome() {
                 setTimeFilterOption={setTimeFilterOption}
                 refreshToken={refreshToken}
                 onRefreshEvents={fetchAllEvents}
+                
+                newsItems={newsItems}
+                isLoadingNews={isLoadingNews}
+                errorNews={errorNews}
+                refreshNewsList={refreshNewsList}
               />
             )}
             {activeTab === "news" && (
@@ -1176,13 +1196,19 @@ export default function UserHome() {
                 user={user}
                 onOpenCreateModal={handleOpenCreateModal}
                 onOpenEditModal={handleOpenEditModal}
-                onNewsDeleted={refreshNewsList}
+                onNewsDeleted={refreshNewsList} 
                 refreshToken={refreshToken}
                 onRefreshNews={fetchNews}
               />
             )}
             {user && activeTab === "myNews" && (
-              <MyNewsTabContent user={user} onNewsChange={refreshNewsList} />
+              <MyNewsTabContent 
+                user={user} 
+                onNewsChange={() => {
+                    fetchNews(); 
+                    // Bạn có thể muốn gọi các hàm fetch khác nếu MyNewsTabContent cũng cập nhật sự kiện
+                }}
+              />
             )}
             {user && activeTab === "createEvent" && (
               <CreateEventTabContent
@@ -1192,9 +1218,9 @@ export default function UserHome() {
                   const t = localStorage.getItem("authToken");
                   if (user?.id && t) {
                     fetchUserCreatedEvents(user.id, t);
-                    fetchNotifications(user.id, t);
+                    fetchNotifications(user.id, t); 
                   }
-                  setActiveTab("myEvents");
+                  setActiveTab("myEvents"); 
                   toast.success("Sự kiện đã được tạo và đang chờ duyệt!");
                 }}
               />
@@ -1204,15 +1230,9 @@ export default function UserHome() {
                 user={user}
                 initialRegisteredEventIds={registeredEventIds}
                 isLoadingRegisteredIds={isLoadingRegisteredIds}
+                createdEventIdsFromParent={createdEventIds}
                 onRegistrationChange={handleRegistrationChange}
-                onEventUpdatedOrDeleted={() => {
-                  fetchAllEvents();
-                  const t = localStorage.getItem("authToken");
-                  if (user?.id && t) {
-                    fetchUserCreatedEvents(user.id, t);
-                    fetchRegisteredEventIds(user.id, t);
-                  }
-                }}
+                onEventNeedsRefresh={handleGlobalEventRefresh}
               />
             )}
             {user && activeTab === "attendees" && (
@@ -1223,7 +1243,7 @@ export default function UserHome() {
                 user={user}
                 userRole={user.roles?.[0]?.name?.toUpperCase() || "UNKNOWN"}
                 currentUserEmail={user.email || null}
-                refreshToken={refreshToken} 
+                refreshToken={refreshToken}
                 onSessionExpired={handleSessionExpired}
               />
             )}
@@ -1232,7 +1252,7 @@ export default function UserHome() {
             )}
             {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
               !user &&
-              isInitialized &&
+              initializedRef.current &&
               !isLoadingUser && (
                 <p className="text-center text-red-500 py-6">
                   Vui lòng đăng nhập để truy cập mục này.
@@ -1241,7 +1261,7 @@ export default function UserHome() {
           </>
         )}
       </div>
-      {isInitialized && !isLoadingUser && user && (
+      {initializedRef.current && !isLoadingUser && user && (
         <div
           className="fixed bottom-6 right-6 z-50 group"
           ref={notificationContainerRef}
@@ -1293,8 +1313,8 @@ export default function UserHome() {
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
       {showAboutModal && (
-          <AboutModal onClose={() => setShowAboutModal(false)} />
-        )}
+        <AboutModal onClose={() => setShowAboutModal(false)} />
+      )}
       <CreateNewsModal
         isOpen={isNewsModalOpen}
         onClose={handleCloseModal}

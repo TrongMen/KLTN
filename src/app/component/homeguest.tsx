@@ -251,10 +251,10 @@ export default function HomeGuest() {
 
   // --- Thêm Socket Ref ---
   const socketRef = useRef<Socket | null>(null);
-
+  const initializedRef = useRef(false);
   // --- Hooks ---
   const router = useRouter();
-  const { refreshToken, isInitialized } = useRefreshToken();
+  const { refreshToken } = useRefreshToken();
 
   // --- Fetch Functions ---
 
@@ -575,27 +575,24 @@ export default function HomeGuest() {
 
   // --- Effects ---
 
-  // Main data loading effect
-  useEffect(() => {
-    if (!isInitialized) return;
-    let isMounted = true;
-    setIsLoadingUser(true);
-    setIsLoadingEvents(true);
-    setIsLoadingRegisteredIds(true);
-    setIsLoadingCreatedEventIds(true);
-    setIsLoadingNews(true);
-
-    const currentAuthToken = localStorage.getItem("authToken");
-    let userIdForFetches: string | null = null;
-    let tokenForSubFetches: string | null = currentAuthToken;
+ useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
     const loadInitialData = async () => {
-      const eventsPromise = fetchAllEvents();
-      const newsPromise = fetchNews();
-      let notificationsPromise: Promise<void> = Promise.resolve();
+      setIsLoadingUser(true);
+      setIsLoadingEvents(true);
+      setIsLoadingRegisteredIds(true);
+      setIsLoadingCreatedEventIds(true);
+      setIsLoadingNews(true);
 
-      if (currentAuthToken) {
-        try {
+      const currentAuthToken = localStorage.getItem("authToken");
+      let userIdForFetches: string | null = null;
+      let tokenForSubFetches: string | null = currentAuthToken;
+
+      try {
+        // Fetch user info
+        if (currentAuthToken) {
           const headers: HeadersInit = {
             Authorization: `Bearer ${currentAuthToken}`,
           };
@@ -604,192 +601,233 @@ export default function HomeGuest() {
             headers,
             cache: "no-store",
           });
+
           if (userRes.status === 401 || userRes.status === 403) {
             const nt = await refreshToken();
-            if (nt && isMounted) {
+            if (nt) {
               tokenForSubFetches = nt;
+              localStorage.setItem("authToken", nt);
               userRes = await fetch(userInfoUrl, {
                 headers: { Authorization: `Bearer ${nt}` },
                 cache: "no-store",
               });
-            } else if (isMounted) {
-              console.warn("Refresh failed, clearing token.");
-              localStorage.removeItem("authToken");
-              if (isMounted) setUser(null);
-              tokenForSubFetches = null;
-            }
-          }
-          if (userRes.ok && isMounted) {
-            const userData = await userRes.json();
-            if (userData.code === 1000 && userData.result?.id) {
-              const fetchedUser: User = userData.result;
-              userIdForFetches = fetchedUser.id;
-              setUser(fetchedUser);
-              if (tokenForSubFetches) {
-                notificationsPromise = fetchNotifications(
-                  userIdForFetches,
-                  tokenForSubFetches
-                );
-              }
             } else {
-              console.warn("Invalid user data structure, clearing token.");
-              localStorage.removeItem("authToken");
-              setUser(null);
-              userIdForFetches = null;
-              tokenForSubFetches = null;
-              setNotifications([]);
+              throw new Error("Unauthorized or Refresh Failed");
             }
-          } else if (
-            isMounted &&
-            userRes.status !== 401 &&
-            userRes.status !== 403
-          ) {
-            console.error(
-              `User info fetch failed with status ${userRes.status}`
-            );
-            setUser(null);
-            userIdForFetches = null;
-            tokenForSubFetches = null;
-            setNotifications([]);
-          } else if (isMounted && !tokenForSubFetches) {
-            setNotifications([]);
           }
-        } catch (error: any) {
-          console.error("Lỗi fetch user info (HomeGuest):", error.message);
-          localStorage.removeItem("authToken");
-          if (isMounted) setUser(null);
-          userIdForFetches = null;
-          tokenForSubFetches = null;
-          setNotifications([]);
-        } finally {
-          if (isMounted) setIsLoadingUser(false);
-        }
-      } else {
-        if (isMounted) {
+
+          if (!userRes.ok) {
+            throw new Error(`Workspace user info failed: ${userRes.status}`);
+          }
+
+          const userData = await userRes.json();
+          if (userData.code === 1000 && userData.result?.id) {
+            const fetchedUser: User = userData.result;
+            userIdForFetches = fetchedUser.id;
+            setUser(fetchedUser);
+          } else {
+            throw new Error("Invalid user data received");
+          }
+        } else {
           setUser(null);
-          setIsLoadingUser(false);
-          setIsLoadingRegisteredIds(false);
-          setIsLoadingCreatedEventIds(false);
-          setNotifications([]);
         }
+      } catch (error: any) {
+        console.error("Lỗi fetch user info (UserHome):", error.message);
+        setUser(null);
+        userIdForFetches = null;
+        tokenForSubFetches = null;
+        if (!error.message?.includes("Invalid user data")) {
+          router.push("/login?sessionExpired=true");
+        }
+      } finally {
+        setIsLoadingUser(false);
       }
 
-      await Promise.all([eventsPromise, newsPromise, notificationsPromise]);
+      // Fetch other data in parallel
+      await Promise.all([fetchAllEvents(), fetchNews()]);
 
-      if (userIdForFetches && isMounted) {
+      if (userIdForFetches && tokenForSubFetches) {
         await Promise.all([
-          fetchRegisteredEventIds(userIdForFetches),
-          fetchUserCreatedEvents(userIdForFetches),
+          fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
+          fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
+          fetchNotifications(userIdForFetches, tokenForSubFetches),
         ]);
-      } else if (isMounted) {
+      } else {
         setIsLoadingRegisteredIds(false);
         setIsLoadingCreatedEventIds(false);
+        setNotifications([]);
       }
     };
 
     loadInitialData();
-    return () => {
-      isMounted = false;
-    };
   }, [
-    isInitialized,
     fetchAllEvents,
     fetchRegisteredEventIds,
     fetchUserCreatedEvents,
     fetchNews,
     fetchNotifications,
     refreshToken,
+    router,
   ]);
-
   // --- Thêm useEffect để quản lý Socket Connection ---
-  useEffect(() => {
-    // Chỉ kết nối khi có user ID (đã đăng nhập)
-    if (user?.id) {
-      // Ngắt kết nối cũ nếu có (trường hợp user thay đổi)
+  // useEffect(() => {
+  //   // Chỉ kết nối khi có user ID (đã đăng nhập)
+  //   if (user?.id) {
+  //     // Ngắt kết nối cũ nếu có (trường hợp user thay đổi)
+  //     if (socketRef.current) {
+  //       socketRef.current.disconnect();
+  //     }
+
+  //     console.log(`SOCKET: Đang kết nối cho user: ${user.id}`);
+  //     // Tạo kết nối mới
+  //     const socket = io("ws://localhost:9099", {
+  //       path: "/socket.io", 
+  //       query: {
+  //         userId: user.id, 
+  //       },
+  //       transports: ["websocket"], 
+  //       reconnectionAttempts: 5, 
+  //       reconnectionDelay: 3000, 
+  //     });
+  //     socketRef.current = socket; // Lưu instance vào ref
+
+  //     // Lắng nghe các sự kiện từ socket
+  //     socket.on("connect", () => {
+  //       console.log("SOCKET: Đã kết nối - ID:", socket.id);
+  //     });
+
+  //     socket.on("disconnect", (reason) => {
+  //       console.log("SOCKET: Đã ngắt kết nối - Lý do:", reason);
+  //       if (reason === "io server disconnect") {
+  //         toast.error("Mất kết nối máy chủ thông báo.", {
+  //           id: "socket-disconnect",
+  //         });
+  //       }
+  //     });
+
+  //     socket.on("connect_error", (error) => {
+  //       console.error("SOCKET: Lỗi kết nối:", error);
+  //       toast.error("Không thể kết nối máy chủ thông báo.", {
+  //         id: "socket-error",
+  //       });
+  //     });
+
+  //     // --- Lắng nghe sự kiện 'notification' ---
+  //     socket.on("notification", (data: any) => {
+  //       console.log("SOCKET: Nhận được thông báo:", data);
+  //       if (data && typeof data === "object") {
+  //         toast(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
+  //           duration: 5000,
+  //         });
+  //         const newNotification: NotificationItem = {
+  //           id: data.id || `socket-${Date.now()}`, 
+  //           title: data.title || "Thông báo",
+  //           content: data.content || "",
+  //           type: data.type || "SYSTEM",
+  //           read: data.read !== undefined ? data.read : false, 
+  //           createdAt: data.createdAt || new Date().toISOString(),
+  //           relatedId: data.relatedId,
+  //           userId: data.userId || user.id, 
+  //         };
+  //         setNotifications((prevNotifications) =>
+  //           [newNotification, ...prevNotifications].slice(0, 15) 
+  //         );
+  //       } else {
+  //         console.warn("SOCKET: Dữ liệu thông báo không hợp lệ:", data);
+  //       }
+  //     });
+
+  //     // Hàm cleanup
+  //     return () => {
+  //       if (socketRef.current) {
+  //         console.log("SOCKET: Ngắt kết nối...");
+  //         socketRef.current.off("connect"); 
+  //         socketRef.current.off("disconnect");
+  //         socketRef.current.off("connect_error");
+  //         socketRef.current.off("notification"); 
+  //         socketRef.current.disconnect(); 
+  //         socketRef.current = null; 
+  //       }
+  //     };
+  //   } else {
+  //     if (socketRef.current) {
+  //       console.log("SOCKET: Ngắt kết nối do không có user.");
+  //       socketRef.current.disconnect();
+  //       socketRef.current = null;
+  //     }
+  //   }
+  // }, [user?.id, setNotifications]); // Dependency là user.id
+ useEffect(() => {
+    if (!user?.id) {
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
+      return;
+    }
 
-      console.log(`SOCKET: Đang kết nối cho user: ${user.id}`);
-      // Tạo kết nối mới
+    // Only initialize socket if not already connected
+    if (!socketRef.current) {
       const socket = io("ws://localhost:9099", {
-        path: "/socket.io", 
-        query: {
-          userId: user.id, 
-        },
-        transports: ["websocket"], 
-        reconnectionAttempts: 5, 
-        reconnectionDelay: 3000, 
+        path: "/socket.io",
+        query: { userId: user.id },
+        transports: ["websocket"],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 3000,
       });
-      socketRef.current = socket; // Lưu instance vào ref
 
-      // Lắng nghe các sự kiện từ socket
+      socketRef.current = socket;
+
       socket.on("connect", () => {
-        console.log("SOCKET: Đã kết nối - ID:", socket.id);
+        console.log("SOCKET (UserHome): Đã kết nối - ID:", socket.id);
       });
 
       socket.on("disconnect", (reason) => {
-        console.log("SOCKET: Đã ngắt kết nối - Lý do:", reason);
-        if (reason === "io server disconnect") {
-          toast.error("Mất kết nối máy chủ thông báo.", {
-            id: "socket-disconnect",
-          });
-        }
+        console.log("SOCKET (UserHome): Đã ngắt kết nối - Lý do:", reason);
       });
 
       socket.on("connect_error", (error) => {
-        console.error("SOCKET: Lỗi kết nối:", error);
-        toast.error("Không thể kết nối máy chủ thông báo.", {
-          id: "socket-error",
-        });
+        console.error("SOCKET (UserHome): Lỗi kết nối:", error);
       });
 
-      // --- Lắng nghe sự kiện 'notification' ---
       socket.on("notification", (data: any) => {
-        console.log("SOCKET: Nhận được thông báo:", data);
         if (data && typeof data === "object") {
           toast(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
             duration: 5000,
           });
           const newNotification: NotificationItem = {
-            id: data.id || `socket-${Date.now()}`, 
+            id: data.id || `socket-user-${Date.now()}`,
             title: data.title || "Thông báo",
             content: data.content || "",
             type: data.type || "SYSTEM",
-            read: data.read !== undefined ? data.read : false, 
+            read: data.read !== undefined ? data.read : false,
             createdAt: data.createdAt || new Date().toISOString(),
             relatedId: data.relatedId,
-            userId: data.userId || user.id, 
+            userId: data.userId || user.id,
           };
           setNotifications((prevNotifications) =>
-            [newNotification, ...prevNotifications].slice(0, 15) 
+            [newNotification, ...prevNotifications].slice(0, 15)
           );
         } else {
-          console.warn("SOCKET: Dữ liệu thông báo không hợp lệ:", data);
+          console.warn(
+            "SOCKET (UserHome): Dữ liệu thông báo không hợp lệ:",
+            data
+          );
         }
       });
+    }
 
-      // Hàm cleanup
-      return () => {
-        if (socketRef.current) {
-          console.log("SOCKET: Ngắt kết nối...");
-          socketRef.current.off("connect"); 
-          socketRef.current.off("disconnect");
-          socketRef.current.off("connect_error");
-          socketRef.current.off("notification"); 
-          socketRef.current.disconnect(); 
-          socketRef.current = null; 
-        }
-      };
-    } else {
+    return () => {
       if (socketRef.current) {
-        console.log("SOCKET: Ngắt kết nối do không có user.");
+        socketRef.current.off("connect");
+        socketRef.current.off("disconnect");
+        socketRef.current.off("connect_error");
+        socketRef.current.off("notification");
         socketRef.current.disconnect();
         socketRef.current = null;
       }
-    }
-  }, [user?.id, setNotifications]); // Dependency là user.id
-
+    };
+  }, [user?.id]);
   // Effect for handling clicks outside notification dropdown (Giữ nguyên)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1153,7 +1191,7 @@ export default function HomeGuest() {
             >
               Liên hệ
             </span>
-            {isInitialized &&
+            {initializedRef &&
               !isLoadingUser &&
               (user ? (
                 <UserMenu user={user} onLogout={handleLogout} />
@@ -1164,7 +1202,7 @@ export default function HomeGuest() {
                   </span>
                 </Link>
               ))}
-            {(!isInitialized || isLoadingUser) && (
+            {(!initializedRef || isLoadingUser) && (
               <span className="text-gray-400">Đang tải...</span>
             )}
           </div>
@@ -1176,7 +1214,7 @@ export default function HomeGuest() {
           {tabs.map((tab) => {
             const showTab =
               !tab.requiresAuth ||
-              (tab.requiresAuth && isInitialized && !isLoadingUser && user);
+              (tab.requiresAuth && initializedRef && !isLoadingUser && user);
             if (!showTab) return null;
             return (
               <div key={tab.id} className="relative flex flex-col items-center">
@@ -1208,7 +1246,7 @@ export default function HomeGuest() {
               </div>
             );
           })}
-          {isInitialized &&
+          {initializedRef &&
             !user &&
             !isLoadingUser &&
             tabs.some((t) => t.requiresAuth) && (
@@ -1307,7 +1345,7 @@ export default function HomeGuest() {
       </div>
 
       {/* Notification Bell */}
-      {isInitialized && !isLoadingUser && user && (
+      {initializedRef && !isLoadingUser && user && (
         <div
           className="fixed bottom-6 right-6 z-50 group"
           ref={notificationContainerRef}

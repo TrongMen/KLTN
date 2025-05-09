@@ -4,7 +4,7 @@ import { toast } from "react-hot-toast";
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
 
-// ... (Các type ApiUser, EventMember, Event giữ nguyên)
+import ConfirmationDialog from "../utils/ConfirmationDialog";
 export type ApiUser = {
   id: string;
   firstName: string | null;
@@ -32,7 +32,6 @@ export type Event = {
   createdBy?: string;
   organizers: EventMember[];
   participants: EventMember[];
-  permissions: string[];
   status?: "PENDING" | "APPROVED" | "REJECTED";
   image?: string;
   avatarUrl?: string | null;
@@ -92,49 +91,7 @@ const getMemberNames = (
   return names.join(", ");
 };
 
-type ConfirmDialogProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  title: string;
-  message: React.ReactNode;
-  confirmText?: string;
-  cancelText?: string;
-};
 
-function ConfirmDialog({
-  isOpen,
-  onClose,
-  onConfirm,
-  title,
-  message,
-  confirmText = "Xác nhận",
-  cancelText = "Hủy",
-}: ConfirmDialogProps) {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-        <h2 className="text-xl font-semibold mb-4 text-gray-800">{title}</h2>
-        <div className="text-gray-700 mb-6">{message}</div>
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors cursor-pointer"
-          >
-            {cancelText}
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors cursor-pointer"
-          >
-            {confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const EventList: React.FC<EventListProps> = ({
   events,
@@ -687,7 +644,7 @@ const EventList: React.FC<EventListProps> = ({
         </div>
       )}
       {renderEventDetailsModal()}
-      <ConfirmDialog
+      <ConfirmationDialog
         isOpen={isConfirmOpen}
         onClose={closeConfirmDialog}
         onConfirm={confirmDelete}

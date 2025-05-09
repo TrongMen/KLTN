@@ -16,6 +16,9 @@ import {
 } from "../../../sections/ParticipantSection";
 import EventList from "../../../sections/ListEvenUser";
 import { User as MainUserType } from "../homeuser";
+import type { OrganizerData } from "../../../sections/BTCSection";
+import type { ParticipantData } from "../../../sections/ParticipantSection";
+
 
 export type ApiUser = {
   id: string;
@@ -24,6 +27,8 @@ export type ApiUser = {
   username: string | null;
   email?: string;
   role?: string;
+  position?: { id: string; name: string } | null;
+  organizerRole?: { id: string; name: string } | null;
 };
 
 export type EventMember = {
@@ -44,7 +49,6 @@ export type Event = {
   createdBy?: string;
   organizers: EventMember[];
   participants: EventMember[];
-  permissions: string[];
   status?: "PENDING" | "APPROVED" | "REJECTED";
   image?: string;
   avatarUrl?: string | null;
@@ -56,6 +60,7 @@ export type Event = {
   deletedBy?: string | null;
   progressStatus?: string;
   qrCodeUrl?: string | null;
+  maxAttendees?: number | null;
 };
 
 export type EventMemberInput = {
@@ -64,7 +69,7 @@ export type EventMemberInput = {
   positionId: string;
 };
 
-const INITIAL_EVENT_STATE: Omit<Event, "id"> & { id?: string } = {
+const INITIAL_EVENT_STATE: Omit<Event, "id" | "status"> & { id?: string, status?: "PENDING" | "APPROVED" | "REJECTED" } = {
   name: "",
   purpose: "",
   time: "",
@@ -72,8 +77,8 @@ const INITIAL_EVENT_STATE: Omit<Event, "id"> & { id?: string } = {
   content: "",
   organizers: [],
   participants: [],
-  permissions: [],
   avatarUrl: null,
+  maxAttendees: null,
 };
 
 interface CreateEventTabContentProps {
@@ -88,7 +93,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
   const [events, setEvents] = useState<Event[]>([]);
   const [isFetchingEvents, setIsFetchingEvents] = useState(false);
   const [currentEventData, setCurrentEventData] = useState<
-    Omit<Event, "id"> & { id?: string }
+    Omit<Event, "id" | "status"> & { id?: string, status?: "PENDING" | "APPROVED" | "REJECTED" }
   >(INITIAL_EVENT_STATE);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [allUsers, setAllUsers] = useState<ApiUser[]>([]);
@@ -97,13 +102,14 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
-  const [availablePermissions] = useState([
-    "Giảng viên",
-    "Sinh viên",
-    "Quản trị viên",
-  ]);
   const btcSectionRef = useRef<BTCSectionHandle>(null);
   const participantSectionRef = useRef<ParticipantSectionHandle>(null);
+  const [formChangeCounter, setFormChangeCounter] = useState(0);
+
+  const handleChildFormChange = useCallback(() => {
+      setFormChangeCounter(prev => prev + 1);
+  }, []);
+
 
   const getUserFullName = useCallback(
     (userId: string | undefined, usersList: ApiUser[]): string => {
@@ -120,6 +126,57 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     },
     []
   );
+
+  const transformToOrganizerDataArray = useCallback((members: EventMember[] | undefined): OrganizerData[] => {
+    if (!members) return [];
+    return members
+      .filter(
+        (member): member is EventMember & { roleId: string; positionId: string } =>
+          typeof member.roleId === 'string' && member.roleId !== '' &&
+          typeof member.positionId === 'string' && member.positionId !== ''
+      )
+      .map((member) => ({
+        userId: member.userId,
+        roleId: member.roleId,
+        positionId: member.positionId,
+      }));
+  }, []);
+
+  const transformToParticipantDataArray = useCallback((members: EventMember[] | undefined): ParticipantData[] => {
+    if (!members) return [];
+    return members
+      .filter(
+        (member): member is EventMember & { roleId: string; positionId: string } =>
+          typeof member.roleId === 'string' && member.roleId !== '' &&
+          typeof member.positionId === 'string' && member.positionId !== ''
+      )
+      .map((member) => ({
+        userId: member.userId,
+        roleId: member.roleId,
+        positionId: member.positionId,
+      }));
+  }, []);
+
+
+  const globallyBusyUserIds = useMemo((): Set<string> => {
+      const ids = new Set<string>();
+
+      const btcFormUserIds = btcSectionRef.current?.getFormUserIds?.() || [];
+      btcFormUserIds.forEach(id => { if (id) ids.add(id); });
+
+      const participantFormUserIds = participantSectionRef.current?.getFormUserIds?.() || [];
+      participantFormUserIds.forEach(id => { if (id) ids.add(id); });
+
+      if (editingEventId) {
+          const initialOrganizers = transformToOrganizerDataArray(currentEventData.organizers);
+          initialOrganizers.forEach(org => ids.add(org.userId));
+
+          const initialParticipants = transformToParticipantDataArray(currentEventData.participants);
+          initialParticipants.forEach(p => ids.add(p.userId));
+      }
+      return ids;
+  }, [formChangeCounter, editingEventId, currentEventData.organizers, currentEventData.participants, transformToOrganizerDataArray, transformToParticipantDataArray]);
+
 
   useEffect(() => {
     const fetchRequiredData = async () => {
@@ -206,7 +263,15 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setCurrentEventData((prev) => ({ ...prev, [name]: value }));
+    if (name === "maxAttendees") {
+      const numValue = parseInt(value, 10);
+      setCurrentEventData((prev) => ({
+        ...prev,
+        [name]: value === "" ? null : (isNaN(numValue) ? prev.maxAttendees : numValue),
+      }));
+    } else {
+      setCurrentEventData((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -229,20 +294,8 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     };
   }, [avatarPreviewUrl]);
 
-  const handlePermissionChange = (permission: string) => {
-    setCurrentEventData((prev) => {
-      const ps = prev.permissions || [];
-      return {
-        ...prev,
-        permissions: ps.includes(permission)
-          ? ps.filter((p) => p !== permission)
-          : [...ps, permission],
-      };
-    });
-  };
-
   const resetFormState = useCallback(() => {
-    setCurrentEventData({ ...INITIAL_EVENT_STATE, createdBy: user?.id || "" });
+    setCurrentEventData({ ...INITIAL_EVENT_STATE, createdBy: user?.id || "", maxAttendees: null });
     setEditingEventId(null);
     setAvatarFile(null);
     if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
@@ -250,7 +303,8 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     if (avatarInputRef.current) avatarInputRef.current.value = "";
     btcSectionRef.current?.resetForms();
     participantSectionRef.current?.resetForms();
-  }, [user, avatarPreviewUrl]);
+    handleChildFormChange(); 
+  }, [user, avatarPreviewUrl, handleChildFormChange]);
 
   const handleSetEditingEvent = useCallback(
     (eventToEdit: Event | null) => {
@@ -261,27 +315,29 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         const timeForInput = eventToEdit.time
           ? eventToEdit.time.slice(0, 16)
           : "";
-        const eventDataForForm: Event = {
+        const eventDataForForm = {
           ...INITIAL_EVENT_STATE,
           ...eventToEdit,
           time: timeForInput,
           organizers: eventToEdit.organizers || [],
           participants: eventToEdit.participants || [],
-          permissions: eventToEdit.permissions || [],
           avatarUrl: eventToEdit.avatarUrl || null,
+          maxAttendees: eventToEdit.maxAttendees === undefined ? null : eventToEdit.maxAttendees,
         };
         setCurrentEventData(eventDataForForm);
         setEditingEventId(eventToEdit.id);
         setAvatarFile(null);
         if (avatarInputRef.current) avatarInputRef.current.value = "";
-        btcSectionRef.current?.resetForms();
+        
+        btcSectionRef.current?.resetForms(); 
         participantSectionRef.current?.resetForms();
+        handleChildFormChange(); 
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         resetFormState();
       }
     },
-    [resetFormState, avatarPreviewUrl]
+    [resetFormState, avatarPreviewUrl, handleChildFormChange]
   );
 
   const cancelEdit = () => handleSetEditingEvent(null);
@@ -318,7 +374,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
             errorMsg = `${errorMsg}: ${errorDetails.slice(0, 200)}`;
           }
         } catch (readError) {
-          //
         }
         throw new Error(errorMsg);
       }
@@ -338,6 +393,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     }
   };
 
+
   const handleSubmitEvent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
@@ -353,33 +409,13 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     const participantsFromSection: EventMemberInput[] =
       participantSectionRef.current?.getMembersData() ?? [];
 
-    const requiredFields: (keyof Omit<
-      Event,
-      | "id"
-      | "createdBy"
-      | "status"
-      | "image"
-      | "avatarUrl"
-      | "organizers"
-      | "participants"
-      | "attendees"
-      | "rejectionReason"
-      | "createdAt"
-      | "deleted"
-      | "deletedAt"
-      | "deletedBy"
-      | "progressStatus"
-      | "qrCodeUrl"
-    >)[] = ["name", "purpose", "time", "location", "content", "permissions"];
+    const requiredFields: (keyof Omit<Event, "id" | "createdBy" | "status" | "image" | "avatarUrl" | "organizers" | "participants" | "attendees" | "rejectionReason" | "createdAt" | "deleted" | "deletedAt" | "deletedBy" | "progressStatus" | "qrCodeUrl" | "maxAttendees" >)[] = ["name", "purpose", "time", "location", "content"];
+    
     const missingFields = requiredFields.filter((field) => {
-      if (field === "permissions")
-        return (
-          !currentEventData.permissions ||
-          currentEventData.permissions.length === 0
-        );
       const value = currentEventData[field as keyof typeof currentEventData];
-      return value === null || value === undefined || value === "";
+      return value === null || value === undefined || String(value).trim() === "";
     });
+
     if (missingFields.length > 0) {
       const fieldLabels: Record<string, string> = {
         name: "Tên",
@@ -387,21 +423,26 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         time: "Ngày giờ",
         location: "Địa điểm",
         content: "Nội dung",
-        permissions: "Đối tượng",
       };
       const names = missingFields.map((f) => fieldLabels[f] || f).join(", ");
       toast.error(`Vui lòng nhập/chọn: ${names}`);
       setIsLoading(false);
       return;
     }
-    const existingOrganizers = editingEventId
-      ? currentEventData.organizers
+
+    const effectiveOrganizers = editingEventId
+      ? transformToOrganizerDataArray(currentEventData.organizers) 
       : [];
-    if (organizersFromSection.length === 0 && existingOrganizers.length === 0) {
-      toast.error("Vui lòng thêm ít nhất một người vào Ban Tổ Chức.");
-      setIsLoading(false);
-      return;
+    const allSubmittedOrganizers = [...effectiveOrganizers, ...organizersFromSection];
+    
+    if (allSubmittedOrganizers.length === 0 ) {
+        if (organizersFromSection.length === 0 && (!currentEventData.organizers || currentEventData.organizers.filter(org => org.roleId && org.positionId).length === 0)) {
+          toast.error("Vui lòng thêm ít nhất một người vào Ban Tổ Chức (với vai trò và vị trí hợp lệ).");
+          setIsLoading(false);
+          return;
+        }
     }
+
 
     const isEditing = !!editingEventId;
     const method = isEditing ? "PUT" : "POST";
@@ -409,14 +450,31 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       ? `http://localhost:8080/identity/api/events/${editingEventId}`
       : "http://localhost:8080/identity/api/events";
 
-    const formattedOrganizers = organizersFromSection.map((org) => ({
-      userId: org.userId,
-    }));
-    const formattedParticipants = participantsFromSection.map((p) => ({
-      userId: p.userId,
-      positionId: p.positionId,
-      roleId: p.roleId,
-    }));
+    const finalOrganizersPayload = organizersFromSection.map(org => ({ userId: org.userId, roleId: org.roleId, positionId: org.positionId }));
+ 
+    let orgPayload = finalOrganizersPayload;
+    if (isEditing) {
+        const existingValidOrganizers = transformToOrganizerDataArray(currentEventData.organizers);
+        const newOrgIds = new Set(organizersFromSection.map(o => o.userId));
+        const combined = [
+            ...organizersFromSection,
+            ...existingValidOrganizers.filter(eo => !newOrgIds.has(eo.userId))
+        ];
+        orgPayload = combined.map(o => ({userId: o.userId, roleId: o.roleId, positionId: o.positionId}));
+    }
+
+
+    let participantPayload = participantsFromSection.map(p => ({ userId: p.userId, roleId: p.roleId, positionId: p.positionId }));
+    if (isEditing) {
+        const existingValidParticipants = transformToParticipantDataArray(currentEventData.participants);
+        const newParticipantIds = new Set(participantsFromSection.map(p => p.userId));
+        const combined = [
+            ...participantsFromSection,
+            ...existingValidParticipants.filter(ep => !newParticipantIds.has(ep.userId))
+        ];
+        participantPayload = combined.map(p => ({userId: p.userId, roleId: p.roleId, positionId: p.positionId}));
+    }
+
 
     let requestBodyBase: any = {
       name: currentEventData.name,
@@ -426,9 +484,9 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         : null,
       location: currentEventData.location,
       content: currentEventData.content,
-      permissions: currentEventData.permissions || [],
-      organizers: formattedOrganizers,
-      participants: formattedParticipants,
+      organizers: orgPayload,
+      participants: participantPayload,
+      maxAttendees: currentEventData.maxAttendees === null || currentEventData.maxAttendees === undefined || String(currentEventData.maxAttendees).trim() === "" ? null : Number(currentEventData.maxAttendees),
     };
 
     if (!isEditing) {
@@ -436,7 +494,7 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       requestBodyBase.attendees = [];
     } else {
       requestBodyBase.id = editingEventId;
-      requestBodyBase.status = "PENDING";
+      requestBodyBase.status = currentEventData.status || "PENDING"; 
       if (user?.id) {
         url = `${url}?updatedByUserId=${user.id}`;
       } else {
@@ -480,11 +538,9 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
 
         if (eventIdForResult && avatarFile) {
           await uploadAvatar(eventIdForResult, token);
-        } else if (!eventIdForResult && avatarFile) {
-         //
         }
-
-        handleSetEditingEvent(null);
+        
+        handleSetEditingEvent(null); 
         await fetchEvents();
         onEventCreated();
       } else {
@@ -534,7 +590,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                 />
               </div>
 
-              {/* ========== KHỐI CHỌN AVATAR ĐƯỢC THIẾT KẾ LẠI ========== */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Avatar sự kiện
@@ -566,10 +621,10 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                       </div>
                     )}
                     <div className="absolute inset-0 bg-black bg-opacity-25 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="white" className="w-6 h-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="white" className="w-6 h-6">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.174C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.174 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-                      </svg>
+                        </svg>
                     </div>
                   </div>
                   <input
@@ -581,34 +636,36 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                     onChange={handleAvatarChange}
                     className="hidden"
                   />
-                  {(avatarFile || avatarPreviewUrl) && (
+                  {(avatarFile || (editingEventId && currentEventData.avatarUrl && !avatarPreviewUrl)) && (
                     <div className="flex flex-col justify-center h-24">
-                       {avatarFile && (
+                        {avatarFile && (
                           <p className="text-xs text-gray-600 mb-1 max-w-[150px] truncate" title={avatarFile.name}>
                               {avatarFile.name}
                           </p>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAvatarFile(null);
-                          if (avatarPreviewUrl) {
-                            URL.revokeObjectURL(avatarPreviewUrl);
-                            setAvatarPreviewUrl(null);
-                          }
-                          if (avatarInputRef.current) {
-                            avatarInputRef.current.value = "";
-                          }
-                        }}
-                        className="text-xs px-3 py-1.5 border border-red-400 text-red-600 rounded-md hover:bg-red-50 transition-colors"
-                      >
-                        Bỏ chọn
-                      </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAvatarFile(null);
+                            if (avatarPreviewUrl) {
+                              URL.revokeObjectURL(avatarPreviewUrl);
+                              setAvatarPreviewUrl(null);
+                            }
+                            if (editingEventId) {
+                                setCurrentEventData(prev => ({...prev, avatarUrl: null}));
+                            }
+                            if (avatarInputRef.current) {
+                              avatarInputRef.current.value = "";
+                            }
+                          }}
+                          className="text-xs px-3 py-1.5 border border-red-400 text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                        >
+                          Bỏ chọn
+                        </button>
                     </div>
                   )}
                 </div>
               </div>
-              {/* ========== KẾT THÚC KHỐI CHỌN AVATAR ========== */}
 
               <div>
                 <label
@@ -642,6 +699,23 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   onChange={handleInputChange}
                   className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   required
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="maxAttendees"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Số người tham dự tối đa
+                </label>
+                <input
+                  id="maxAttendees"
+                  type="number"
+                  name="maxAttendees"
+                  value={currentEventData.maxAttendees === null || currentEventData.maxAttendees === undefined ? "" : currentEventData.maxAttendees}
+                  onChange={handleInputChange}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  min="1"
                 />
               </div>
               <div>
@@ -692,49 +766,24 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   required
                 />
               </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Đối tượng tham gia <span className="text-red-500">*</span>
-                </label>
-                <div className="flex flex-wrap gap-x-4 gap-y-2">
-                  {availablePermissions.map((p) => (
-                    <label
-                      key={p}
-                      className="inline-flex items-center cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={currentEventData.permissions?.includes(p)}
-                        onChange={() => handlePermissionChange(p)}
-                        className="form-checkbox h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">{p}</span>
-                    </label>
-                  ))}
-                </div>
-                {(!currentEventData.permissions ||
-                  currentEventData.permissions.length === 0) && (
-                  <p className="text-xs text-red-500 mt-1">
-                    Chọn ít nhất một đối tượng.
-                  </p>
-                )}
-              </div>
+              
             </div>
             <BTCSection
               ref={btcSectionRef}
-              existingOrganizers={
-                editingEventId ? currentEventData.organizers : []
-              }
-              allUsers={allUsers}
-              getUserFullName={getUserFullName}
+              existingOrganizers={transformToOrganizerDataArray(
+                editingEventId ? currentEventData.organizers : undefined
+              )}
+              globallyBusyUserIds={globallyBusyUserIds}
+              onFormChange={handleChildFormChange}
             />
             <ParticipantSection
               ref={participantSectionRef}
               allUsers={allUsers}
-              existingParticipants={
-                editingEventId ? currentEventData.participants : []
-              }
-              getUserFullName={getUserFullName}
+              existingParticipants={transformToParticipantDataArray(
+                editingEventId ? currentEventData.participants : undefined
+              )}
+              globallyBusyUserIds={globallyBusyUserIds}
+              onFormChange={handleChildFormChange}
             />
             <div className="flex justify-end gap-3 mt-6 border-t pt-4">
               {editingEventId && (

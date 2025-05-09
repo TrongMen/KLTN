@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useCallback } from "react";
-import Image from "next/image";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
-import { EventDisplayInfo, User } from "../homeuser";
+import Image from "next/image";
+import { User as MainUserType, NewsItem, EventDisplayInfo } from "../homeuser";
 
 import {
   ReloadIcon,
@@ -19,42 +19,25 @@ import {
   TrashIcon,
 } from "@radix-ui/react-icons";
 
-import UpdateEventModal from "../modals/UpdateEventModal"; // Đường dẫn đến Modal
+import UpdateEventModal from "../modals/UpdateEventModal";
 import ConfirmationDialog, {
   ConfirmationDialogProps,
-} from "../../../utils/ConfirmationDialog"; // Đường dẫn đến ConfirmationDialog
+} from "../../../utils/ConfirmationDialog";
 
 type ConfirmationState = Omit<ConfirmationDialogProps, "onCancel"> & {
   onConfirm: (() => Promise<void>) | null;
 };
 
-interface HomeTabContentProps {
-  allEvents: EventDisplayInfo[];
-  isLoadingEvents: boolean;
-  errorEvents: string | null;
-  registeredEventIds: Set<string>;
-  createdEventIds: Set<string>;
-  user: User | null;
-  isLoadingRegisteredIds: boolean;
-  isLoadingCreatedEventIds: boolean;
-  isRegistering: string | null;
-  onRegister: (event: EventDisplayInfo) => void;
-  onEventClick: (event: EventDisplayInfo) => void;
-  selectedEvent: EventDisplayInfo | null;
-  onBackToList: () => void;
-  search: string;
-  setSearch: (value: string) => void;
-  sortOption: string;
-  setSortOption: (value: string) => void;
-  timeFilterOption: string;
-  setTimeFilterOption: (value: string) => void;
-  refreshToken: () => Promise<string | null>;
-  onRefreshEvents: () => Promise<void>;
-}
-
 type EventStatus = "upcoming" | "ongoing" | "ended";
 
-const getEventStatus = (eventDateStr: string): EventStatus => {
+interface DetailedOrganizer {
+  userId: string;
+  fullName?: string;
+  roleName?: string;
+  positionName?: string;
+}
+
+const getEventStatus = (eventDateStr: string | undefined): EventStatus => {
   if (!eventDateStr) return "upcoming";
   try {
     const now = new Date();
@@ -70,6 +53,7 @@ const getEventStatus = (eventDateStr: string): EventStatus => {
       eventDate.getMonth(),
       eventDate.getDate()
     );
+
     if (eventDateStart < todayStart) return "ended";
     else if (eventDateStart > todayStart) return "upcoming";
     else return "ongoing";
@@ -147,6 +131,34 @@ const getMonthRange = (
 
 const ITEMS_PER_PAGE_OPTIONS = [6, 12, 36];
 
+interface HomeTabContentProps {
+  allEvents: EventDisplayInfo[];
+  isLoadingEvents: boolean;
+  errorEvents: string | null;
+  registeredEventIds: Set<string>;
+  createdEventIds: Set<string>;
+  user: User | null;
+  isLoadingRegisteredIds: boolean;
+  isLoadingCreatedEventIds: boolean;
+  isRegistering: string | null;
+  onRegister: (event: EventDisplayInfo) => void;
+  onEventClick: (event: EventDisplayInfo) => void;
+  selectedEvent: EventDisplayInfo | null;
+  onBackToList: () => void;
+  search: string;
+  setSearch: (value: string) => void;
+  sortOption: string;
+  setSortOption: (value: string) => void;
+  timeFilterOption: string;
+  setTimeFilterOption: (value: string) => void;
+  newsItems: NewsItem[];
+  isLoadingNews: boolean;
+  errorNews: string | null;
+  refreshNewsList: () => void;
+  refreshToken?: () => Promise<string | null>;
+  onRefreshEvents: () => Promise<void>;
+}
+
 const HomeTabContent: React.FC<HomeTabContentProps> = ({
   allEvents,
   isLoadingEvents,
@@ -167,6 +179,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   setSortOption,
   timeFilterOption,
   setTimeFilterOption,
+  newsItems,
+  isLoadingNews,
+  errorNews,
+  refreshNewsList,
   refreshToken,
   onRefreshEvents,
 }) => {
@@ -188,11 +204,120 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       onConfirm: null,
       confirmVariant: "primary",
     });
+  const [creatorName, setCreatorName] = useState<string | null>(null);
+  const [isLoadingCreator, setIsLoadingCreator] = useState<boolean>(false);
+  const [detailedOrganizers, setDetailedOrganizers] = useState<
+    DetailedOrganizer[] | null
+  >(null);
+  const [isLoadingOrganizers, setIsLoadingOrganizers] =
+    useState<boolean>(false);
+  const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
+  const [isSubmittingNews, setIsSubmittingNews] = useState(false);
+  const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
+
+  useEffect(() => {
+    if (selectedEvent && selectedEvent.createdBy) {
+      const fetchCreatorInfo = async () => {
+        setIsLoadingCreator(true);
+        setCreatorName(null);
+        try {
+          const response = await fetch(
+            `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
+          );
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || "Không tìm thấy người tạo");
+          }
+          const data = await response.json();
+          if (data.code === 1000 && data.result) {
+            const creator = data.result;
+            const fullName = [creator.lastName, creator.firstName]
+              .filter(Boolean)
+              .join(" ")
+              .trim();
+            setCreatorName(
+              fullName ||
+                creator.username ||
+                `ID: ${selectedEvent.createdBy?.substring(0, 8)}...`
+            );
+          } else {
+            setCreatorName(
+              `ID: ${selectedEvent.createdBy?.substring(0, 8)}...`
+            );
+          }
+        } catch (error) {
+          console.error("Lỗi tải tên người tạo:", error);
+          setCreatorName("Không tải được tên");
+        } finally {
+          setIsLoadingCreator(false);
+        }
+      };
+      fetchCreatorInfo();
+    } else {
+      setCreatorName(null);
+    }
+
+    if (
+      selectedEvent &&
+      selectedEvent.organizers &&
+      selectedEvent.organizers.length > 0
+    ) {
+      const fetchOrganizerDetails = async () => {
+        setIsLoadingOrganizers(true);
+        setDetailedOrganizers(null);
+        try {
+          const organizerPromises = selectedEvent.organizers!.map(
+            async (org) => {
+              const response = await fetch(
+                `http://localhost:8080/identity/users/notoken/${org.userId}`
+              );
+              if (!response.ok)
+                return {
+                  ...org,
+                  fullName: `ID: ${org.userId.substring(0, 8)}...`,
+                };
+              const data = await response.json();
+              if (data.code === 1000 && data.result) {
+                const userDetail = data.result;
+                const fullName =
+                  [userDetail.lastName, userDetail.firstName]
+                    .filter(Boolean)
+                    .join(" ")
+                    .trim() || userDetail.username;
+                return {
+                  ...org,
+                  fullName: fullName || `ID: ${org.userId.substring(0, 8)}...`,
+                };
+              }
+              return {
+                ...org,
+                fullName: `ID: ${org.userId.substring(0, 8)}...`,
+              };
+            }
+          );
+          const settledOrganizers = await Promise.all(organizerPromises);
+          setDetailedOrganizers(settledOrganizers);
+        } catch (error) {
+          console.error("Lỗi tải thông tin ban tổ chức:", error);
+          setDetailedOrganizers(
+            selectedEvent.organizers.map((org) => ({
+              ...org,
+              fullName: "Lỗi tải tên",
+            }))
+          );
+        } finally {
+          setIsLoadingOrganizers(false);
+        }
+      };
+      fetchOrganizerDetails();
+    } else {
+      setDetailedOrganizers(null);
+    }
+  }, [selectedEvent]);
 
   const processedEvents = useMemo(() => {
-    // SỬA LỖI: Kiểm tra allEvents trước khi sử dụng
     if (!allEvents || !Array.isArray(allEvents)) {
-      return []; // Trả về mảng rỗng nếu allEvents không hợp lệ
+      return [];
     }
     let evts = [...allEvents];
     const todayStart = new Date();
@@ -349,10 +474,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   const handleRefresh = async () => {
     try {
       await onRefreshEvents();
-      toast.success("Đã làm mới danh sách sự kiện!");
+      toast.success("Đã làm mới!");
     } catch (error) {
-      console.error("Lỗi khi làm mới sự kiện thủ công:", error);
-      toast.error("Không thể làm mới sự kiện.");
+      console.error("Lỗi khi làm mới:", error);
+      toast.error("Không thể làm mới.");
     }
   };
 
@@ -364,7 +489,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     async (updatedEvent: EventDisplayInfo) => {
       setIsUpdateModalOpen(false);
       setEventToEdit(null);
-      toast.success(`Sự kiện "${updatedEvent.title}" đã được cập nhật.`);
+      toast.success(`Sự kiện "${updatedEvent.title}" đã cập nhật.`);
       await onRefreshEvents();
       if (selectedEvent?.id === updatedEvent.id) {
         onEventClick(updatedEvent);
@@ -375,16 +500,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
 
   const handleDeleteEvent = (event: EventDisplayInfo) => {
     if (!user || !user.id) {
-      toast.error("Vui lòng đăng nhập để thực hiện thao tác này.");
+      toast.error("Vui lòng đăng nhập.");
       return;
     }
     if (isDeleting === event.id) return;
-
     const confirmDeleteAction = async () => {
       setIsDeleting(event.id);
       let token = localStorage.getItem("authToken");
       if (!token) {
-        toast.error("Phiên đăng nhập không hợp lệ.");
+        toast.error("Phiên đăng nhập hết hạn.");
         setIsDeleting(null);
         setConfirmationDialogState({
           ...confirmationDialogState,
@@ -392,8 +516,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         });
         return;
       }
+      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
       try {
-        const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
         let response = await fetch(apiUrl, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -402,20 +526,20 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           (response.status === 401 || response.status === 403) &&
           refreshToken
         ) {
-          const newToken = await refreshToken();
-          if (newToken) {
-            token = newToken;
-            localStorage.setItem("authToken", newToken);
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            localStorage.setItem("authToken", nt);
             response = await fetch(apiUrl, {
               method: "DELETE",
               headers: { Authorization: `Bearer ${token}` },
             });
           } else {
-            throw new Error("Không thể làm mới phiên đăng nhập.");
+            throw new Error("Làm mới phiên thất bại.");
           }
         }
         if (response.ok) {
-          let successMsg = `Đã xoá sự kiện "${event.title}".`;
+          let successMsg = `Đã xoá "${event.title}".`;
           try {
             const data = await response.json();
             successMsg = data.message || successMsg;
@@ -426,8 +550,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         } else {
           let errorMsg = `Lỗi ${response.status}`;
           try {
-            const errorData = await response.json();
-            errorMsg = errorData.message || errorMsg;
+            const errData = await response.json();
+            errorMsg = errData.message || errorMsg;
           } catch (e) {}
           throw new Error(errorMsg);
         }
@@ -444,14 +568,14 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     };
     setConfirmationDialogState({
       isOpen: true,
-      title: "Xác nhận Xoá Sự kiện",
+      title: "Xác nhận Xoá",
       message: (
         <>
+          {" "}
           <p>
-            Bạn có chắc muốn xoá sự kiện{" "}
+            Bạn chắc chắn muốn xoá sự kiện{" "}
             <strong className="font-semibold">"{event.title}"</strong> không?
-          </p>
-                                 
+          </p>{" "}
         </>
       ),
       onConfirm: confirmDeleteAction,
@@ -468,10 +592,120 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     });
   };
 
-  if (errorEvents) {
+  const handleOpenCreateModal = () => {
+    if (!user) {
+      toast.error("Vui lòng đăng nhập.");
+      return;
+    }
+    setEditingNewsItem(null);
+    setIsNewsModalOpen(true);
+  };
+  const handleOpenEditModal = (newsItem: NewsItem) => {
+    setEditingNewsItem(newsItem);
+    setIsNewsModalOpen(true);
+  };
+  const handleCloseModal = () => {
+    if (!isSubmittingNews) {
+      setIsNewsModalOpen(false);
+      setEditingNewsItem(null);
+    }
+  };
+
+  const handleNewsFormSubmit = async (
+    formData: NewsFormData,
+    newsIdToSubmit?: string
+  ) => {
+    if (!user) {
+      toast.error("Vui lòng đăng nhập.");
+      return;
+    }
+    setIsSubmittingNews(true);
+    const toastId = toast.loading(
+      newsIdToSubmit ? "Đang cập nhật..." : "Đang tạo..."
+    );
+    const apiFormData = new FormData();
+    apiFormData.append("title", formData.title);
+    apiFormData.append("content", formData.content);
+    if (formData.eventId) apiFormData.append("eventId", formData.eventId);
+    if (formData.imageFile)
+      apiFormData.append("coverImage", formData.imageFile);
+
+    let API_URL = "http://localhost:8080/identity/api/news";
+    let method = "POST";
+    if (newsIdToSubmit) {
+      API_URL = `http://localhost:8080/identity/api/news/${newsIdToSubmit}`;
+      method = "PUT";
+    } else {
+      apiFormData.append("type", "NEWS");
+      apiFormData.append("featured", "false");
+      apiFormData.append("pinned", "false");
+      apiFormData.append("createById", user.id);
+    }
+
+    let currentToken = localStorage.getItem("authToken");
+    try {
+      let headers: HeadersInit = {};
+      if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
+      let response = await fetch(API_URL, {
+        method: method,
+        headers: headers,
+        body: apiFormData,
+      });
+      if (
+        (response.status === 401 || response.status === 403) &&
+        currentToken &&
+        refreshToken
+      ) {
+        const newToken = await refreshToken();
+        if (newToken) {
+          currentToken = newToken;
+          localStorage.setItem("authToken", newToken);
+          headers["Authorization"] = `Bearer ${currentToken}`;
+          response = await fetch(API_URL, {
+            method: method,
+            headers: headers,
+            body: apiFormData,
+          });
+        } else {
+          throw new Error("Refresh token failed or missing.");
+        }
+      }
+      const result = await response.json();
+      if (response.ok && result.code === 1000) {
+        toast.success(
+          result.message ||
+            (newsIdToSubmit ? "Cập nhật thành công!" : "Tạo mới thành công!"),
+          { id: toastId }
+        );
+        refreshNewsList();
+        setIsNewsModalOpen(false);
+        setEditingNewsItem(null);
+      } else {
+        toast.error(
+          result.message ||
+            (newsIdToSubmit ? "Cập nhật thất bại." : "Tạo mới thất bại."),
+          { id: toastId }
+        );
+        console.error("API Error:", result);
+      }
+    } catch (error: any) {
+      console.error("Error submitting news form:", error);
+      if (error.message?.includes("Refresh token failed")) {
+        toast.error("Phiên đăng nhập hết hạn.", { id: toastId });
+        router.push("/login?sessionExpired=true");
+      } else {
+        toast.error("Lỗi gửi yêu cầu: " + error.message, { id: toastId });
+      }
+    } finally {
+      setIsSubmittingNews(false);
+    }
+  };
+
+  if (errorEvents && !isLoadingEvents && !allEvents.length) {
     return (
       <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-        Lỗi tải sự kiện: {errorEvents}
+        {" "}
+        Lỗi tải sự kiện: {errorEvents}{" "}
       </p>
     );
   }
@@ -479,33 +713,29 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   return (
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        {" "}
         <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600 shrink-0">
-          🎉 Trang chủ
-        </h1>{" "}
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
           {" "}
+          🎉 Trang chủ{" "}
+        </h1>
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
           <div className="flex-grow sm:flex-grow-0">
-            {" "}
             <button
               onClick={handleRefresh}
               disabled={isLoadingEvents}
               title="Làm mới"
               className="w-full h-full p-2 border cursor-pointer border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
             >
-              {" "}
               {isLoadingEvents ? (
                 <ReloadIcon className="w-5 h-5 animate-spin text-indigo-600" />
               ) : (
                 <ReloadIcon className="w-5 h-5 text-indigo-600" />
-              )}{" "}
-            </button>{" "}
-          </div>{" "}
+              )}
+            </button>
+          </div>
           <div className="flex-grow sm:flex-grow-0">
-            {" "}
             <label htmlFor="sortOptionGuest" className="sr-only">
               Sắp xếp
-            </label>{" "}
+            </label>
             <select
               id="sortOptionGuest"
               value={sortOption}
@@ -515,17 +745,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              {" "}
               <option value="default">Mặc định</option>{" "}
               <option value="az">🔤 A - Z</option>{" "}
-              <option value="za">🔤 Z - A</option>{" "}
-            </select>{" "}
-          </div>{" "}
+              <option value="za">🔤 Z - A</option>
+            </select>
+          </div>
           <div className="flex-grow sm:flex-grow-0">
-            {" "}
             <label htmlFor="timeFilterOptionGuest" className="sr-only">
               Lọc thời gian
-            </label>{" "}
+            </label>
             <select
               id="timeFilterOptionGuest"
               value={timeFilterOption}
@@ -535,7 +763,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              {" "}
               <option value="all">♾️ Tất cả</option>{" "}
               <option value="upcoming">☀️ Sắp diễn ra</option>{" "}
               <option value="ongoing">🟢 Đang diễn ra</option>{" "}
@@ -543,30 +770,27 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               <option value="today">📅 Hôm nay</option>{" "}
               <option value="thisWeek">🗓️ Tuần này</option>{" "}
               <option value="thisMonth">🗓️ Tháng này</option>{" "}
-              <option value="dateRange">🔢 Khoảng ngày</option>{" "}
-            </select>{" "}
-          </div>{" "}
+              <option value="dateRange">🔢 Khoảng ngày</option>
+            </select>
+          </div>
           <div className="flex-grow sm:flex-grow-0">
-            {" "}
             <label htmlFor="itemsPerPageSelect" className="sr-only">
               Sự kiện/trang
-            </label>{" "}
+            </label>
             <select
               id="itemsPerPageSelect"
               value={itemsPerPage}
               onChange={handleItemsPerPageChange}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              {" "}
               {ITEMS_PER_PAGE_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option} / trang
                 </option>
-              ))}{" "}
-            </select>{" "}
-          </div>{" "}
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-2 flex-shrink-0 self-center">
-            {" "}
             <button
               onClick={() => setViewMode("card")}
               title="Thẻ"
@@ -577,7 +801,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               }`}
             >
               <GridIcon className="h-5 w-5" />
-            </button>{" "}
+            </button>
             <button
               onClick={() => setViewMode("list")}
               title="Danh sách"
@@ -588,20 +812,21 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               }`}
             >
               <ListBulletIcon className="h-5 w-5" />
-            </button>{" "}
-          </div>{" "}
-        </div>{" "}
+            </button>
+          </div>
+        </div>
       </div>
       {timeFilterOption === "dateRange" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
           {" "}
           <div>
+            {" "}
             <label
               htmlFor="startDateFilterHome"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
               Từ ngày
-            </label>
+            </label>{" "}
             <input
               type="date"
               id="startDateFilterHome"
@@ -609,15 +834,16 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               onChange={handleStartDateChange}
               max={endDateFilter || undefined}
               className="w-full p-2 border rounded-lg text-sm"
-            />
+            />{" "}
           </div>{" "}
           <div>
+            {" "}
             <label
               htmlFor="endDateFilterHome"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
               Đến ngày
-            </label>
+            </label>{" "}
             <input
               type="date"
               id="endDateFilterHome"
@@ -625,7 +851,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               onChange={handleEndDateChange}
               min={startDateFilter || undefined}
               className="w-full p-2 border rounded-lg text-sm"
-            />
+            />{" "}
           </div>{" "}
         </div>
       )}
@@ -664,11 +890,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           </button>
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
-              {" "}
-              {selectedEvent.avatarUrl ? (
+              {selectedEvent.image ? (
                 <Image
-                  src={selectedEvent.avatarUrl}
-                  alt={`Avatar`}
+                  src={selectedEvent.image}
+                  alt={`Ảnh bìa ${selectedEvent.title}`}
                   width={300}
                   height={300}
                   className="w-full h-auto max-h-80 rounded-lg object-cover border p-1 bg-white shadow-md"
@@ -677,7 +902,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                 <div className="w-full h-48 md:h-64 lg:h-80 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-5xl font-semibold border">
                   {selectedEvent.title?.charAt(0).toUpperCase() || "?"}
                 </div>
-              )}{" "}
+              )}
             </div>
             <div className="flex-grow space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
@@ -693,22 +918,22 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         status
                       )} mt-1 sm:mt-0 flex-shrink-0`}
                     >
-                      {getStatusIcon(status)} {getStatusText(status)}
+                      {" "}
+                      {getStatusIcon(status)} {getStatusText(status)}{" "}
                     </span>
                   );
                 })()}{" "}
               </div>
               <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
-                {" "}
                 <p>
-                  <strong className="font-medium w-24 inline-block">
-                    📅 Ngày:
+                  <strong className="font-medium w-28 inline-block">
+                    📅 Ngày diễn ra:
                   </strong>{" "}
                   {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}
-                </p>{" "}
+                </p>
                 {selectedEvent.time && (
                   <p>
-                    <strong className="font-medium w-24 inline-block">
+                    <strong className="font-medium w-28 inline-block">
                       🕒 Thời gian:
                     </strong>{" "}
                     {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
@@ -716,98 +941,75 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                       minute: "2-digit",
                     })}
                   </p>
-                )}{" "}
+                )}
                 <p>
-                  <strong className="font-medium w-24 inline-block">
+                  <strong className="font-medium w-28 inline-block">
                     📍 Địa điểm:
                   </strong>{" "}
                   {selectedEvent.location}
-                </p>{" "}
+                </p>
                 <p>
-                  <strong className="font-medium w-24 inline-block">
+                  <strong className="font-medium w-28 inline-block">
                     👤 Người tạo:
                   </strong>{" "}
-                  {selectedEvent.createdBy || "N/A"}
-                </p>{" "}
+                  {isLoadingCreator
+                    ? "Đang tải..."
+                    : creatorName || selectedEvent.createdBy || "N/A"}
+                </p>
                 {selectedEvent.purpose && (
                   <p>
-                    <strong className="font-medium w-24 inline-block align-top">
+                    <strong className="font-medium w-28 inline-block align-top">
                       🎯 Mục đích:
                     </strong>{" "}
-                    <span className="inline-block max-w-[calc(100%-6rem)]">
+                    <span className="inline-block max-w-[calc(100%-7rem)]">
                       {selectedEvent.purpose}
                     </span>
                   </p>
-                )}{" "}
+                )}
               </div>
               <div className="space-y-3 text-sm">
-                {" "}
                 <div>
-                  <p className="font-medium mb-1">📜 Nội dung:</p>
+                  {" "}
+                  <p className="font-medium mb-1">📜 Nội dung sự kiện:</p>{" "}
                   <p className="whitespace-pre-wrap">
                     {selectedEvent.content ||
                       selectedEvent.description ||
-                      "Không có."}
-                  </p>
-                </div>{" "}
+                      "Không có mô tả chi tiết."}
+                  </p>{" "}
+                </div>
                 <div>
-                  <strong className="font-medium mb-1 block">👥 BTC:</strong>{" "}
-                  {selectedEvent.organizers &&
-                  selectedEvent.organizers.length > 0 ? (
-                    <ul className="list-disc list-inside pl-5 space-y-1">
-                      {selectedEvent.organizers.map((org, index) => (
-                        <li key={`${org.userId}-${index}`}>
-                          {org.roleName || org.positionName
-                            ? `${org.roleName || ""}${
-                                org.roleName && org.positionName ? " - " : ""
-                              }${org.positionName || ""}`
-                            : `Thành viên ${index + 1}`}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="italic">Chưa có.</p>
-                  )}
-                </div>{" "}
-                <div>
+                  {" "}
                   <strong className="font-medium mb-1 block">
-                    👤 Người tham gia:
+                    👥 Ban tổ chức:
                   </strong>{" "}
-                  {selectedEvent.participants &&
-                  selectedEvent.participants.length > 0 ? (
+                  {isLoadingOrganizers ? (
+                    <p className="italic">Đang tải...</p>
+                  ) : detailedOrganizers && detailedOrganizers.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 space-y-1">
-                      {selectedEvent.participants.map((p, index) => (
-                        <li key={`${p.userId}-${index}`}>
-                          {p.roleName || p.positionName
-                            ? `${p.roleName || ""}${
-                                p.roleName && p.positionName ? " - " : ""
-                              }${p.positionName || ""}`
-                            : `Tham gia ${index + 1}`}
+                      {" "}
+                      {detailedOrganizers.map((org, index) => (
+                        <li
+                          key={`<span class="math-inline">\{org\.userId\}\-</span>{index}`}
+                        >
+                          {[org.fullName, org.positionName, org.roleName]
+                            .filter(Boolean)
+                            .join(" - ") || `Thành viên BTC ${index + 1}`}
                         </li>
-                      ))}
+                      ))}{" "}
                     </ul>
                   ) : (
-                    <p className="italic">Chưa có.</p>
-                  )}
-                </div>{" "}
+                    <p className="italic">Chưa có thông tin.</p>
+                  )}{" "}
+                </div>
                 <div>
+                  {" "}
                   <strong className="font-medium mb-1 block">
-                    ✅ Đã đăng ký:
+                    ✅ Số lượng đăng ký:
                   </strong>{" "}
-                  {selectedEvent.attendees &&
-                  selectedEvent.attendees.length > 0 ? (
-                    <ul className="list-disc list-inside pl-5 space-y-1 max-h-32 overflow-y-auto">
-                      {selectedEvent.attendees.map((att) => (
-                        <li key={att.userId}>
-                          {att.fullName || `ID: ${att.userId}`}{" "}
-                          {att.studentCode && ` (${att.studentCode})`}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="italic">Chưa có ai.</p>
-                  )}
-                </div>{" "}
+                  <p className="text-sm text-gray-700">
+                    {selectedEvent.attendees?.length || 0} người
+                  </p>{" "}
+                </div>
               </div>
               <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end gap-3">
                 {(() => {
@@ -816,10 +1018,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   const processing = isRegistering === selectedEvent.id;
                   const status = getEventStatus(selectedEvent.date);
                   const showRegisterBtn = !isCreated && status !== "ended";
-
                   if (isCreated) {
                     return (
                       <>
+                        {" "}
                         <button
                           onClick={() => handleEditEvent(selectedEvent)}
                           disabled={isDeleting === selectedEvent.id}
@@ -827,7 +1029,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         >
                           {" "}
                           <Pencil1Icon className="w-4 h-4" /> Sửa{" "}
-                        </button>
+                        </button>{" "}
                         <button
                           onClick={() => handleDeleteEvent(selectedEvent)}
                           disabled={isDeleting === selectedEvent.id}
@@ -864,7 +1066,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         disabled={
                           !canClick ||
                           isLoadingRegisteredIds ||
-                          isLoadingCreatedEventIds
+                          isLoadingCreatedEventIds ||
+                          isRegistered
                         }
                       >
                         {" "}
@@ -890,7 +1093,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
                         disabled
                       >
-                        Đã kết thúc
+                        {" "}
+                        Đã kết thúc{" "}
                       </button>
                     );
                   } else if (!user && status !== "ended") {
@@ -902,7 +1106,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         }}
                         className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
                       >
-                        Đăng nhập
+                        {" "}
+                        Đăng nhập{" "}
                       </button>
                     );
                   }
@@ -927,6 +1132,9 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                     user && !isCreatedByUser && status !== "ended";
                   const canClickRegister =
                     showRegisterButton && !isRegistered && !processing;
+                  const canEdit =
+                    user?.id === event.createdBy && status !== "ended";
+                  const canDelete = user?.id === event.createdBy;
                   return (
                     <div
                       key={event.id}
@@ -934,30 +1142,19 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                     >
                       {" "}
                       <div
-                        className="w-full h-40 bg-gray-200 relative cursor-pointer"
+                        className="relative w-full h-40 bg-gray-200 cursor-pointer"
                         onClick={() => onEventClick(event)}
                       >
                         {" "}
-                        {event.avatarUrl ? (
+                        {event.image ? (
                           <Image
-                            src={event.avatarUrl}
-                            alt={`Avatar`}
+                            src={event.image}
+                            alt={event.title}
                             layout="fill"
                             objectFit="cover"
-                            className="transition-opacity"
-                            onError={(e) => {
-                              const t = e.target as HTMLImageElement;
-                              t.style.opacity = "0";
-                              if (t.parentElement)
-                                t.parentElement.classList.add("bg-gray-300");
-                            }}
-                            onLoad={(e) => {
-                              (e.target as HTMLImageElement).style.opacity =
-                                "1";
-                            }}
                           />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl">
+                          <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
                             {event.title?.charAt(0).toUpperCase() || "?"}
                           </div>
                         )}{" "}
@@ -972,222 +1169,55 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                       <div className="p-4 flex flex-col flex-grow">
                         {" "}
                         <div
+                          className="mb-3 grow"
                           onClick={() => onEventClick(event)}
-                          className="cursor-pointer mb-3 grow"
+                          style={{ cursor: "pointer" }}
                         >
                           {" "}
-                          <h2 className="text-lg font-semibold mb-1 line-clamp-1">
+                          <h2 className="text-md font-semibold mb-1 line-clamp-2">
                             {event.title}
                           </h2>{" "}
-                          <div className="space-y-0.5 mb-2">
-                            {" "}
-                            <p className="text-sm flex items-center gap-1">
-                              <CalendarIcon className="w-3.5 h-3.5" />
-                              {new Date(event.date).toLocaleDateString("vi-VN")}
-                            </p>{" "}
-                            <p className="text-sm flex items-center gap-1">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                              {event.location}
-                            </p>{" "}
-                          </div>{" "}
-                          <div className="text-xs flex items-center gap-x-3 mt-1">
-                            {" "}
-                            {event.organizers?.length > 0 && (
-                              <span>👥 BTC: {event.organizers.length}</span>
-                            )}{" "}
-                            {event.attendees?.length > 0 && (
-                              <span>✅ ĐK: {event.attendees.length}</span>
-                            )}{" "}
-                          </div>{" "}
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <CalendarIcon className="w-3.5 h-3.5" />{" "}
+                            {new Date(event.date).toLocaleDateString("vi-VN")}
+                          </p>{" "}
+                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {event.location}
+                          </p>{" "}
                         </div>{" "}
-                        <div className="mt-auto pt-3 border-t border-gray-100">
+                        <div className="text-xs flex items-center gap-x-3 mt-1">
+                          {" "}
+                          {event.organizers?.length > 0 && (
+                            <span>👥 BTC: {event.organizers.length}</span>
+                          )}{" "}
+                          {event.attendees?.length > 0 && (
+                            <span>✅ ĐK: {event.attendees.length}</span>
+                          )}{" "}
+                        </div>{" "}
+                        <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
                           {" "}
                           {isCreatedByUser ? (
-                            <div className="w-full px-4 py-2 rounded-lg bg-purple-100 text-purple-700 text-sm text-center">
-                              ✨ Của bạn
+                            <div className="w-full px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium text-center">
+                              {" "}
+                              ✨ Của bạn{" "}
                             </div>
                           ) : showRegisterButton ? (
                             <button
                               onClick={() => {
-                                if (canClickRegister) {
-                                  onRegister(event);
-                                }
+                                if (canClickRegister) onRegister(event);
                               }}
-                              className={`w-full px-4 py-2 cursor-pointer rounded-lg text-white text-sm flex items-center justify-center ${
-                                isRegistered
-                                  ? "bg-green-500 cursor-not-allowed"
-                                  : processing
-                                  ? "bg-indigo-300 cursor-wait"
-                                  : "bg-indigo-500 hover:bg-indigo-600"
-                              }`}
-                              disabled={
-                                !canClickRegister ||
-                                isLoadingRegisteredIds ||
-                                isLoadingCreatedEventIds
-                              }
-                            >
-                              {" "}
-                              {isRegistered ? (
-                                <>
-                                  <CheckCircledIcon className="mr-1" /> Đã ĐK
-                                </>
-                              ) : processing ? (
-                                <>
-                                  <ReloadIcon className="animate-spin mr-2" />
-                                  ...
-                                </>
-                              ) : (
-                                <>
-                                  <Pencil1Icon className="mr-1" /> Đăng ký
-                                </>
-                              )}{" "}
-                            </button>
-                          ) : status === "ended" ? (
-                            <button
-                              className="w-full px-4 py-2 rounded-lg bg-gray-300 cursor-not-allowed text-sm"
-                              disabled
-                            >
-                              Đã kết thúc
-                            </button>
-                          ) : !user && status !== "ended" ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toast("Đăng nhập.", { icon: "🔒" });
-                              }}
-                              className="w-full px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
-                            >
-                              Đăng nhập
-                            </button>
-                          ) : null}{" "}
-                        </div>{" "}
-                      </div>{" "}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <ul className="space-y-4">
-                {paginatedEvents.map((event) => {
-                  const isRegistered = registeredEventIds.has(event.id);
-                  const isCreatedByUser = createdEventIds.has(event.id);
-                  const processing = isRegistering === event.id;
-                  const status = getEventStatus(event.date);
-                  const showRegisterButton =
-                    user && !isCreatedByUser && status !== "ended";
-                  const canClickRegister =
-                    showRegisterButton && !isRegistered && !processing;
-                  return (
-                    <li
-                      key={event.id}
-                      className="bg-white shadow-lg rounded-xl overflow-hidden flex flex-col md:flex-row border hover:border-indigo-300"
-                    >
-                      {" "}
-                      <div
-                        className="relative w-full md:w-1/3 xl:w-1/4 shrink-0 h-48 md:h-auto cursor-pointer"
-                        onClick={() => onEventClick(event)}
-                      >
-                        {" "}
-                        {event.avatarUrl ? (
-                          <Image
-                            src={event.avatarUrl}
-                            alt={event.title}
-                            layout="fill"
-                            objectFit="cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
-                            {event.title?.charAt(0).toUpperCase() || "?"}
-                          </div>
-                        )}{" "}
-                      </div>{" "}
-                      <div className="p-4 flex flex-col justify-between grow md:pl-4">
-                        {" "}
-                        <div className="mb-3">
-                          {" "}
-                          <div className="flex flex-col sm:flex-row justify-between items-start mb-1">
-                            <h2
-                              onClick={() => onEventClick(event)}
-                              className="text-md sm:text-lg font-semibold hover:text-indigo-600 cursor-pointer line-clamp-2 flex-1"
-                            >
-                              {event.title}
-                            </h2>
-                            <span
-                              className={`mt-1 sm:mt-0 ml-0 sm:ml-2 shrink-0 ${getStatusBadgeClasses(
-                                status
-                              )}`}
-                            >
-                              {getStatusIcon(status)} {getStatusText(status)}
-                            </span>
-                          </div>{" "}
-                          <div className="text-xs text-gray-500 space-y-1 mb-2">
-                            <p className="flex items-center gap-1">
-                              <CalendarIcon className="w-3.5 h-3.5" />
-                              {new Date(event.date).toLocaleDateString(
-                                "vi-VN"
-                              )}{" "}
-                              {event.time &&
-                                `- ${new Date(event.time).toLocaleTimeString(
-                                  "vi-VN",
-                                  { hour: "2-digit", minute: "2-digit" }
-                                )}`}
-                            </p>
-                            <p className="flex items-center gap-1">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-3.5 w-3.5"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                              {event.location}
-                            </p>
-                          </div>{" "}
-                          <p className="text-sm line-clamp-2 mb-2">
-                            {event.description || event.purpose || "..."}
-                          </p>{" "}
-                          <div className="text-xs flex flex-wrap items-center gap-x-3 gap-y-1">
-                            {event.organizers?.length > 0 && (
-                              <span className="inline-flex items-center gap-1">
-                                👥 {event.organizers.length} BTC
-                              </span>
-                            )}{" "}
-                            {event.attendees?.length > 0 && (
-                              <span className="inline-flex items-center gap-1">
-                                ✅ {event.attendees.length} ĐK
-                              </span>
-                            )}
-                          </div>{" "}
-                        </div>{" "}
-                        <div className="mt-auto">
-                          {" "}
-                          {isCreatedByUser ? (
-                            <div className="w-full px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium text-center">
-                              ✨ Của bạn
-                            </div>
-                          ) : showRegisterButton ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (canClickRegister) {
-                                  onRegister(event);
-                                }
-                              }}
-                              className={`w-full px-3 py-1.5 rounded-md text-white shadow-sm text-xs font-medium flex items-center justify-center ${
+                              className={`flex-grow px-3 py-1.5 rounded-md text-white text-xs font-medium flex items-center justify-center ${
                                 isRegistered
                                   ? "bg-green-500 cursor-default"
                                   : processing
@@ -1201,10 +1231,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 isRegistered
                               }
                             >
+                              {" "}
                               {isRegistered ? (
                                 <>
-                                  <CheckCircledIcon className="mr-1" />
-                                  Đã ĐK
+                                  <CheckCircledIcon className="mr-1" /> Đã ĐK
                                 </>
                               ) : processing ? (
                                 <>
@@ -1216,11 +1246,11 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                   <Pencil1Icon className="mr-1" />
                                   Đăng ký
                                 </>
-                              )}
+                              )}{" "}
                             </button>
                           ) : status === "ended" ? (
                             <button
-                              className="w-full px-3 py-1.5 rounded-md bg-gray-300 cursor-not-allowed text-xs"
+                              className="w-full px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs"
                               disabled
                             >
                               🏁 Đã kết thúc
@@ -1229,23 +1259,220 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toast("Đăng nhập.", { icon: "🔒" });
+                                toast("Vui lòng đăng nhập.", { icon: "🔒" });
                               }}
                               className="w-full px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-xs"
                             >
                               Đăng nhập
                             </button>
                           ) : null}{" "}
+                          {canEdit && (
+                            <button
+                              onClick={() => handleEditEvent(event)}
+                              className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200"
+                              title="Sửa sự kiện"
+                            >
+                              <Pencil1Icon className="w-4 h-4" />
+                            </button>
+                          )}{" "}
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDeleteEvent(event)}
+                              disabled={isDeleting === event.id}
+                              className={`p-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 ${
+                                isDeleting === event.id
+                                  ? "opacity-50 cursor-wait"
+                                  : ""
+                              }`}
+                              title="Xóa sự kiện"
+                            >
+                              {isDeleting === event.id ? (
+                                <ReloadIcon className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <TrashIcon className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}{" "}
                         </div>{" "}
                       </div>{" "}
-                    </li>
+                    </div>
                   );
-                })}
-              </ul>
+                })}{" "}
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
+                {" "}
+                <ul className="divide-y divide-gray-200">
+                  {" "}
+                  {paginatedEvents.map((event) => {
+                    const isRegistered = registeredEventIds.has(event.id);
+                    const isCreatedByUser = createdEventIds.has(event.id);
+                    const processing = isRegistering === event.id;
+                    const status = getEventStatus(event.date);
+                    const showRegisterButton =
+                      user && !isCreatedByUser && status !== "ended";
+                    const canClickRegister =
+                      showRegisterButton && !isRegistered && !processing;
+                    const canEdit =
+                      user?.id === event.createdBy && status !== "ended";
+                    const canDelete = user?.id === event.createdBy;
+                    return (
+                      <li
+                        key={event.id}
+                        className="px-4 py-3 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors"
+                      >
+                        {" "}
+                        <div
+                          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                          onClick={() => onEventClick(event)}
+                        >
+                          {" "}
+                          {event.image ? (
+                            <div className="relative w-16 h-12 rounded overflow-hidden flex-shrink-0 hidden sm:block bg-gray-100">
+                              <Image
+                                src={event.image}
+                                alt={event.title}
+                                layout="fill"
+                                objectFit="cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="relative w-16 h-12 rounded flex-shrink-0 hidden sm:block bg-gradient-to-br from-gray-100 to-gray-200 text-gray-400 items-center justify-center text-xl font-semibold">
+                              {event.title?.charAt(0).toUpperCase() || "?"}
+                            </div>
+                          )}{" "}
+                          <div className="flex-1 min-w-0">
+                            {" "}
+                            <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1">
+                              {event.title}
+                            </p>{" "}
+                            <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                              {" "}
+                              <span className="inline-flex items-center gap-1">
+                                <CalendarIcon className="w-3.5 h-3.5" />{" "}
+                                {new Date(event.date).toLocaleDateString(
+                                  "vi-VN"
+                                )}
+                              </span>{" "}
+                              <span className="inline-flex items-center gap-1">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={2}
+                                >
+                                  <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                  <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                {event.location}
+                              </span>{" "}
+                              <span
+                                className={`${getStatusBadgeClasses(status)}`}
+                              >
+                                {getStatusIcon(status)} {getStatusText(status)}
+                              </span>{" "}
+                            </div>{" "}
+                          </div>{" "}
+                        </div>{" "}
+                        <div className="mt-2 sm:mt-0 sm:ml-4 flex-shrink-0 flex items-center gap-2 justify-end">
+                          {" "}
+                          {isCreatedByUser ? (
+                            <div className="px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium">
+                              ✨ Của bạn
+                            </div>
+                          ) : showRegisterButton ? (
+                            <button
+                              onClick={() => {
+                                if (canClickRegister) onRegister(event);
+                              }}
+                              className={`px-3 py-1.5 rounded-md text-white text-xs font-medium flex items-center justify-center ${
+                                isRegistered
+                                  ? "bg-green-500 cursor-default"
+                                  : processing
+                                  ? "bg-indigo-300 cursor-wait"
+                                  : "bg-indigo-500 hover:bg-indigo-600"
+                              }`}
+                              disabled={
+                                !canClickRegister ||
+                                isLoadingRegisteredIds ||
+                                isLoadingCreatedEventIds ||
+                                isRegistered
+                              }
+                            >
+                              {" "}
+                              {isRegistered ? (
+                                <>
+                                  <CheckCircledIcon className="mr-1" /> Đã ĐK
+                                </>
+                              ) : processing ? (
+                                <>
+                                  <ReloadIcon className="animate-spin mr-1.5" />
+                                  ...
+                                </>
+                              ) : (
+                                <>
+                                  <Pencil1Icon className="mr-1" />
+                                  Đăng ký
+                                </>
+                              )}{" "}
+                            </button>
+                          ) : status === "ended" ? (
+                            <button
+                              className="px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs"
+                              disabled
+                            >
+                              🏁 Đã kết thúc
+                            </button>
+                          ) : !user && status !== "ended" ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toast("Vui lòng đăng nhập.", { icon: "🔒" });
+                              }}
+                              className="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-xs"
+                            >
+                              Đăng nhập
+                            </button>
+                          ) : null}{" "}
+                          {canEdit && (
+                            <button
+                              onClick={() => handleEditEvent(event)}
+                              className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200"
+                              title="Sửa sự kiện"
+                            >
+                              <Pencil1Icon className="w-4 h-4" />
+                            </button>
+                          )}{" "}
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDeleteEvent(event)}
+                              disabled={isDeleting === event.id}
+                              className={`p-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 ${
+                                isDeleting === event.id
+                                  ? "opacity-50 cursor-wait"
+                                  : ""
+                              }`}
+                              title="Xóa sự kiện"
+                            >
+                              {isDeleting === event.id ? (
+                                <ReloadIcon className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <TrashIcon className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}{" "}
+                        </div>{" "}
+                      </li>
+                    );
+                  })}{" "}
+                </ul>{" "}
+              </div>
             )
           ) : (
             <p className="text-gray-500 text-center col-span-1 md:col-span-2 lg:col-span-3 py-6 italic">
-              Không tìm thấy sự kiện nào khớp với bộ lọc.
+              Không tìm thấy sự kiện nào khớp.
             </p>
           )}
           {processedEvents.length > 0 && totalPages > 1 && (
@@ -1292,7 +1519,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         onEventUpdated={handleEventUpdated}
         currentUserId={user?.id || null}
       />
-
       <ConfirmationDialog
         isOpen={confirmationDialogState.isOpen}
         title={confirmationDialogState.title}
@@ -1301,12 +1527,12 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         confirmText={confirmationDialogState.confirmText || "Xác nhận"}
         cancelText={confirmationDialogState.cancelText || "Hủy bỏ"}
         onConfirm={() => {
-          if (confirmationDialogState.onConfirm) {
-            confirmationDialogState.onConfirm(); 
-          }
+          if (confirmationDialogState.onConfirm)
+            confirmationDialogState.onConfirm();
         }}
         onCancel={handleCancelConfirmation}
       />
+      {/* <CreateNewsModal isOpen={isNewsModalOpen} onClose={handleCloseModal} onSubmit={handleNewsFormSubmit} isSubmitting={isSubmittingNews} editMode={!!editingNewsItem} initialData={editingNewsItem} /> */}
     </div>
   );
 };

@@ -4,7 +4,8 @@ import StarterKit from '@tiptap/starter-kit';
 import FontFamily from '@tiptap/extension-font-family';
 import TextStyle from '@tiptap/extension-text-style';
 import Underline from '@tiptap/extension-underline';
-import MenuBar from './MenuBar'; 
+import Image from '@tiptap/extension-image';
+import MenuBar from './MenuBar';
 
 interface MyTiptapEditorProps {
   initialContent?: string;
@@ -19,12 +20,16 @@ const MyTiptapEditor: React.FC<MyTiptapEditorProps> = ({
 }) => {
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ }),
-      TextStyle.configure({ }),
+      StarterKit.configure({}),
+      TextStyle.configure({}),
       FontFamily.configure({
-          types: ['textStyle'],
+        types: ['textStyle'],
       }),
       Underline,
+      Image.configure({
+        inline: true,
+        allowBase64: true,
+      }),
     ],
     content: initialContent,
     onUpdate: ({ editor: updatedEditor }: { editor: Editor }) => {
@@ -50,8 +55,8 @@ const MyTiptapEditor: React.FC<MyTiptapEditorProps> = ({
   return (
     <div className={`tiptap-editor-wrapper border border-gray-300 rounded-md overflow-hidden ${disabled ? 'bg-gray-100' : 'bg-white'}`}>
       <MenuBar editor={editor} disabled={disabled} />
-       <div className={disabled ? 'opacity-70 cursor-not-allowed' : ''}>
-          <EditorContent editor={editor} />
+      <div className={disabled ? 'opacity-70 cursor-not-allowed' : ''}>
+        <EditorContent editor={editor} />
       </div>
     </div>
   );

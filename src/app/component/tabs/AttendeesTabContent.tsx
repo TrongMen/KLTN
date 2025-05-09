@@ -8,10 +8,12 @@ import React, {
   useRef,
 } from "react";
 import { toast } from "react-hot-toast";
-import Link from "next/link";
+import Image from "next/image";
 import { User as MainUserType } from "../homeuser";
 import QrScannerModal from "../modals/QrScannerModal";
 import { Html5QrcodeResult } from "html5-qrcode";
+// import MyQrScannerModal from '../modals/MyQrScannerModal';
+import QRScanner from '../modals/QRScanner';
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -20,7 +22,7 @@ import {
   PersonIcon,
   IdCardIcon,
   Link2Icon,
-  ReloadIcon, // Import ReloadIcon
+  ReloadIcon,
   MagnifyingGlassIcon,
   CalendarIcon,
   Component1Icon,
@@ -28,7 +30,10 @@ import {
   DownloadIcon,
   InfoCircledIcon,
   ExclamationTriangleIcon,
-  ArchiveIcon
+  ArchiveIcon,
+  ChevronLeftIcon,
+  ClockIcon, // Thêm ClockIcon
+  CheckCircledIcon, // Thêm CheckCircledIcon
 } from "@radix-ui/react-icons";
 
 interface ApprovedEvent {
@@ -38,6 +43,8 @@ interface ApprovedEvent {
   location?: string;
   status?: string;
   createdAt?: string;
+  avatarUrl?: string | null;
+  progressStatus?: "UPCOMING" | "ONGOING" | "ENDED" | string;
 }
 
 interface Attendee {
@@ -77,140 +84,75 @@ interface QrCodeModalProps {
   eventName?: string;
 }
 
-function QrCodeModal({
-  isOpen,
-  onClose,
-  qrCodeUrl,
-  isLoadingQrCode,
-  qrCodeError,
-  eventName = "Sự kiện",
-}: QrCodeModalProps) {
-  if (!isOpen) return null;
+// --- Thêm các hàm helper từ HomeTabContent ---
+type EventStatus = "upcoming" | "ongoing" | "ended";
 
-  return (
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 transition-opacity duration-300 ease-out"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="qr-modal-title"
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-md p-5 transform transition-all duration-300 ease-out scale-100 relative"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-2 cursor-pointer right-2 text-gray-500 hover:text-gray-800 p-1 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-400"
-          aria-label="Đóng modal"
-        >
-          <Cross2Icon className="w-5 h-5" />
-        </button>
+const getEventStatus = (eventDateStr?: string | null): EventStatus => {
+  if (!eventDateStr) return "upcoming";
+  try {
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+    const eventDate = new Date(eventDateStr);
+    if (isNaN(eventDate.getTime())) return "upcoming";
+    const eventDateStart = new Date(
+      eventDate.getFullYear(),
+      eventDate.getMonth(),
+      eventDate.getDate()
+    );
+    if (eventDateStart < todayStart) return "ended";
+    else if (eventDateStart > todayStart) return "upcoming";
+    else return "ongoing";
+  } catch (e) {
+    console.error("Error parsing event date for status:", e);
+    return "upcoming";
+  }
+};
 
-        <h3
-          id="qr-modal-title"
-          className="text-lg font-semibold text-center text-gray-800 mb-4"
-        >
-          Mã QR Điểm Danh
-        </h3>
-        <p className="text-sm text-center text-gray-600 mb-5 line-clamp-2">
-          {eventName}
-        </p>
+const getStatusBadgeClasses = (status: EventStatus): string => {
+  const base =
+    "px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1";
+  switch (status) {
+    case "ongoing":
+      return `${base} bg-green-100 text-green-800`;
+    case "upcoming":
+      return `${base} bg-blue-100 text-blue-800`;
+    case "ended":
+      return `${base} bg-gray-100 text-gray-700`;
+    default:
+      return `${base} bg-gray-100 text-gray-600`;
+  }
+};
 
-        <div className="flex justify-center items-center min-h-[250px]">
-          {isLoadingQrCode && (
-            <p className="text-sm text-gray-500 italic">Đang tải mã QR...</p>
-          )}
-          {qrCodeError && (
-            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200 text-center">
-              {qrCodeError}
-            </p>
-          )}
-          {qrCodeUrl && !isLoadingQrCode && !qrCodeError && (
-            <img
-              src={qrCodeUrl}
-              alt={`Mã QR điểm danh cho ${eventName}`}
-              className="w-full max-w-[300px] h-auto border border-gray-300 rounded bg-white p-1 shadow-sm"
-            />
-          )}
-        </div>
-        <button
-          onClick={onClose}
-          className="mt-6 w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
-        >
-          Đóng
-        </button>
-      </div>
-    </div>
-  );
-}
+const getStatusText = (status: EventStatus): string => {
+  switch (status) {
+    case "ongoing":
+      return "Đang diễn ra";
+    case "upcoming":
+      return "Sắp diễn ra";
+    case "ended":
+      return "Đã kết thúc";
+    default:
+      return "";
+  }
+};
 
-function ConfirmationDialog({
-  isOpen,
-  title,
-  message,
-  onConfirm,
-  onCancel,
-  confirmText = "Xác nhận",
-  cancelText = "Hủy bỏ",
-  confirmVariant = "primary",
-}: ConfirmationDialogProps) {
-  if (!isOpen) return null;
-  const confirmButtonClasses = useMemo(() => {
-    let b =
-      "flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ";
-    if (confirmVariant === "danger") {
-      b +=
-        "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 cursor-pointer";
-    } else if (confirmVariant === "warning") {
-      b +=
-        "bg-yellow-500 hover:bg-yellow-600 text-white focus:ring-yellow-400 cursor-pointer";
-    } else {
-      b +=
-        "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 cursor-pointer";
-    }
-    return b;
-  }, [confirmVariant]);
-  const cancelButtonClasses =
-    "flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2";
-
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 transition-opacity duration-300 ease-out"
-      onClick={onCancel}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="dialog-title"
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 transform transition-all duration-300 ease-out scale-100"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3
-          id="dialog-title"
-          className={`text-lg font-bold mb-3 ${
-            confirmVariant === "danger"
-              ? "text-red-700"
-              : confirmVariant === "warning"
-              ? "text-yellow-700"
-              : "text-gray-800"
-          }`}
-        >
-          {title}
-        </h3>
-        <div className="text-sm text-gray-600 mb-5">{message}</div>
-        <div className="flex gap-3">
-          <button onClick={onCancel} className={cancelButtonClasses}>
-            {cancelText}
-          </button>
-          <button onClick={onConfirm} className={confirmButtonClasses}>
-            {confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+const getStatusIcon = (status: EventStatus) => {
+  switch (status) {
+    case "ongoing":
+      return <CheckCircledIcon className="w-3 h-3" />;
+    case "upcoming":
+      return <ClockIcon className="w-3 h-3" />;
+    case "ended":
+      return <ArchiveIcon className="w-3 h-3" />;
+    default:
+      return null;
+  }
+};
+// --- Kết thúc thêm hàm helper ---
 
 const getWeekRange = (
   refDate: Date
@@ -273,6 +215,138 @@ const getAttendeeName = (attendee: Attendee): string => {
   );
 };
 
+function QrCodeModal({
+  isOpen,
+  onClose,
+  qrCodeUrl,
+  isLoadingQrCode,
+  qrCodeError,
+  eventName = "Sự kiện",
+}: QrCodeModalProps) {
+  if (!isOpen) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 transition-opacity duration-300 ease-out"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="qr-modal-title"
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-md p-5 transform transition-all duration-300 ease-out scale-100 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-2 cursor-pointer right-2 text-gray-500 hover:text-gray-800 p-1 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-400"
+          aria-label="Đóng modal"
+        >
+          <Cross2Icon className="w-5 h-5" />
+        </button>
+        <h3
+          id="qr-modal-title"
+          className="text-lg font-semibold text-center text-gray-800 mb-4"
+        >
+          Mã QR Điểm Danh
+        </h3>
+        <p className="text-sm text-center text-gray-600 mb-5 line-clamp-2">
+          {eventName}
+        </p>
+        <div className="flex justify-center items-center min-h-[250px]">
+          {isLoadingQrCode && (
+            <p className="text-sm text-gray-500 italic">Đang tải mã QR...</p>
+          )}{" "}
+          {qrCodeError && (
+            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded border border-red-200 text-center">
+              {qrCodeError}
+            </p>
+          )}{" "}
+          {qrCodeUrl && !isLoadingQrCode && !qrCodeError && (
+            <img
+              src={qrCodeUrl}
+              alt={`Mã QR điểm danh cho ${eventName}`}
+              className="w-full max-w-[300px] h-auto border border-gray-300 rounded bg-white p-1 shadow-sm"
+            />
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-6 w-full px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmationDialog({
+  isOpen,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  confirmText = "Xác nhận",
+  cancelText = "Hủy bỏ",
+  confirmVariant = "primary",
+}: ConfirmationDialogProps) {
+  if (!isOpen) return null;
+  const confirmButtonClasses = useMemo(() => {
+    let b =
+      "flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ";
+    if (confirmVariant === "danger") {
+      b +=
+        "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 cursor-pointer";
+    } else if (confirmVariant === "warning") {
+      b +=
+        "bg-yellow-500 hover:bg-yellow-600 text-white focus:ring-yellow-400 cursor-pointer";
+    } else {
+      b +=
+        "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 cursor-pointer";
+    }
+    return b;
+  }, [confirmVariant]);
+  const cancelButtonClasses =
+    "flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2";
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 transition-opacity duration-300 ease-out"
+      onClick={onCancel}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dialog-title"
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 transform transition-all duration-300 ease-out scale-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3
+          id="dialog-title"
+          className={`text-lg font-bold mb-3 ${
+            confirmVariant === "danger"
+              ? "text-red-700"
+              : confirmVariant === "warning"
+              ? "text-yellow-700"
+              : "text-gray-800"
+          }`}
+        >
+          {title}
+        </h3>
+        <div className="text-sm text-gray-600 mb-5">{message}</div>
+        <div className="flex gap-3">
+          {" "}
+          <button onClick={onCancel} className={cancelButtonClasses}>
+            {cancelText}
+          </button>{" "}
+          <button onClick={onConfirm} className={confirmButtonClasses}>
+            {confirmText}
+          </button>{" "}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const [userApprovedEvents, setUserApprovedEvents] = useState<ApprovedEvent[]>(
     []
@@ -281,13 +355,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const [eventError, setEventError] = useState<string | null>(null);
   const [eventSearchTerm, setEventSearchTerm] = useState("");
   const [eventSortOrder, setEventSortOrder] = useState<"az" | "za">("az");
-  const [eventTimeFilter, setEventTimeFilter] = useState<
-    "all" | "today" | "thisWeek" | "thisMonth" | "dateRange"
+  // Đổi tên và cập nhật kiểu cho state bộ lọc sự kiện
+  const [eventStatusFilterOption, setEventStatusFilterOption] = useState<
+    "all" | "upcoming" | "ongoing" | "ended" | "dateRange"
   >("all");
   const [eventStartDateFilter, setEventStartDateFilter] = useState<string>("");
   const [eventEndDateFilter, setEventEndDateFilter] = useState<string>("");
   const [eventViewMode, setEventViewMode] = useState<"list" | "card">("list");
-
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [isLoadingAttendees, setIsLoadingAttendees] = useState<boolean>(false);
@@ -299,7 +373,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const [attendeeViewMode, setAttendeeViewMode] = useState<"list" | "card">(
     "list"
   );
-
   const [originalAttendance, setOriginalAttendance] = useState<
     Record<string, boolean>
   >({});
@@ -321,139 +394,146 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     cancelText?: string;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
   const [isExporting, setIsExporting] = useState<boolean>(false);
-
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [isLoadingQrCode, setIsLoadingQrCode] = useState<boolean>(false);
   const [qrCodeError, setQrCodeError] = useState<string | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
-
-  const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false); // State for refresh button
-
-  const fetchUserApprovedEvents = useCallback(async (showToast = false) => { // Added showToast
-    if (!user?.id) {
-      setEventError("Không tìm thấy thông tin người dùng.");
-      setIsLoadingEvents(false);
-      setUserApprovedEvents([]);
-      return;
-    }
-    setIsLoadingEvents(true);
-    setEventError(null);
-    setUserApprovedEvents([]);
-    try {
-      const tk = localStorage.getItem("authToken");
-      if (!tk) throw new Error("Chưa đăng nhập.");
-      const h = { Authorization: `Bearer ${tk}` };
-      const cId = user.id;
-      const url = `http://localhost:8080/identity/api/events/creator/${cId}`;
-      const evRes = await fetch(url, { headers: h, cache: "no-store" });
-      if (!evRes.ok) {
-        const d = await evRes.json().catch(() => ({}));
-        throw new Error(d?.message || `Lỗi tải sự kiện (${evRes.status})`);
-      }
-      const data = await evRes.json();
-      if (data.code === 1000 && Array.isArray(data.result)) {
-        const approved = data.result
-          .filter((e: any) => e.status === "APPROVED")
-          .map((e: any) => ({
-            id: e.id,
-            name: e.name,
-            time: e.time,
-            location: e.location,
-            status: e.status,
-            createdAt: e.createdAt,
-          }));
-        setUserApprovedEvents(approved);
-        if (showToast) { // Show toast on success if requested
-          toast.success("Đã làm mới danh sách sự kiện!");
-        }
-      } else {
+  // const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const currentUserId = user?.id ?? null;
+  const [isProcessingCheckIn, setIsProcessingCheckIn] = useState(false);  
+  const fetchUserApprovedEvents = useCallback(
+    async (showToast = false) => {
+      if (!user?.id) {
+        setEventError("Không tìm thấy thông tin người dùng.");
+        setIsLoadingEvents(false);
         setUserApprovedEvents([]);
-        console.warn("API creator events returned unexpected data:", data);
-         if (showToast) { // Show error toast if requested
-           toast.error("Làm mới thất bại: Dữ liệu không hợp lệ.");
-         }
+        return;
       }
-    } catch (e: any) {
-      console.error("Lỗi fetch UserApprovedEvents:", e);
-      setEventError(e.message || "Lỗi không xác định khi tải sự kiện");
-      if (showToast) { // Show error toast if requested
-        toast.error(`Làm mới thất bại: ${e.message || 'Lỗi không xác định'}`);
-      }
-    } finally {
-      setIsLoadingEvents(false);
-    }
-  }, [user]);
-
-  const fetchAttendees = useCallback(async (eventId: string, showToast = false) => { // Added showToast
-    setIsLoadingAttendees(true);
-    setAttendeeError(null);
-    try {
-      const token = localStorage.getItem("authToken");
-      if (!token) throw new Error("Chưa đăng nhập.");
-      const h = { Authorization: `Bearer ${token}` };
-      const res = await fetch(
-        `http://localhost:8080/identity/api/events/${eventId}/attendees`,
-        { headers: h, cache: "no-store" }
-      );
-      if (!res.ok) {
-        let m = `Lỗi tải danh sách người tham gia`;
-        try {
-          const d = await res.json();
-          m = d.message || m;
-        } catch (_) {}
-        throw new Error(`<span class="math-inline">\{m\} \(</span>{res.status})`);
-      }
-      const data = await res.json();
-      if (data.code === 1000 && Array.isArray(data.result)) {
-        const fetched: Attendee[] = data.result;
-        const uniqueAttendees = fetched;
-        setAttendees(uniqueAttendees);
-        const initialAttendance: Record<string, boolean> = {};
-        uniqueAttendees.forEach((a) => {
-          if (a.userId) initialAttendance[a.userId] = a.attending ?? false;
-        });
-        setOriginalAttendance(initialAttendance);
-        setAttendanceChanges(initialAttendance);
-        setSelectedForDelete(new Set());
-         if (showToast) { // Show toast on success if requested
-            toast.success("Đã làm mới danh sách người tham gia!");
+      setIsLoadingEvents(true);
+      setEventError(null);
+      setUserApprovedEvents([]);
+      try {
+        const tk = localStorage.getItem("authToken");
+        if (!tk) throw new Error("Chưa đăng nhập.");
+        const h = { Authorization: `Bearer ${tk}` };
+        const cId = user.id;
+        const url = `http://localhost:8080/identity/api/events/creator/${cId}`;
+        const evRes = await fetch(url, { headers: h, cache: "no-store" });
+        if (!evRes.ok) {
+          const d = await evRes.json().catch(() => ({}));
+          throw new Error(d?.message || `Lỗi tải sự kiện (${evRes.status})`);
         }
-      } else {
+        const data = await evRes.json();
+        if (data.code === 1000 && Array.isArray(data.result)) {
+          const approved = data.result
+            .filter((e: any) => e.status === "APPROVED")
+            .map((e: any) => ({
+              id: e.id,
+              name: e.name,
+              time: e.time,
+              location: e.location,
+              status: e.status,
+              createdAt: e.createdAt,
+              avatarUrl: e.avatarUrl,
+              progressStatus: e.progressStatus,
+            }));
+          setUserApprovedEvents(approved);
+          if (showToast) {
+            toast.success("Đã làm mới danh sách sự kiện!");
+          }
+        } else {
+          setUserApprovedEvents([]);
+          console.warn("API creator events returned unexpected data:", data);
+          if (showToast) {
+            toast.error("Làm mới thất bại: Dữ liệu không hợp lệ.");
+          }
+        }
+      } catch (e: any) {
+        console.error("Lỗi fetch UserApprovedEvents:", e);
+        setEventError(e.message || "Lỗi không xác định khi tải sự kiện");
+        if (showToast) {
+          toast.error(`Làm mới thất bại: ${e.message || "Lỗi không xác định"}`);
+        }
+      } finally {
+        setIsLoadingEvents(false);
+      }
+    },
+    [user]
+  );
+  const fetchAttendees = useCallback(
+    async (eventId: string, showToast = false) => {
+      setIsLoadingAttendees(true);
+      setAttendeeError(null);
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Chưa đăng nhập.");
+        const h = { Authorization: `Bearer ${token}` };
+        const res = await fetch(
+          `http://localhost:8080/identity/api/events/${eventId}/attendees`,
+          { headers: h, cache: "no-store" }
+        );
+        if (!res.ok) {
+          let m = `Lỗi tải danh sách người tham gia`;
+          try {
+            const d = await res.json();
+            m = d.message || m;
+          } catch (_) {}
+          throw new Error(`${m} (${res.status})`);
+        }
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result)) {
+          const fetched: Attendee[] = data.result;
+          const uniqueAttendees = fetched;
+          setAttendees(uniqueAttendees);
+          const initialAttendance: Record<string, boolean> = {};
+          uniqueAttendees.forEach((a) => {
+            if (a.userId) initialAttendance[a.userId] = a.attending ?? false;
+          });
+          setOriginalAttendance(initialAttendance);
+          setAttendanceChanges(initialAttendance);
+          setSelectedForDelete(new Set());
+          if (showToast) {
+            toast.success("Đã làm mới danh sách người tham gia!");
+          }
+        } else {
+          setAttendees([]);
+          setOriginalAttendance({});
+          setAttendanceChanges({});
+          throw new Error(
+            data.message || "Lỗi định dạng dữ liệu người tham gia"
+          );
+        }
+      } catch (err: any) {
+        console.error("Lỗi fetchAttendees:", err);
+        setAttendeeError(
+          err.message || "Lỗi không xác định khi tải người tham gia"
+        );
         setAttendees([]);
         setOriginalAttendance({});
         setAttendanceChanges({});
-        throw new Error(data.message || "Lỗi định dạng dữ liệu người tham gia");
+        if (showToast) {
+          toast.error(
+            `Làm mới thất bại: ${err.message || "Lỗi không xác định"}`
+          );
+        }
+      } finally {
+        setIsLoadingAttendees(false);
       }
-    } catch (err: any) {
-      console.error("Lỗi fetchAttendees:", err);
-      setAttendeeError(
-        err.message || "Lỗi không xác định khi tải người tham gia"
-      );
-      setAttendees([]);
-      setOriginalAttendance({});
-      setAttendanceChanges({});
-       if (showToast) { // Show error toast if requested
-          toast.error(`Làm mới thất bại: ${err.message || 'Lỗi không xác định'}`);
-       }
-    } finally {
-      setIsLoadingAttendees(false);
-    }
-  }, []);
-
+    },
+    []
+  );
   const fetchQrCodeImage = useCallback(async (eventId: string) => {
     setIsLoadingQrCode(true);
     setQrCodeError(null);
     setQrCodeUrl(null);
     let tempUrl: string | null = null;
-
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Chưa đăng nhập để lấy mã QR.");
       const h = { Authorization: `Bearer ${token}` };
       const url = `http://localhost:8080/identity/api/events/${eventId}/qr-code-image`;
       const res = await fetch(url, { headers: h });
-
       if (!res.ok) {
         let m = `Lỗi tải mã QR`;
         try {
@@ -465,9 +545,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             m = `${m}: ${txt.slice(0, 100)}`;
           } catch (_) {}
         }
-        throw new Error(`<span class="math-inline">\{m\} \(</span>{res.status})`);
+        throw new Error(`${m} (${res.status})`);
       }
-
       const blob = await res.blob();
       if (blob.type.startsWith("image/")) {
         tempUrl = window.URL.createObjectURL(blob);
@@ -499,12 +578,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   }, []);
 
   useEffect(() => {
-    fetchUserApprovedEvents(); // Fetch events on initial load
+    fetchUserApprovedEvents();
   }, [fetchUserApprovedEvents]);
-
   useEffect(() => {
     let qrUrlToRevoke: string | null = null;
-
     if (selectedEventId) {
       setAttendees([]);
       setOriginalAttendance({});
@@ -513,22 +590,18 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setAttendeeError(null);
       setMode("view");
       setIsLoadingAttendees(true);
-
       setQrCodeUrl(null);
       setQrCodeError(null);
       setIsLoadingQrCode(true);
       setIsQrModalOpen(false);
       setIsScannerOpen(false);
-
-      fetchAttendees(selectedEventId); // Fetch attendees for selected event
-
-      fetchQrCodeImage(selectedEventId) // Fetch QR code for selected event
+      fetchAttendees(selectedEventId);
+      fetchQrCodeImage(selectedEventId)
         .then((newUrl) => {
           qrUrlToRevoke = newUrl;
         })
         .catch(() => {});
     } else {
-      // Reset states when no event is selected
       setAttendees([]);
       setOriginalAttendance({});
       setAttendanceChanges({});
@@ -536,15 +609,12 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setAttendeeError(null);
       setMode("view");
       setIsLoadingAttendees(false);
-
       setQrCodeUrl(null);
       setQrCodeError(null);
       setIsLoadingQrCode(false);
       setIsQrModalOpen(false);
       setIsScannerOpen(false);
     }
-
-    // Cleanup function to revoke object URL
     return () => {
       if (qrUrlToRevoke) {
         window.URL.revokeObjectURL(qrUrlToRevoke);
@@ -552,33 +622,23 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     };
   }, [selectedEventId, fetchAttendees, fetchQrCodeImage]);
 
-  useEffect(() => {
-    // Log mỗi khi isScannerOpen thay đổi
-    console.log(`!!!!!!!! AttendeesTabContent: isScannerOpen changed to: ${isScannerOpen} !!!!!!!!`);
-  }, [isScannerOpen]);
-  // Added handleRefresh function
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     const toastId = toast.loading("Đang làm mới...");
     try {
-        if (selectedEventId) {
-            await fetchAttendees(selectedEventId, true); // Pass true to show toast
-            // Toast handled inside fetchAttendees now
-            toast.dismiss(toastId); // Dismiss loading toast
-        } else {
-            await fetchUserApprovedEvents(true); // Pass true to show toast
-            // Toast handled inside fetchUserApprovedEvents now
-             toast.dismiss(toastId); // Dismiss loading toast
-        }
+      if (selectedEventId) {
+        await fetchAttendees(selectedEventId, true);
+      } else {
+        await fetchUserApprovedEvents(true);
+      }
+      toast.dismiss(toastId);
     } catch (error: any) {
-         // Log the error, toast already shown in fetch functions if showToast was true
-         console.error("Refresh failed:", error);
-         toast.error("Làm mới thất bại.", { id: toastId }); // General error if needed
+      console.error("Refresh failed:", error);
+      toast.error("Làm mới thất bại.", { id: toastId });
     } finally {
-        setIsRefreshing(false);
+      setIsRefreshing(false);
     }
-  };
-
+  }, [selectedEventId, fetchAttendees, fetchUserApprovedEvents]);
   const handleSelectEvent = (eventId: string) => {
     setSelectedEventId(eventId);
     setMode("view");
@@ -588,36 +648,50 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     setIsQrModalOpen(false);
     setIsScannerOpen(false);
   };
-
   const handleBackToEventList = () => {
     setSelectedEventId(null);
   };
 
+  const selectedEventFullData = useMemo(() => {
+    if (!selectedEventId || !Array.isArray(userApprovedEvents)) return null;
+    return (
+      userApprovedEvents.find(
+        (event) =>
+          event &&
+          typeof event.id !== "undefined" &&
+          event.id === selectedEventId
+      ) || null
+    );
+  }, [userApprovedEvents, selectedEventId]);
+
+  const isEventOngoing = selectedEventFullData?.progressStatus === "ONGOING";
+
   const handleSetMode = (newMode: "view" | "attendance" | "delete") => {
+    if (newMode === "attendance" && !isEventOngoing) {
+      toast.error("Điểm danh chỉ khả dụng khi sự kiện đang diễn ra.");
+      return;
+    }
     setMode(newMode);
     if (newMode === "view") {
       setSelectedForDelete(new Set());
       setAttendanceChanges({ ...originalAttendance });
-    } else if (newMode === 'attendance') {
+    } else if (newMode === "attendance") {
       setAttendanceChanges({ ...originalAttendance });
       setSelectedForDelete(new Set());
-    } else if (newMode === 'delete') {
+    } else if (newMode === "delete") {
       setAttendanceChanges({ ...originalAttendance });
       setSelectedForDelete(new Set());
     }
   };
-
   const handleCancelMode = () => {
     handleSetMode("view");
   };
-
   const handleAttendanceCheckboxChange = (
     userId: string,
     isChecked: boolean
   ) => {
     setAttendanceChanges((prev) => ({ ...prev, [userId]: isChecked }));
   };
-
   const handleDeleteCheckboxChange = (userId: string, isChecked: boolean) => {
     setSelectedForDelete((prev) => {
       const next = new Set(prev);
@@ -629,7 +703,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       return next;
     });
   };
-
   const handleSelectAllForDelete = (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -641,24 +714,29 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setSelectedForDelete(new Set());
     }
   };
-
   const handleSaveChanges = async () => {
     if (!selectedEventId || isProcessing) return;
     const changes: { userId: string; status: boolean }[] = [];
     Object.keys(attendanceChanges).forEach((id) => {
-      if (id in originalAttendance && attendanceChanges[id] !== originalAttendance[id]) {
-          changes.push({ userId: id, status: attendanceChanges[id] });
-      } else if (!(id in originalAttendance) && attendanceChanges[id] === true) {
-          console.warn(`User ID ${id} found in changes but not in original attendance.`);
+      if (
+        id in originalAttendance &&
+        attendanceChanges[id] !== originalAttendance[id]
+      ) {
+        changes.push({ userId: id, status: attendanceChanges[id] });
+      } else if (
+        !(id in originalAttendance) &&
+        attendanceChanges[id] === true
+      ) {
+        console.warn(
+          `User ID ${id} found in changes but not in original attendance.`
+        );
       }
     });
-
     if (changes.length === 0) {
       toast("Không có thay đổi để lưu.", { icon: "ℹ️" });
       setMode("view");
       return;
     }
-
     setIsProcessing(true);
     const loadId = toast.loading(`Đang lưu ${changes.length} thay đổi...`);
     const token = localStorage.getItem("authToken");
@@ -667,9 +745,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setIsProcessing(false);
       return;
     }
-
     const promises = changes.map(({ userId, status }) => {
-      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}?isAttending=${status}`;
+      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}?isAttending=${status}`;
       return fetch(url, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
@@ -683,20 +760,23 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             } catch (_) {}
             return { status: "rejected", reason: m, userId };
           }
-           try {
-             const updateResult = await res.json();
-             if (updateResult.code !== 1000 && updateResult.message) {
-                 return { status: "rejected", reason: updateResult.message, userId };
-             }
-           } catch(e) {}
+          try {
+            const updateResult = await res.json();
+            if (updateResult.code !== 1000 && updateResult.message) {
+              return {
+                status: "rejected",
+                reason: updateResult.message,
+                userId,
+              };
+            }
+          } catch (e) {}
           return { status: "fulfilled", value: { userId, status } };
         })
         .catch((err) => ({ status: "rejected", reason: err.message, userId }));
     });
-
     const results = await Promise.allSettled(promises);
-    let ok = 0, fail = 0;
-
+    let ok = 0,
+      fail = 0;
     results.forEach((r) => {
       if (r.status === "fulfilled" && r.value.status === "fulfilled") {
         ok++;
@@ -711,26 +791,22 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         console.error(`Lỗi lưu UserID ${failedUserId || "unknown"}:`, reason);
       }
     });
-
     if (ok > 0) {
-        toast.success(`Đã lưu ${ok} thay đổi.`, { id: loadId });
+      toast.success(`Đã lưu ${ok} thay đổi.`, { id: loadId });
     }
     if (fail > 0) {
-        toast.error(`Lưu thất bại ${fail} thay đổi.`, {
-          id: ok === 0 ? loadId : undefined,
-        });
+      toast.error(`Lưu thất bại ${fail} thay đổi.`, {
+        id: ok === 0 ? loadId : undefined,
+      });
     } else if (ok === 0 && fail === 0) {
-        toast.dismiss(loadId);
+      toast.dismiss(loadId);
     }
-
     if (selectedEventId) {
-      await fetchAttendees(selectedEventId); // Fetch again to get latest confirmed data
+      await fetchAttendees(selectedEventId);
     }
-
     setIsProcessing(false);
     setMode("view");
   };
-
   const executeBatchDelete = async () => {
     const idsToDelete = Array.from(selectedForDelete);
     if (!selectedEventId || idsToDelete.length === 0 || isProcessing) return;
@@ -742,9 +818,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setIsProcessing(false);
       return;
     }
-
     const promises = idsToDelete.map((userId) => {
-      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}`;
+      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}`;
       return fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -758,24 +833,23 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             } catch (_) {}
             return { status: "rejected", reason: m, userId };
           }
-           try {
-             const deleteResult = await res.json();
-             if (deleteResult.code !== 1000 && deleteResult.message) {
-                 return {
-                   status: "rejected",
-                   reason: deleteResult.message,
-                   userId,
-                 };
-             }
-           } catch (e) {}
+          try {
+            const deleteResult = await res.json();
+            if (deleteResult.code !== 1000 && deleteResult.message) {
+              return {
+                status: "rejected",
+                reason: deleteResult.message,
+                userId,
+              };
+            }
+          } catch (e) {}
           return { status: "fulfilled", value: userId };
         })
         .catch((err) => ({ status: "rejected", reason: err.message, userId }));
     });
-
     const results = await Promise.allSettled(promises);
-    let ok = 0, fail = 0;
-
+    let ok = 0,
+      fail = 0;
     results.forEach((r) => {
       if (r.status === "fulfilled" && r.value.status === "fulfilled") {
         ok++;
@@ -790,31 +864,31 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         console.error(`Lỗi xóa UserID ${failedUserId || "unknown"}:`, reason);
       }
     });
-
     if (ok > 0) {
-        toast.success(`Đã xóa ${ok} người.`, { id: loadId });
+      toast.success(`Đã xóa ${ok} người.`, { id: loadId });
     }
     if (fail > 0) {
-        toast.error(`Xóa thất bại ${fail} người. Xem console để biết chi tiết.`, {
-          id: ok === 0 ? loadId : undefined,
-        });
+      toast.error(`Xóa thất bại ${fail} người.`, {
+        id: ok === 0 ? loadId : undefined,
+      });
     } else if (ok === 0 && fail === 0) {
-        toast.dismiss(loadId);
+      toast.dismiss(loadId);
     }
-
     if (selectedEventId) {
-      await fetchAttendees(selectedEventId); // Refresh list after delete
+      await fetchAttendees(selectedEventId);
     }
-
     setSelectedForDelete(new Set());
     setIsProcessing(false);
     setMode("view");
   };
-
   const handleConfirmBatchDelete = () => {
     const ids = Array.from(selectedForDelete);
     if (ids.length === 0) {
       toast.error("Vui lòng chọn ít nhất một người để xóa.");
+      return;
+    }
+    if (!currentUserId) {
+      toast.error("Không thể xác định người dùng.");
       return;
     }
     setConfirmationState({
@@ -847,7 +921,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       cancelText: "Hủy",
     });
   };
-
   const handleEventStartDateChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -855,10 +928,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     setEventStartDateFilter(newStartDate);
     if (eventEndDateFilter && newStartDate > eventEndDateFilter) {
       setEventEndDateFilter("");
-      toast("Ngày bắt đầu không thể sau ngày kết thúc.", { icon: "⚠️" });
     }
   };
-
   const handleEventEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newEndDate = e.target.value;
     if (eventStartDateFilter && newEndDate < eventStartDateFilter) {
@@ -867,7 +938,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setEventEndDateFilter(newEndDate);
     }
   };
-
   const handleExportClick = async (eventId: string | null) => {
     if (!eventId) {
       toast.error("Không tìm thấy ID sự kiện.");
@@ -878,7 +948,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Token không hợp lệ.");
-
       const url = `http://localhost:8080/identity/api/events/${eventId}/attendees/export`;
       const response = await fetch(url, {
         method: "GET",
@@ -889,7 +958,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
           "Content-Type": "application/json",
         },
       });
-
       if (!response.ok) {
         let errorMsg = `Lỗi export (${response.status})`;
         try {
@@ -903,7 +971,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         }
         throw new Error(errorMsg);
       }
-
       const contentDisposition = response.headers.get("Content-Disposition");
       const filename = getFilenameFromHeader(contentDisposition);
       const blob = await response.blob();
@@ -925,50 +992,125 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setIsExporting(false);
     }
   };
+  // const handleScanSuccess = useCallback(
+  //   async (decodedResult: Html5QrcodeResult) => {
+  //     const scannedUserId = decodedResult.decodedText;
+  //     if (!selectedEventId || !scannedUserId) {
+  //       toast.error("Dữ liệu quét không hợp lệ hoặc chưa chọn sự kiện.");
+  //       return;
+  //     }
+  //     const alreadyAttending = attendees.find(
+  //       (a) => a.userId === scannedUserId
+  //     )?.attending;
+  //     if (alreadyAttending) {
+  //       toast.success(
+  //         `${getAttendeeName(
+  //           attendees.find((a) => a.userId === scannedUserId) || {
+  //             userId: scannedUserId,
+  //           }
+  //         )} đã điểm danh trước đó.`,
+  //         { icon: "✅" }
+  //       );
+  //       return;
+  //     }
+  //     const token = localStorage.getItem("authToken");
+  //     if (!token) {
+  //       toast.error("Vui lòng đăng nhập lại.");
+  //       return;
+  //     }
+  //     const loadId = toast.loading(
+  //       `Đang điểm danh cho user ${scannedUserId.substring(0, 8)}...`
+  //     );
+  //     setIsProcessing(true);
+  //     try {
+  //       const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${scannedUserId}?isAttending=true`;
+  //       const res = await fetch(url, {
+  //         method: "PUT",
+  //         headers: { Authorization: `Bearer ${token}` },
+  //       });
+  //       if (!res.ok) {
+  //         let m = "Điểm danh thất bại";
+  //         try {
+  //           const d = await res.json();
+  //           m = d.message || m;
+  //         } catch (_) {}
+  //         throw new Error(`${m} (${res.status})`);
+  //       }
+  //       await res.json();
+  //       toast.success(
+  //         `Điểm danh thành công cho ${getAttendeeName(
+  //           attendees.find((a) => a.userId === scannedUserId) || {
+  //             userId: scannedUserId,
+  //           }
+  //         )}!`,
+  //         { id: loadId }
+  //       );
+  //       setAttendees((prev) =>
+  //         prev.map((att) =>
+  //           att.userId === scannedUserId ? { ...att, attending: true } : att
+  //         )
+  //       );
+  //       setOriginalAttendance((prev) => ({ ...prev, [scannedUserId]: true }));
+  //       setAttendanceChanges((prev) => ({ ...prev, [scannedUserId]: true }));
+  //     } catch (err: any) {
+  //       toast.error(`Điểm danh thất bại: ${err.message}`, { id: loadId });
+  //     } finally {
+  //       setIsProcessing(false);
+  //     }
+  //   },
+  //   [selectedEventId, attendees]
+  // );
+  const handleCancelConfirmation = () => {
+    setConfirmationState({
+      ...confirmationState,
+      isOpen: false,
+      onConfirm: null,
+    });
+  };
 
   const processedEvents = useMemo(() => {
+    if (!Array.isArray(userApprovedEvents)) return [];
     let eventsToProcess = [...userApprovedEvents];
-    if (eventTimeFilter !== "all") {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-      eventsToProcess = eventsToProcess.filter((event) => {
-        const dateStrToUse = event.time || event.createdAt;
-        if (!dateStrToUse) return false;
-        try {
-          const eventDate = new Date(dateStrToUse);
-          if (isNaN(eventDate.getTime())) return false;
-          switch (eventTimeFilter) {
-            case "today":
-              return eventDate >= todayStart && eventDate <= todayEnd;
-            case "thisWeek":
-              const { startOfWeek, endOfWeek } = getWeekRange(new Date());
-              return eventDate >= startOfWeek && eventDate <= endOfWeek;
-            case "thisMonth":
-              const { startOfMonth, endOfMonth } = getMonthRange(new Date());
-              return eventDate >= startOfMonth && eventDate <= endOfMonth;
-            case "dateRange":
-              if (!eventStartDateFilter || !eventEndDateFilter) return true; // Show all if range incomplete
-              const start = new Date(eventStartDateFilter);
-              start.setHours(0, 0, 0, 0);
-              const end = new Date(eventEndDateFilter);
-              end.setHours(23, 59, 59, 999);
-              // Allow same day selection
+
+    // Lọc theo trạng thái tiến trình (thay thế cho timeFilter cũ)
+    if (
+      eventStatusFilterOption !== "all" &&
+      eventStatusFilterOption !== "dateRange"
+    ) {
+      eventsToProcess = eventsToProcess.filter(
+        (event) => getEventStatus(event.time) === eventStatusFilterOption
+      );
+    }
+    // Lọc theo khoảng ngày nếu chọn "dateRange"
+    else if (
+      eventStatusFilterOption === "dateRange" &&
+      eventStartDateFilter &&
+      eventEndDateFilter
+    ) {
+      try {
+        const start = new Date(eventStartDateFilter);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(eventEndDateFilter);
+        end.setHours(23, 59, 59, 999);
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end) {
+          eventsToProcess = eventsToProcess.filter((event) => {
+            const dateStrToUse = event.time || event.createdAt;
+            if (!dateStrToUse) return false;
+            try {
+              const eventDate = new Date(dateStrToUse);
               return (
-                !isNaN(start.getTime()) &&
-                !isNaN(end.getTime()) &&
-                start <= end && // Check if start is not after end
+                !isNaN(eventDate.getTime()) &&
                 eventDate >= start &&
                 eventDate <= end
               );
-            default:
-              return true;
-          }
-        } catch {
-          return false;
+            } catch {
+              return false;
+            }
+          });
         }
-      });
+      } catch (e) {
+        console.error("Error parsing date range for filtering:", e);
+      }
     }
 
     if (eventSearchTerm.trim()) {
@@ -980,7 +1122,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             event.location.toLowerCase().includes(lowerSearchTerm))
       );
     }
-
     if (eventSortOrder === "za") {
       eventsToProcess.sort((a, b) =>
         b.name.localeCompare(a.name, "vi", { sensitivity: "base" })
@@ -990,11 +1131,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
       );
     }
-
     return eventsToProcess;
   }, [
     userApprovedEvents,
-    eventTimeFilter,
+    eventStatusFilterOption,
     eventStartDateFilter,
     eventEndDateFilter,
     eventSearchTerm,
@@ -1002,6 +1142,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   ]);
 
   const processedAttendees = useMemo(() => {
+    if (!Array.isArray(attendees)) return [];
     let attendeesToProcess = [...attendees];
     if (attendeeSearchTerm.trim()) {
       const lowerSearchTerm = attendeeSearchTerm.trim().toLowerCase();
@@ -1028,59 +1169,142 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       );
     } else if (attendeeSortOrder === "status") {
       attendeesToProcess.sort((a, b) => {
-        // Use attendanceChanges for sorting in 'attendance' mode, originalAttendance otherwise
-        const changesToUse = (mode === 'attendance') ? attendanceChanges : originalAttendance;
+        const changesToUse =
+          mode === "attendance" ? attendanceChanges : originalAttendance;
         const statusA = changesToUse[a.userId] ?? false;
         const statusB = changesToUse[b.userId] ?? false;
         if (statusA !== statusB) {
-          return statusA ? -1 : 1; // Attending first
+          return statusA ? -1 : 1;
         }
-        // If status is the same, sort by name A-Z
         return getAttendeeName(a).localeCompare(getAttendeeName(b), "vi", {
           sensitivity: "base",
         });
       });
     }
     return attendeesToProcess;
-  }, [attendees, attendeeSearchTerm, attendeeSortOrder, originalAttendance, attendanceChanges, mode]); // Add attendanceChanges and mode
+  }, [
+    attendees,
+    attendeeSearchTerm,
+    attendeeSortOrder,
+    originalAttendance,
+    attendanceChanges,
+    mode,
+  ]);
 
 
-  const selectedEventName = useMemo(
-    () =>
-      userApprovedEvents.find((event) => event.id === selectedEventId)?.name,
-    [userApprovedEvents, selectedEventId]
-  );
+
+
+  // Hàm này sẽ được gọi khi QRScanner trong modal quét thành công
+  const handleSuccessfulScan = async (decodedText: string) => {
+    if (isProcessingCheckIn) return; // Đã có xử lý, không làm gì thêm
+
+    setIsProcessingCheckIn(true);
+    const loadingToastId = toast.loading("Đang xử lý điểm danh...");
+    console.log(`Attempting check-in for event ${event.id} with QR data: ${decodedText}`);
+
+    try {
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        throw new Error("Chưa đăng nhập hoặc token không hợp lệ.");
+      }
+
+      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}/check-in`;
+      const formData = new FormData();
+      formData.append('qrCodeData', decodedText);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.code === 1000) {
+        toast.success(result.message || "Điểm danh thành công!", { id: loadingToastId });
+        // TODO: Gọi hàm cập nhật danh sách người tham dự hoặc UI nếu cần
+        // Ví dụ: fetchAttendeesForEvent(event.id);
+      } else {
+        throw new Error(result.message || `Lỗi điểm danh từ API (${response.status})`);
+      }
+    } catch (error: any) {
+      console.error("Lỗi khi điểm danh:", error);
+      toast.error(error.message || "Điểm danh thất bại.", { id: loadingToastId });
+    } finally {
+      setIsProcessingCheckIn(false);
+      setIsScannerOpen(false); // Đóng modal sau khi xử lý
+    }
+  };
+
+  const selectedEventName = selectedEventFullData?.name;
+
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleScanSuccess = (decodedText: string) => {
+    setScanResult(decodedText);
+    setError(null);
+    setIsScannerOpen(false); // Đóng modal khi quét thành công
+    // Xử lý kết quả quét ở đây
+  };
+
+  const handleScanError = (errorMessage: string) => {
+    if (!errorMessage.includes('NotFoundException') && 
+        !errorMessage.includes('NotAllowedError')) {
+      setError(errorMessage);
+    }
+  };
+
+  const resetScanner = () => {
+    setScanResult(null);
+    setError(null);
+  };
 
   return (
     <div className="flex flex-col h-full p-3 md:p-5 bg-gray-50">
-      {/* Header with Title and Refresh Button */}
       <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 flex-wrap gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-teal-600">
-          {selectedEventId
-            ? `Quản lý tham gia: ${selectedEventName || "..."}`
-            : "Chọn sự kiện để quản lý"}
+          {selectedEventId ? (
+            <>
+              {" "}
+              <button
+                onClick={handleBackToEventList}
+                className="mr-1 p-1 rounded hover:bg-gray-200 align-middle cursor-pointer"
+              >
+                <ChevronLeftIcon className="w-6 h-6" />
+              </button>{" "}
+              {`Quản lý điểm danh: ${selectedEventName || "..."}`}{" "}
+            </>
+          ) : (
+            "Chọn sự kiện để điểm danh"
+          )}
         </h2>
         <button
           onClick={handleRefresh}
-          disabled={isLoadingEvents || isLoadingAttendees || isProcessing || isRefreshing || isExporting}
-          className="p-2 border cursor-pointer border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-auto sm:ml-4"
-          title={selectedEventId ? "Làm mới danh sách tham gia" : "Làm mới danh sách sự kiện"}
+          disabled={
+            isLoadingEvents ||
+            isLoadingAttendees ||
+            isProcessing ||
+            isRefreshing ||
+            isExporting
+          }
+          className="p-2 border cursor-pointer border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 bg-white hover:bg-gray-50 disabled:opacity-50 flex items-center ml-auto"
+          title={selectedEventId ? "Làm mới DS tham gia" : "Làm mới DS sự kiện"}
         >
+          {" "}
           {isRefreshing ? (
             <ReloadIcon className="w-5 h-5 animate-spin text-teal-600" />
           ) : (
             <ReloadIcon className="w-5 h-5 text-teal-600" />
-          )}
-          {/* <span className="ml-2 hidden sm:inline">Làm mới</span>   */}
+          )}{" "}
         </button>
       </div>
 
-      {!selectedEventId && (
+      {!selectedEventId ? (
         <>
-          {/* Event Filters */}
           <div className="mb-5 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
-              {/* Search Input */}
               <div className="relative lg:col-span-1 xl:col-span-1">
                 <label
                   htmlFor="searchEvents"
@@ -1089,7 +1313,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   Tìm sự kiện
                 </label>
                 <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                  <MagnifyingGlassIcon/> {/* Updated Icon */}
+                  <MagnifyingGlassIcon />
                 </span>
                 <input
                   type="text"
@@ -1097,16 +1321,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   placeholder="Tên hoặc địa điểm..."
                   value={eventSearchTerm}
                   onChange={(e) => setEventSearchTerm(e.target.value)}
-                  className="w-full p-2 pl-10 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm"
+                  className="w-full p-2 pl-10 border rounded-md text-sm focus:ring-teal-500"
                 />
               </div>
-              {/* Sort Select */}
               <div>
                 <label
                   htmlFor="sortEvents"
                   className="block text-xs font-medium text-gray-600 mb-1"
                 >
-                  Sắp xếp sự kiện
+                  Sắp xếp
                 </label>
                 <select
                   id="sortEvents"
@@ -1114,84 +1337,81 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   onChange={(e) =>
                     setEventSortOrder(e.target.value as "az" | "za")
                   }
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 h-[40px] shadow-sm bg-white appearance-none pr-8"
-                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1.5em 1.5em' }}
+                  className="w-full p-2 border rounded-md text-sm h-[40px] appearance-none pr-8 bg-white"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 0.5rem center",
+                    backgroundSize: "1.5em 1.5em",
+                  }}
                 >
-                  <option value="az">A - Z</option>
+                  <option value="az">A - Z</option>{" "}
                   <option value="za">Z - A</option>
                 </select>
               </div>
-              {/* Time Filter Select */}
               <div>
                 <label
-                  htmlFor="timeFilterEvents"
+                  htmlFor="eventStatusFilter"
                   className="block text-xs font-medium text-gray-600 mb-1"
                 >
-                  Lọc thời gian sự kiện
+                  Lọc trạng thái
                 </label>
                 <select
-                  id="timeFilterEvents"
-                  value={eventTimeFilter}
+                  id="eventStatusFilter"
+                  value={eventStatusFilterOption}
                   onChange={(e) =>
-                    setEventTimeFilter(
-                      e.target.value as
-                        | "all"
-                        | "today"
-                        | "thisWeek"
-                        | "thisMonth"
-                        | "dateRange"
-                    )
+                    setEventStatusFilterOption(e.target.value as any)
                   }
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 h-[40px] shadow-sm bg-white appearance-none pr-8"
-                   style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1.5em 1.5em' }}
+                  className="w-full p-2 border rounded-md text-sm h-[40px] appearance-none pr-8 bg-white"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 0.5rem center",
+                    backgroundSize: "1.5em 1.5em",
+                  }}
                 >
-                  <option value="all">Tất cả</option>
-                  <option value="today">Hôm nay</option>
-                  <option value="thisWeek">Tuần này</option>
-                  <option value="thisMonth">Tháng này</option>
-                  <option value="dateRange">Khoảng ngày</option>
+                  <option value="all">♾️ Tất cả</option>
+                  <option value="upcoming">☀️ Sắp diễn ra</option>
+                  <option value="ongoing">🟢 Đang diễn ra</option>
+                  <option value="ended">🏁 Đã kết thúc</option>
+                  <option value="dateRange">🔢 Khoảng ngày</option>
                 </select>
               </div>
-              {/* View Mode Buttons */}
-              <div className="flex items-end justify-start md:justify-end gap-2 lg:col-start-auto xl:col-start-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1 invisible">
-                  Chế độ xem
-                </label>
+              <div className="flex items-end justify-start md:justify-end gap-2">
                 <div className="flex w-full sm:w-auto">
                   <button
                     onClick={() => setEventViewMode("list")}
-                    title="Danh sách sự kiện"
-                    className={`flex-1 cursor-pointer sm:flex-none p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
+                    title="Danh sách"
+                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition ${
                       eventViewMode === "list"
-                        ? "bg-teal-600 border-teal-700 text-white shadow-sm z-10"
-                        : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                        ? "bg-teal-600 text-white z-10"
+                        : "bg-white text-gray-500 hover:bg-gray-50"
                     }`}
                   >
                     <ListBulletIcon className="h-5 w-5" />
                   </button>
                   <button
                     onClick={() => setEventViewMode("card")}
-                    title="Thẻ sự kiện"
-                    className={`flex-1 sm:flex-none cursor-pointer p-2 rounded-r-md border transition duration-150 ease-in-out ${
+                    title="Thẻ"
+                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transition ${
                       eventViewMode === "card"
-                        ? "bg-teal-600 border-teal-700 text-white shadow-sm z-10"
-                        : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                        ? "bg-teal-600 text-white z-10"
+                        : "bg-white text-gray-500 hover:bg-gray-50"
                     }`}
                   >
-                     <Component1Icon className="h-5 w-5" />
+                    <Component1Icon className="h-5 w-5" />
                   </button>
                 </div>
               </div>
             </div>
-            {/* Date Range Inputs */}
-             {eventTimeFilter === "dateRange" && (
+            {eventStatusFilterOption === "dateRange" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
                 <div>
                   <label
                     htmlFor="startDateFilterEvents"
-                    className="block text-sm font-medium text-gray-700 mb-1"
+                    className="block text-xs font-medium mb-1"
                   >
-                    <span className="inline-block mr-1">🗓️</span> Từ ngày
+                    Từ ngày
                   </label>
                   <input
                     type="date"
@@ -1199,16 +1419,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     value={eventStartDateFilter}
                     onChange={handleEventStartDateChange}
                     max={eventEndDateFilter || undefined}
-                    className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm bg-white"
-                    aria-label="Ngày bắt đầu lọc sự kiện"
+                    className="w-full p-2 border rounded text-sm"
                   />
                 </div>
                 <div>
                   <label
                     htmlFor="endDateFilterEvents"
-                    className="block text-sm font-medium text-gray-700 mb-1"
+                    className="block text-xs font-medium mb-1"
                   >
-                    <span className="inline-block mr-1">🗓️</span> Đến ngày
+                    Đến ngày
                   </label>
                   <input
                     type="date"
@@ -1216,250 +1435,298 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     value={eventEndDateFilter}
                     onChange={handleEventEndDateChange}
                     min={eventStartDateFilter || undefined}
-                    className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm bg-white"
-                    aria-label="Ngày kết thúc lọc sự kiện"
+                    className="w-full p-2 border rounded text-sm"
                   />
                 </div>
               </div>
             )}
           </div>
-          {/* Event List/Card View */}
-          <div className="overflow-y-auto flex-grow mb-4 pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          <div className="overflow-y-auto flex-grow mb-4 pr-1 scrollbar-thin scrollbar-thumb-gray-300">
             {isLoadingEvents ? (
               <p className="text-center text-gray-500 italic py-5">
-                Đang tải sự kiện...
+                Đang tải...
               </p>
             ) : eventError ? (
-              <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-                {eventError}
-              </p>
+              <p className="text-center text-red-600 p-3">{eventError}</p>
             ) : processedEvents.length === 0 ? (
               <p className="text-center text-gray-500 italic py-5">
                 {eventSearchTerm ||
-                eventTimeFilter !== "all" ||
+                eventStatusFilterOption !== "all" ||
                 eventStartDateFilter ||
                 eventEndDateFilter
-                  ? "Không tìm thấy sự kiện nào khớp bộ lọc."
-                  : "Bạn không có sự kiện nào đã được duyệt."}
+                  ? "Không tìm thấy sự kiện."
+                  : "Bạn không có sự kiện đã duyệt."}
               </p>
             ) : eventViewMode === "list" ? (
-              <div className="space-y-2">
+              <ul className="space-y-3">
                 {processedEvents.map((event) => (
-                  <button
+                  <li
                     key={event.id}
-                    onClick={() => handleSelectEvent(event.id)}
-                    className="w-full text-left p-3 bg-white cursor-pointer rounded-lg border border-gray-200 hover:bg-gray-100 transition focus:outline-none focus:ring-2 focus:ring-teal-300 shadow-sm"
+                    className="bg-white shadow-lg rounded-xl overflow-hidden transition transform hover:scale-[1.01] hover:shadow-xl flex flex-col md:flex-row border border-gray-200 hover:border-teal-300"
                   >
-                    <p className="font-semibold text-gray-800">{event.name}</p>
-                    {(event.time || event.createdAt) && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        📅{" "}
-                        {event.time
-                          ? new Date(event.time).toLocaleString("vi-VN", {
-                              dateStyle: "short",
-                              timeStyle: "short",
-                            })
-                          : `(Tạo) ${new Date(event.createdAt!).toLocaleString(
-                              "vi-VN",
-                              {
-                                dateStyle: "short",
-                                timeStyle: "short",
-                              }
-                            )}`}
-                      </p>
-                    )}
-                    {event.location && (
-                      <p className="text-sm text-gray-500">
-                        📍 {event.location}
-                      </p>
-                    )}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {processedEvents.map((event) => (
-                  <button
-                    key={event.id}
-                    onClick={() => handleSelectEvent(event.id)}
-                    className="p-4 bg-white shadow rounded-lg flex flex-col justify-between border border-gray-200 hover:shadow-md transition-shadow duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-300 text-left"
-                  >
-                    <div>
-                      <h3 className="font-semibold text-base text-gray-800 line-clamp-2 mb-1">
-                        {event.name}
-                      </h3>
-                      {(event.time || event.createdAt) && (
-                        <p className="text-xs text-gray-500 mb-0.5">
-                          📅{" "}
-                          {event.time
-                            ? new Date(event.time).toLocaleString("vi-VN", {
-                                dateStyle: "short",
-                                timeStyle: "short",
-                              })
-                            : `(Tạo) ${new Date(
-                                event.createdAt!
-                              ).toLocaleString("vi-VN", {
-                                dateStyle: "short",
-                                timeStyle: "short",
-                              })}`}
-                        </p>
-                      )}
-                      {event.location && (
-                        <p className="text-xs text-gray-500">
-                          📍 {event.location}
-                        </p>
+                    <div
+                      className="relative w-full md:w-48 xl:w-56 flex-shrink-0 h-48 md:h-auto cursor-pointer"
+                      onClick={() => handleSelectEvent(event.id)}
+                    >
+                      {event.avatarUrl ? (
+                        <Image
+                          src={event.avatarUrl}
+                          alt={event.name}
+                          layout="fill"
+                          objectFit="cover"
+                          className="bg-gray-100"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-3xl font-semibold">
+                          {event.name?.charAt(0).toUpperCase() || "?"}
+                        </div>
                       )}
                     </div>
-                  </button>
+                    <div className="p-3 flex flex-col justify-between flex-grow md:pl-4">
+                      <div
+                        onClick={() => handleSelectEvent(event.id)}
+                        className="cursor-pointer"
+                      >
+                        <h3 className="font-semibold text-base text-gray-800 mb-1 line-clamp-1 hover:text-teal-600">
+                          {event.name}
+                        </h3>
+                        <div className="text-xs text-gray-500 space-y-0.5">
+                          {(event.time || event.createdAt) && (
+                            <p className="flex items-center gap-1">
+                              <CalendarIcon className="w-3 h-3 opacity-70" />
+                              {event.time
+                                ? new Date(event.time).toLocaleString("vi-VN", {
+                                    dateStyle: "short",
+                                    timeStyle: "short",
+                                  })
+                                : `(Tạo) ${new Date(
+                                    event.createdAt!
+                                  ).toLocaleString("vi-VN", {
+                                    dateStyle: "short",
+                                    timeStyle: "short",
+                                  })}`}
+                            </p>
+                          )}
+                          {event.location && (
+                            <p className="flex items-center gap-1">
+                              <span className="opacity-70">📍</span>{" "}
+                              {event.location}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-gray-100 flex justify-end">
+                        <button
+                          onClick={() => handleSelectEvent(event.id)}
+                          className="px-3 py-1.5 rounded-md bg-teal-500 hover:bg-teal-600 text-white text-xs font-medium transition"
+                        >
+                          Quản lý điểm danh
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {processedEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="bg-white shadow-lg rounded-xl overflow-hidden flex flex-col border border-gray-200 transition transform hover:scale-[1.02] hover:shadow-xl"
+                  >
+                    <div
+                      className="w-full h-36 bg-gray-200 relative cursor-pointer"
+                      onClick={() => handleSelectEvent(event.id)}
+                    >
+                      {event.avatarUrl ? (
+                        <Image
+                          src={event.avatarUrl}
+                          alt={event.name}
+                          layout="fill"
+                          objectFit="cover"
+                          className="bg-gray-100"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
+                          {event.name?.charAt(0).toUpperCase() || "?"}
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3 flex flex-col flex-grow justify-between">
+                      <div
+                        onClick={() => handleSelectEvent(event.id)}
+                        className="cursor-pointer"
+                      >
+                        <h3 className="font-semibold text-base text-gray-800 line-clamp-2 mb-1 hover:text-teal-600">
+                          {event.name}
+                        </h3>
+                        {(event.time || event.createdAt) && (
+                          <p className="text-xs text-gray-500 mb-0.5 flex items-center gap-1">
+                            <CalendarIcon className="w-3 h-3 opacity-70" />
+                            {event.time
+                              ? new Date(event.time).toLocaleString("vi-VN", {
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                })
+                              : `(Tạo) ${new Date(
+                                  event.createdAt!
+                                ).toLocaleString("vi-VN", {
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                })}`}
+                          </p>
+                        )}
+                        {event.location && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <span className="opacity-70">📍</span>{" "}
+                            {event.location}
+                          </p>
+                        )}
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-gray-100 flex justify-end">
+                        <button
+                          onClick={() => handleSelectEvent(event.id)}
+                          className="px-3 py-1.5 rounded-md bg-teal-500 hover:bg-teal-600 text-white text-xs font-medium transition"
+                        >
+                          Quản lý điểm danh
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
           </div>
         </>
-      )}
-
-      {selectedEventId && (
+      ) : (
         <>
-          {/* Back Button */}
-           <div className="mb-4 flex-shrink-0">
-             <button
-               onClick={handleBackToEventList}
-               className="text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer p-1 rounded hover:bg-blue-50"
-             >
-               <ArrowLeftIcon className="h-4 w-4 mr-1" /> Quay lại chọn sự kiện
-             </button>
-           </div>
-           {/* Attendee Filters and Controls */}
-           <div className="mb-4 p-3 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
-             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-end">
-               <div className="relative sm:col-span-1">
-                 <label
+          <div className="mb-4 p-3 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-end">
+              <div className="relative sm:col-span-1">
+                <label
                   htmlFor="searchAttendees"
                   className="block text-xs font-medium text-gray-600 mb-1"
-                 >
-                  Tìm người tham gia
-                 </label>
-                 <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                   <MagnifyingGlassIcon/>
-                 </span>
-                 <input
-                   type="text"
-                   id="searchAttendees"
-                   placeholder="Tên, MSSV..."
-                   value={attendeeSearchTerm}
-                   onChange={(e) => setAttendeeSearchTerm(e.target.value)}
-                   className="w-full p-2 pl-10 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-sm"
-                 />
-               </div>
-               <div className="sm:col-span-1">
-                 <label
+                >
+                  Tìm kiếm
+                </label>
+                <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
+                  <MagnifyingGlassIcon />
+                </span>
+                <input
+                  type="text"
+                  id="searchAttendees"
+                  placeholder="Tên, MSSV..."
+                  value={attendeeSearchTerm}
+                  onChange={(e) => setAttendeeSearchTerm(e.target.value)}
+                  className="w-full p-2 pl-10 border rounded-md text-sm focus:ring-teal-500"
+                />
+              </div>
+              <div className="sm:col-span-1">
+                <label
                   htmlFor="sortAttendees"
                   className="block text-xs font-medium text-gray-600 mb-1"
-                 >
-                  Sắp xếp người tham gia
-                 </label>
-                 <select
-                   id="sortAttendees"
-                   value={attendeeSortOrder}
-                   onChange={(e) =>
-                     setAttendeeSortOrder(
-                       e.target.value as "az" | "za" | "status"
-                     )
-                   }
-                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-teal-500 focus:border-teal-500 h-[40px] shadow-sm bg-white appearance-none pr-8"
-                    style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1.5em 1.5em' }}
-                 >
-                   <option value="az"> A - Z</option>
-                   <option value="za"> Z - A</option>
-                   <option value="status">Trạng thái điểm danh</option>
-                 </select>
-               </div>
-               <div className="flex items-end justify-start sm:justify-end gap-2 sm:col-span-1">
-                 <label className="block text-xs font-medium text-gray-600 mb-1 invisible">
-                   Chế độ xem
-                 </label>
-                 <div className="flex w-full sm:w-auto">
+                >
+                  Sắp xếp
+                </label>
+                <select
+                  id="sortAttendees"
+                  value={attendeeSortOrder}
+                  onChange={(e) => setAttendeeSortOrder(e.target.value as any)}
+                  className="w-full p-2 border rounded-md text-sm h-[40px] appearance-none pr-8 bg-white"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 0.5rem center",
+                    backgroundSize: "1.5em 1.5em",
+                  }}
+                >
+                  <option value="az">A - Z</option>{" "}
+                  <option value="za">Z - A</option>{" "}
+                  <option value="status">Trạng thái</option>
+                </select>
+              </div>
+              <div className="flex items-end justify-start sm:justify-end gap-2">
+                <div className="flex w-full sm:w-auto">
                   <button
                     onClick={() => setAttendeeViewMode("list")}
                     title="Danh sách"
-                    className={`flex-1 sm:flex-none p-2 cursor-pointer rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
+                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition ${
                       attendeeViewMode === "list"
-                        ? "bg-teal-600 border-teal-700 text-white shadow-sm z-10"
-                        : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                        ? "bg-teal-600 text-white z-10"
+                        : "bg-white text-gray-500 hover:bg-gray-50"
                     }`}
                   >
-                    <ListBulletIcon className="h-5 w-5"/>
+                    <ListBulletIcon className="h-5 w-5" />
                   </button>
                   <button
                     onClick={() => setAttendeeViewMode("card")}
                     title="Thẻ"
-                    className={`flex-1 sm:flex-none p-2 rounded-r-md border cursor-pointer transition duration-150 ease-in-out ${
+                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transition ${
                       attendeeViewMode === "card"
-                        ? "bg-teal-600 border-teal-700 text-white shadow-sm z-10"
-                        : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                        ? "bg-teal-600 text-white z-10"
+                        : "bg-white text-gray-500 hover:bg-gray-50"
                     }`}
                   >
-                    <Component1Icon className="h-5 w-5"/>
+                    <Component1Icon className="h-5 w-5" />
                   </button>
-                 </div>
-               </div>
-             </div>
-           </div>
-           {/* Attendee List/Card View */}
-          <div className="overflow-y-auto flex-grow mb-4 pr-1 min-h-[300px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="overflow-y-auto flex-grow mb-4 pr-1 scrollbar-thin scrollbar-thumb-gray-300">
             {isLoadingAttendees ? (
               <p className="text-center text-gray-500 italic py-5">
                 Đang tải danh sách...
               </p>
             ) : attendeeError ? (
-              <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-                {attendeeError}
-              </p>
+              <p className="text-center text-red-600 p-3">{attendeeError}</p>
             ) : !selectedEventId ? (
               <p className="text-center text-gray-400 italic py-5">
-                  Vui lòng chọn sự kiện để xem danh sách tham gia.
+                Vui lòng chọn sự kiện.
               </p>
             ) : processedAttendees.length === 0 ? (
               <p className="text-center text-gray-500 italic py-5">
                 {attendeeSearchTerm
-                  ? "Không tìm thấy người nào khớp."
-                  : "Chưa có người tham gia sự kiện này."}
+                  ? "Không tìm thấy."
+                  : "Chưa có người tham gia."}
               </p>
             ) : (
               <div className="space-y-0">
                 {mode === "delete" && processedAttendees.length > 0 && (
                   <div className="flex items-center justify-between border-b pb-2 mb-2 sticky top-0 bg-gray-50 py-2 z-10 px-3 -mx-1 rounded-t-md">
+                    {" "}
                     <div className="flex items-center">
                       <input
                         type="checkbox"
                         id={`select-all-delete`}
-                        className="mr-2 cursor-pointer h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                        className="mr-2 cursor-pointer h-4 w-4"
                         checked={
                           processedAttendees.length > 0 &&
-                          selectedForDelete.size === processedAttendees.length &&
-                          processedAttendees.every(att => selectedForDelete.has(att.userId)) // More robust check
+                          selectedForDelete.size ===
+                            processedAttendees.length &&
+                          processedAttendees.every((att) =>
+                            selectedForDelete.has(att.userId)
+                          )
                         }
                         onChange={handleSelectAllForDelete}
-                        disabled={
-                          processedAttendees.length === 0 || isProcessing
-                        }
+                        disabled={isProcessing}
                       />
-                      <label
-                        htmlFor={`select-all-delete`}
-                        className="text-sm text-gray-600 cursor-pointer"
-                      >
+                      <label htmlFor={`select-all-delete`} className="text-sm">
                         Chọn tất cả ({selectedForDelete.size})
                       </label>
+                    </div>{" "}
+                  </div>
+                )}
+                {mode === "attendance" &&
+                  isEventOngoing &&
+                  processedAttendees.length > 0 && (
+                    <div className="text-right border-b pb-2 mb-2 sticky top-0 bg-gray-50 py-2 z-10 px-3 -mx-1 rounded-t-md">
+                      {" "}
+                      <p className="text-sm text-gray-500 italic">
+                        Đánh dấu vào ô để xác nhận có mặt.
+                      </p>{" "}
                     </div>
-                  </div>
-                )}
-                {mode === "attendance" && processedAttendees.length > 0 && (
-                  <div className="text-right border-b pb-2 mb-2 sticky top-0 bg-gray-50 py-2 z-10 px-3 -mx-1 rounded-t-md">
-                    <p className="text-sm text-gray-500 italic">
-                      Đánh dấu vào ô để xác nhận có mặt.
-                    </p>
-                  </div>
-                )}
+                  )}
                 {attendeeViewMode === "list" ? (
                   <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
                     {processedAttendees.map((attendee) => {
@@ -1470,9 +1737,11 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         attendanceChanges[attendee.userId] ?? false;
                       const isAttending =
                         originalAttendance[attendee.userId] ?? false;
-                      const hasChanged = mode === 'attendance' && isCheckedForAttendance !== isAttending;
-                      const isRowProcessing = isProcessing; // Apply to entire row if needed
-
+                      const hasChanged =
+                        mode === "attendance" &&
+                        isEventOngoing &&
+                        isCheckedForAttendance !== isAttending;
+                      const isRowProcessing = isProcessing;
                       return (
                         <li
                           key={attendee.userId}
@@ -1480,11 +1749,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             mode === "delete" && isSelectedForDelete
                               ? "bg-red-50"
                               : hasChanged
-                              ? (isCheckedForAttendance ? "bg-green-50" : "bg-gray-100") // Highlight changed rows
+                              ? isCheckedForAttendance
+                                ? "bg-green-50"
+                                : "bg-gray-100"
                               : "hover:bg-gray-50"
                           } ${isRowProcessing ? "opacity-70" : ""}`}
                         >
+                          {" "}
                           <div className="flex items-center gap-3 flex-grow mr-2 overflow-hidden">
+                            {" "}
                             {mode === "delete" && (
                               <input
                                 type="checkbox"
@@ -1496,11 +1769,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   )
                                 }
                                 disabled={isRowProcessing}
-                                aria-labelledby={`attendee-name-list-${attendee.userId}`}
-                                className="w-4 h-4 text-red-600 focus:ring-red-500 border-gray-300 rounded cursor-pointer flex-shrink-0 disabled:opacity-50"
+                                className="w-4 h-4 text-red-600 rounded cursor-pointer"
                               />
-                            )}
-                            {mode === "attendance" && (
+                            )}{" "}
+                            {mode === "attendance" && isEventOngoing && (
                               <input
                                 type="checkbox"
                                 checked={isCheckedForAttendance}
@@ -1511,21 +1783,21 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   )
                                 }
                                 disabled={isRowProcessing}
-                                aria-labelledby={`attendee-name-list-${attendee.userId}`}
-                                className="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer flex-shrink-0 disabled:opacity-50"
+                                className="w-4 h-4 text-green-600 rounded cursor-pointer"
                               />
-                            )}
+                            )}{" "}
                             <img
                               src={
                                 attendee.avatar ||
                                 `https://ui-avatars.com/api/?name=${encodeURIComponent(
                                   getAttendeeName(attendee)
-                                )}&background=random&color=fff&size=96`
+                                )}&background=random&color=fff`
                               }
-                              alt={`Avatar of ${getAttendeeName(attendee)}`}
-                              className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-gray-200"
-                            />
+                              alt={`Avatar`}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />{" "}
                             <div className="flex-grow overflow-hidden">
+                              {" "}
                               <p
                                 id={`attendee-name-list-${attendee.userId}`}
                                 className={`font-semibold text-sm truncate ${
@@ -1535,33 +1807,35 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                 }`}
                               >
                                 {getAttendeeName(attendee)}
-                              </p>
+                              </p>{" "}
                               <div className="flex flex-wrap gap-x-3 text-xs text-gray-500 mt-0.5">
+                                {" "}
                                 {attendee.studentCode && (
                                   <span className="text-blue-600">
                                     MSSV: {attendee.studentCode}
                                   </span>
-                                )}
+                                )}{" "}
                                 {attendee.username && (
                                   <span>@{attendee.username}</span>
-                                )}
+                                )}{" "}
                                 {attendee.roleName && (
                                   <span className="italic">
                                     ({attendee.roleName})
                                   </span>
-                                )}
+                                )}{" "}
                                 {attendee.positionName && (
                                   <span className="font-medium">
                                     [{attendee.positionName}]
                                   </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          {(mode === "view" || mode === "attendance") &&
+                                )}{" "}
+                              </div>{" "}
+                            </div>{" "}
+                          </div>{" "}
+                          {(mode === "view" ||
+                            (mode === "attendance" && !isEventOngoing)) &&
                             !isRowProcessing && (
                               <span
-                                className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
                                   isAttending
                                     ? "bg-green-100 text-green-700"
                                     : "bg-gray-200 text-gray-600"
@@ -1569,39 +1843,43 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                               >
                                 {isAttending ? "Có mặt" : "Vắng"}
                               </span>
-                            )}
-                             {mode === "attendance" && hasChanged && (
-                                <span
-                                  className={`flex-shrink-0 p-1 rounded-full ml-2 ${
-                                    isCheckedForAttendance
-                                      ? "bg-green-200 text-green-700"
-                                      : "bg-red-100 text-red-600"
-                                  }`}
-                                >
-                                  {isCheckedForAttendance ? (
-                                      <CheckIcon className="w-3 h-3" />
-                                  ) : (
-                                      <Cross2Icon className="w-3 h-3" />
-                                  )}
-                                </span>
-                              )}
+                            )}{" "}
+                          {mode === "attendance" &&
+                            isEventOngoing &&
+                            hasChanged && (
+                              <span
+                                className={`shrink-0 p-1 rounded-full ml-2 ${
+                                  isCheckedForAttendance
+                                    ? "bg-green-200 text-green-700"
+                                    : "bg-red-100 text-red-600"
+                                }`}
+                              >
+                                {isCheckedForAttendance ? (
+                                  <CheckIcon className="w-3 h-3" />
+                                ) : (
+                                  <Cross2Icon className="w-3 h-3" />
+                                )}
+                              </span>
+                            )}{" "}
                         </li>
                       );
                     })}
                   </ul>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                     {processedAttendees.map((attendee) => {
-                          const isSelectedForDelete = selectedForDelete.has(
-                            attendee.userId
-                          );
-                          const isCheckedForAttendance =
-                            attendanceChanges[attendee.userId] ?? false;
-                          const isAttending =
-                            originalAttendance[attendee.userId] ?? false;
-                          const hasChanged = mode === 'attendance' && isCheckedForAttendance !== isAttending;
-                          const isRowProcessing = isProcessing;
-
+                      const isSelectedForDelete = selectedForDelete.has(
+                        attendee.userId
+                      );
+                      const isCheckedForAttendance =
+                        attendanceChanges[attendee.userId] ?? false;
+                      const isAttending =
+                        originalAttendance[attendee.userId] ?? false;
+                      const hasChanged =
+                        mode === "attendance" &&
+                        isEventOngoing &&
+                        isCheckedForAttendance !== isAttending;
+                      const isRowProcessing = isProcessing;
                       return (
                         <div
                           key={attendee.userId}
@@ -1609,11 +1887,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             mode === "delete" && isSelectedForDelete
                               ? "border-red-300 bg-red-50"
                               : hasChanged
-                              ? (isCheckedForAttendance ? "border-green-300 bg-green-50" : "border-gray-300 bg-gray-100")
+                              ? isCheckedForAttendance
+                                ? "border-green-300 bg-green-50"
+                                : "border-gray-300 bg-gray-100"
                               : "border-gray-200 hover:bg-gray-50"
                           } ${isRowProcessing ? "opacity-70" : ""}`}
                         >
+                          {" "}
                           <div className="flex items-start gap-3 mb-2 flex-grow">
+                            {" "}
                             {mode === "delete" && (
                               <input
                                 type="checkbox"
@@ -1625,11 +1907,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   )
                                 }
                                 disabled={isRowProcessing}
-                                aria-labelledby={`attendee-name-card-${attendee.userId}`}
-                                className="mt-1 w-4 h-4 text-red-600 focus:ring-red-500 border-gray-300 rounded cursor-pointer flex-shrink-0 disabled:opacity-50"
+                                className="mt-1 w-4 h-4 text-red-600 rounded cursor-pointer"
                               />
-                            )}
-                            {mode === "attendance" && (
+                            )}{" "}
+                            {mode === "attendance" && isEventOngoing && (
                               <input
                                 type="checkbox"
                                 checked={isCheckedForAttendance}
@@ -1640,21 +1921,21 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   )
                                 }
                                 disabled={isRowProcessing}
-                                aria-labelledby={`attendee-name-card-${attendee.userId}`}
-                                className="mt-1 w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer flex-shrink-0 disabled:opacity-50"
+                                className="mt-1 w-4 h-4 text-green-600 rounded cursor-pointer"
                               />
-                            )}
+                            )}{" "}
                             <img
                               src={
                                 attendee.avatar ||
                                 `https://ui-avatars.com/api/?name=${encodeURIComponent(
                                   getAttendeeName(attendee)
-                                )}&background=random&color=fff&size=96`
+                                )}&background=random&color=fff`
                               }
-                              alt={`Avatar of ${getAttendeeName(attendee)}`}
-                              className="w-10 h-10 rounded-full object-cover flex-shrink-0 bg-gray-200"
-                            />
+                              alt={`Avatar`}
+                              className="w-10 h-10 rounded-full object-cover"
+                            />{" "}
                             <div className="flex-grow overflow-hidden">
+                              {" "}
                               <p
                                 id={`attendee-name-card-${attendee.userId}`}
                                 className={`font-semibold text-sm truncate ${
@@ -1664,72 +1945,78 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                 }`}
                               >
                                 {getAttendeeName(attendee)}
-                              </p>
+                              </p>{" "}
                               {attendee.username && (
                                 <p className="text-xs text-gray-500 truncate">
                                   @{attendee.username}
                                 </p>
-                              )}
-                            </div>
-                             <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                {(mode === "view" || mode === "attendance") && !isRowProcessing && (
-                                  <span
-                                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                      isAttending
-                                        ? "bg-green-100 text-green-700"
-                                        : "bg-gray-200 text-gray-600"
-                                    }`}
-                                  >
-                                    {isAttending ? "Có mặt" : "Vắng"}
-                                  </span>
-                                )}
-                                {mode === "attendance" && hasChanged && (
-                                   <span
-                                      className={`p-1 rounded-full ${
-                                        isCheckedForAttendance
-                                          ? "bg-green-200 text-green-700"
-                                          : "bg-red-100 text-red-600"
-                                      }`}
-                                    >
-                                      {isCheckedForAttendance ? (
-                                          <CheckIcon className="w-3 h-3" />
-                                      ) : (
-                                          <Cross2Icon className="w-3 h-3" />
-                                      )}
-                                    </span>
-                                )}
-                              </div>
-                          </div>
+                              )}{" "}
+                            </div>{" "}
+                            {(mode === "view" ||
+                              (mode === "attendance" && !isEventOngoing)) &&
+                              !isRowProcessing && (
+                                <span
+                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full self-start shrink-0 ${
+                                    isAttending
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-gray-200 text-gray-600"
+                                  }`}
+                                >
+                                  {isAttending ? "Có mặt" : "Vắng"}
+                                </span>
+                              )}{" "}
+                            {mode === "attendance" &&
+                              isEventOngoing &&
+                              hasChanged && (
+                                <span
+                                  className={`self-start shrink-0 p-1 rounded-full ml-1 ${
+                                    isCheckedForAttendance
+                                      ? "bg-green-200 text-green-700"
+                                      : "bg-red-100 text-red-600"
+                                  }`}
+                                >
+                                  {isCheckedForAttendance ? (
+                                    <CheckIcon className="w-3 h-3" />
+                                  ) : (
+                                    <Cross2Icon className="w-3 h-3" />
+                                  )}
+                                </span>
+                              )}{" "}
+                          </div>{" "}
                           <div
                             className={`space-y-1 text-xs text-gray-600 ${
-                               mode === 'view' ? 'pl-[52px]' : 'pl-3' // Adjust padding based on mode
-                             }`}
-                           >
+                              mode === "view" ||
+                              (mode === "attendance" && !isEventOngoing)
+                                ? "pl-[52px]"
+                                : "pl-3"
+                            }`}
+                          >
+                            {" "}
                             {attendee.studentCode && (
                               <p className="flex items-center gap-1">
-                                <IdCardIcon className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                                <IdCardIcon className="w-3 h-3 text-blue-500" />{" "}
                                 <span className="truncate">
                                   MSSV: {attendee.studentCode}
                                 </span>
                               </p>
-                            )}
+                            )}{" "}
                             {attendee.roleName && (
                               <p className="flex items-center gap-1">
-                                <PersonIcon className="w-3 h-3 text-purple-500 flex-shrink-0" />
+                                <PersonIcon className="w-3 h-3 text-purple-500" />{" "}
                                 <span className="truncate italic">
                                   ({attendee.roleName})
                                 </span>
                               </p>
-                            )}
+                            )}{" "}
                             {attendee.positionName && (
                               <p className="flex items-center gap-1">
-                                <Link2Icon className="w-3 h-3 text-orange-500 flex-shrink-0" />
+                                <Link2Icon className="w-3 h-3 text-orange-500" />{" "}
                                 <span className="truncate font-medium">
                                   [{attendee.positionName}]
                                 </span>
                               </p>
-                            )}
-                          </div>
+                            )}{" "}
+                          </div>{" "}
                         </div>
                       );
                     })}
@@ -1738,147 +2025,266 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
               </div>
             )}
           </div>
-
-          {selectedEventId && !isLoadingAttendees && processedAttendees.length > 0 && (
-            <div className="flex justify-between items-center border-t border-gray-200 pt-4 mt-auto flex-shrink-0 gap-3 flex-wrap">
-              <div>
-                {mode === "view" && (
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={() => handleSetMode("attendance")}
-                      disabled={isProcessing || attendees.length === 0}
-                      className="px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 shadow-sm border border-green-200"
-                    >
-                      <CheckIcon /> Điểm danh
-                    </button>
-
-                    <button
-                      onClick={() => setIsQrModalOpen(true)}
-                      disabled={
-                        isProcessing || isLoadingQrCode || !!qrCodeError || !qrCodeUrl
-                      }
-                      className="px-3 py-1.5 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 shadow-sm border border-purple-200"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+          {selectedEventId &&
+            !isLoadingAttendees &&
+            processedAttendees.length > 0 && (
+              <div className="flex justify-between items-center border-t border-gray-200 pt-4 mt-auto flex-shrink-0 gap-3 flex-wrap">
+                <div>
+                  {mode === "view" && (
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => handleSetMode("attendance")}
+                        disabled={
+                          !isEventOngoing ||
+                          isProcessing ||
+                          attendees.length === 0
+                        }
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer inline-flex items-center gap-1 shadow-sm border ${
+                          !isEventOngoing || attendees.length === 0
+                            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                            : "bg-green-100 hover:bg-green-200 text-green-800 border-green-200"
+                        }`}
+                        title={
+                          !isEventOngoing
+                            ? "Chỉ điểm danh khi sự kiện đang diễn ra"
+                            : attendees.length === 0
+                            ? "Chưa có người tham gia"
+                            : "Chuyển sang chế độ điểm danh"
+                        }
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 4v1m0 4v1m0 4v1m0 4v1m-4-8h1m4 0h1m4 0h1M4 12h1m4 0h1m4 0h1m4 0h1m-4 4h1m-4-4h1m-4 4h1m4-4h1m0 4h1m-4 0h1m-4-4h1"
-                        />
-                      </svg>
-                      QR điểm danh
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        console.log("Nút Quét Mã QR được nhấn!");
-                        setIsScannerOpen(true);
-                      }}
-                      disabled={isProcessing}
-                      className="px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 shadow-sm border border-indigo-200"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+                        <CheckIcon /> Điểm danh
+                      </button>
+                      <button
+                        onClick={() => setIsQrModalOpen(true)}
+                        disabled={
+                          !isEventOngoing ||
+                          isProcessing ||
+                          isLoadingQrCode ||
+                          !!qrCodeError ||
+                          !qrCodeUrl
+                        }
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer inline-flex items-center gap-1 shadow-sm border ${
+                          !isEventOngoing
+                            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                            : "bg-purple-100 hover:bg-purple-200 text-purple-800 border-purple-200"
+                        }`}
+                        title={
+                          !isEventOngoing
+                            ? "Chỉ xem QR khi sự kiện đang diễn ra"
+                            : ""
+                        }
                       >
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15l-4-4h3V9h2v4h3l-4 4z"/>
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7m-4 0V5a2 2 0 00-2-2H7a2 2 0 00-2 2v2m14 0H3" />
-                      </svg>
-                       Quét Mã QR
-                    </button>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v1m0 4v1m0 4v1m0 4v1m-4-8h1m4 0h1m4 0h1M4 12h1m4 0h1m4 0h1m4 0h1m-4 4h1m-4-4h1m-4 4h1m4-4h1m0 4h1m-4 0h1m-4-4h1"
+                          />
+                        </svg>{" "}
+                        QR điểm danh
+                      </button>
+<button
+        onClick={() => setIsScannerOpen(true)}
+        disabled={!isEventOngoing || isProcessing}
+        className={`px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer inline-flex items-center gap-1 shadow-sm border ${
+          !isEventOngoing
+            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+            : "bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border-indigo-200"
+        }`}
+        title={
+          !isEventOngoing
+            ? "Chỉ quét QR khi sự kiện đang diễn ra"
+            : ""
+        }
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7m-4 0V5a2 2 0 00-2-2H7a2 2 0 00-2 2v2m14 0H3"
+          />
+        </svg>
+        Quét QR
+      </button>
 
-                    <button
-                      onClick={() => handleSetMode("delete")}
-                      disabled={isProcessing || attendees.length === 0}
-                      className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 shadow-sm border border-red-200"
-                    >
-                       <TrashIcon /> Xóa người
-                    </button>
-                  </div>
-                )}
-                {mode === "attendance" && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleCancelMode}
-                      disabled={isProcessing}
-                      className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 shadow-sm border border-gray-300"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      onClick={handleSaveChanges}
-                      disabled={
-                        isProcessing ||
-                        Object.keys(attendanceChanges).every(
-                           (k) => (k in originalAttendance) && attendanceChanges[k] === originalAttendance[k]
-                        )
-                      }
-                      className={`px-4 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium cursor-pointer ${
-                        isProcessing ||
-                        Object.keys(attendanceChanges).every(
-                           (k) => (k in originalAttendance) && attendanceChanges[k] === originalAttendance[k]
-                        )
-                          ? "bg-blue-300 cursor-not-allowed"
-                          : "bg-blue-600 hover:bg-blue-700"
-                      }`}
-                    >
-                      {isProcessing ? "Đang lưu..." : "Lưu điểm danh"}
-                    </button>
-                  </div>
-                )}
-                {mode === "delete" && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleCancelMode}
-                      disabled={isProcessing}
-                      className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 shadow-sm border border-gray-300"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      onClick={handleConfirmBatchDelete}
-                      disabled={isProcessing || selectedForDelete.size === 0}
-                      className={`px-4 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium cursor-pointer inline-flex items-center gap-1 ${
-                        isProcessing || selectedForDelete.size === 0
-                          ? "bg-red-300 cursor-not-allowed"
-                          : "bg-red-600 hover:bg-red-700"
-                      }`}
-                    >
-                       <TrashIcon /> Xóa ({selectedForDelete.size})
-                    </button>
-                  </div>
-                )}
+      {/* Modal quét QR */}
+      {isScannerOpen && (
+        <div className="fixed inset-0 bg-black/30 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Quét mã QR</h3>
+              <button 
+                onClick={() => setIsScannerOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <QRScanner 
+              onScanSuccess={handleScanSuccess} 
+              onScanError={handleScanError} 
+            />
+            
+            {error && (
+              <div className="mt-4 p-3 bg-red-100 rounded text-red-700">
+                <p>{error}</p>
               </div>
+            )}
+            
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setIsScannerOpen(false)}
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div>
-                 <button
+      {/* Hiển thị kết quả quét (nếu cần) */}
+      {scanResult && (
+        <div className="mt-4 p-4 bg-green-100 rounded">
+          <p>Kết quả quét: {scanResult}</p>
+        </div>
+      )}
+                      {/* <button
+                        onClick={() => {
+                          setIsScannerOpen(true);
+                        }}
+                        disabled={!isEventOngoing || isProcessing}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer inline-flex items-center gap-1 shadow-sm border ${
+                          !isEventOngoing
+                            ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                            : "bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border-indigo-200"
+                        }`}
+                        title={
+                          !isEventOngoing
+                            ? "Chỉ quét QR khi sự kiện đang diễn ra"
+                            : ""
+                        }
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7m-4 0V5a2 2 0 00-2-2H7a2 2 0 00-2 2v2m14 0H3"
+                          />
+                        </svg>{" "}
+                        Quét QR
+                      </button> */}
+                      <button
+                        onClick={() => handleSetMode("delete")}
+                        disabled={isProcessing || attendees.length === 0}
+                        className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 border border-red-200"
+                      >
+                        <TrashIcon /> Xóa người
+                      </button>
+                    </div>
+                  )}
+                  {mode === "attendance" && (
+                    <div className="flex gap-2">
+                      {" "}
+                      <button
+                        onClick={handleCancelMode}
+                        disabled={isProcessing}
+                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 border"
+                      >
+                        Hủy
+                      </button>{" "}
+                      <button
+                        onClick={handleSaveChanges}
+                        disabled={
+                          isProcessing ||
+                          Object.keys(attendanceChanges).every(
+                            (k) =>
+                              k in originalAttendance &&
+                              attendanceChanges[k] === originalAttendance[k]
+                          )
+                        }
+                        className={`px-4 py-1.5 rounded-md text-white text-xs font-medium ${
+                          isProcessing ||
+                          Object.keys(attendanceChanges).every(
+                            (k) =>
+                              k in originalAttendance &&
+                              attendanceChanges[k] === originalAttendance[k]
+                          )
+                            ? "bg-blue-300 cursor-not-allowed"
+                            : "bg-blue-600 hover:bg-blue-700"
+                        }`}
+                      >
+                        {isProcessing ? "Đang lưu..." : "Lưu điểm danh"}
+                      </button>{" "}
+                    </div>
+                  )}
+                  {mode === "delete" && (
+                    <div className="flex gap-2">
+                      {" "}
+                      <button
+                        onClick={handleCancelMode}
+                        disabled={isProcessing}
+                        className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 border"
+                      >
+                        Hủy
+                      </button>{" "}
+                      <button
+                        onClick={handleConfirmBatchDelete}
+                        disabled={isProcessing || selectedForDelete.size === 0}
+                        className={`px-4 py-1.5 rounded-md text-white text-xs font-medium inline-flex items-center gap-1 ${
+                          isProcessing || selectedForDelete.size === 0
+                            ? "bg-red-300 cursor-not-allowed"
+                            : "bg-red-600 hover:bg-red-700"
+                        }`}
+                      >
+                        <TrashIcon /> Xóa ({selectedForDelete.size})
+                      </button>{" "}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  {" "}
+                  <button
                     onClick={() => handleExportClick(selectedEventId)}
                     disabled={
-                     isExporting ||
-                     isLoadingAttendees ||
-                     attendees.length === 0 ||
-                     isProcessing
-                   }
-                   className={`px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1 shadow-sm border border-blue-200 ${isExporting ? "animate-pulse" : ""}`}
-                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                   {isExporting ? "Đang xuất..." : "Xuất DS tham gia (Excel)"}
-                 </button>
+                      isExporting ||
+                      isLoadingAttendees ||
+                      attendees.length === 0 ||
+                      isProcessing
+                    }
+                    className={`px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 border border-blue-200 ${
+                      isExporting ? "animate-pulse" : ""
+                    }`}
+                  >
+                    {" "}
+                    <DownloadIcon className="w-3 h-3" />{" "}
+                    {isExporting ? "Đang xuất..." : "Xuất Excel"}{" "}
+                  </button>{" "}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </>
       )}
 
@@ -1899,27 +2305,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
           })
         }
       />
-
-       <QrCodeModal
-        isOpen={isQrModalOpen}
-        onClose={() => setIsQrModalOpen(false)}
-        qrCodeUrl={qrCodeUrl}
-        isLoadingQrCode={isLoadingQrCode}
-        qrCodeError={qrCodeError}
-        eventName={selectedEventName}
-       />
-
-       <QrScannerModal
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        eventId={selectedEventId}
-        eventName={selectedEventName}
-        onScanSuccess={() => {
-            if(selectedEventId) {
-                fetchAttendees(selectedEventId, true); // Refresh list after scan and show toast
-            }
-        }}
-       />
+      
+      
     </div>
   );
 };

@@ -19,6 +19,8 @@ import AttendeesTabContent from "../component/tabs/AttendeesTabContent";
 import MembersTabContent from "../component/tabs/MembersTabContent";
 import RolesTabContent from "../component/tabs/RolesTabContent";
 import ChatTabContent from "../component/tabs/ChatTabContent";
+import MyEventsTabContent from "./tabs/MyEventsTabContent";
+
 import NewsTabContent from "../component/tabs/NewsTabContent";
 import CreateNewsModal, {
   NewsFormData,
@@ -27,10 +29,7 @@ import NotificationDropdown, {
   NotificationItem,
 } from "../component/NotificationDropdown";
 import { BellIcon } from "@radix-ui/react-icons";
-import {
-  useRefreshToken,
-  RefreshTokenResponse,
-} from "../../hooks/useRefreshToken";
+import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
 
@@ -108,14 +107,19 @@ export interface NewsItem {
   rejectionReason?: string | null;
 }
 
+
+
+
 type ActiveTab =
   | "home"
   | "news"
   | "approval"
+  | "myEvents"
   | "attendees"
   | "members"
   | "roles"
-  | "chatList";
+  | "chatList"
+  | "myActivities"; // Thêm tab mới
 
 export default function HomeAdmin() {
   const [search, setSearch] = useState("");
@@ -125,6 +129,18 @@ export default function HomeAdmin() {
   const [selectedEvent, setSelectedEvent] = useState<EventDisplayInfo | null>(
     null
   );
+  const [registeredEventIds, setRegisteredEventIds] = useState<Set<string>>(
+      new Set()
+    );
+    const [isLoadingCreatedEventIds, setIsLoadingCreatedEventIds] =
+        useState<boolean>(true);
+    
+      const [isLoadingRegisteredIds, setIsLoadingRegisteredIds] =
+        useState<boolean>(true);
+
+        const [createdEventIds, setCreatedEventIds] = useState<Set<string>>(
+            new Set()
+          );
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState<boolean>(true);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -142,6 +158,7 @@ export default function HomeAdmin() {
     confirmVariant?: "primary" | "danger";
     confirmText?: string;
     cancelText?: string;
+    onCancel?: () => void;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
   const [isLoadingNews, setIsLoadingNews] = useState<boolean>(true);
@@ -155,34 +172,43 @@ export default function HomeAdmin() {
   const [errorNotifications, setErrorNotifications] = useState<string | null>(
     null
   );
-  
   const [showNotificationDropdown, setShowNotificationDropdown] =
     useState<boolean>(false);
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
   const notificationContainerRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
-
   const [sessionStatus, setSessionStatus] = useState<
     "active" | "expired" | "error"
   >("active");
   const router = useRouter();
-  const { refreshToken, isInitialized } = useRefreshToken();
+
+  const { refreshToken, refreshing } = useRefreshToken();
+  const [appIsInitialized, setAppIsInitialized] = useState(false);
 
   useEffect(() => {
     if (sessionStatus === "expired") {
       localStorage.removeItem("authToken");
       localStorage.removeItem("refreshToken");
-      localStorage.removeItem("authenticated");
+      localStorage.removeItem("authenticatedUser");
       setUser(null);
       setAllEvents([]);
       setNewsItems([]);
       setNotifications([]);
       setActiveTab("home");
-      router.push("/login?sessionExpired=true&role=admin");
-      setSessionStatus("active"); 
+      if (router) {
+        router.push("/login?sessionExpired=true&role=admin");
+      }
     } else if (sessionStatus === "error") {
-      toast.error("Đã có lỗi trong phiên làm việc, vui lòng thử lại.");
-      setSessionStatus("active");
+      toast.error(
+        "Đã có lỗi trong phiên làm việc hoặc xác thực, vui lòng đăng nhập lại."
+      );
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("authenticatedUser");
+      setUser(null);
+      if (router) {
+        router.push("/login?sessionError=true&role=admin");
+      }
     }
   }, [sessionStatus, router]);
 
@@ -191,30 +217,41 @@ export default function HomeAdmin() {
     setErrorState?: (msg: string | null) => void
   ) => {
     return (errorType: "expired" | "error" = "expired") => {
-      setSessionStatus(errorType);
+      if (isMountedRef.current) {
+        setSessionStatus(errorType);
+      }
       if (stopLoading) stopLoading();
-      if (setErrorState)
+      if (setErrorState && isMountedRef.current)
         setErrorState(
           errorType === "expired" ? "Phiên đăng nhập hết hạn." : "Lỗi xác thực."
         );
     };
   };
 
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const fetchNews = useCallback(async () => {
+    if (!isMountedRef.current) return;
     setIsLoadingNews(true);
     setErrorNews(null);
     let currentToken = localStorage.getItem("authToken");
-    const handleAuthFailure = createAuthFailureHandler(
-      () => setIsLoadingNews(false),
-      setErrorNews
-    );
+    const handleAuthFailure = createAuthFailureHandler(() => {
+      if (isMountedRef.current) setIsLoadingNews(false);
+    }, setErrorNews);
 
-    if (!currentToken && isInitialized) {
+    if (!currentToken && appIsInitialized) {
       handleAuthFailure();
       return;
     }
-    if (!currentToken && !isInitialized) {
-      setIsLoadingNews(false);
+    if (!currentToken && !appIsInitialized) {
+      if (isMountedRef.current) setIsLoadingNews(false);
       return;
     }
 
@@ -225,6 +262,7 @@ export default function HomeAdmin() {
 
       if (res.status === 401 || res.status === 403) {
         const refreshResult = await refreshToken();
+        if (!isMountedRef.current) return;
         if (refreshResult.sessionExpired) {
           handleAuthFailure("expired");
           return;
@@ -243,6 +281,7 @@ export default function HomeAdmin() {
         }
       }
 
+      if (!isMountedRef.current) return;
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
           handleAuthFailure("expired");
@@ -274,44 +313,46 @@ export default function HomeAdmin() {
           coverImageUrl: item.coverImageUrl,
           rejectionReason: item.rejectionReason,
         }));
-        setNewsItems(fmt);
+        if (isMountedRef.current) setNewsItems(fmt);
       } else throw new Error(d.message || "Lỗi định dạng dữ liệu tin tức");
     } catch (e: any) {
       if (
+        isMountedRef.current &&
         e.message !== "Phiên đăng nhập hết hạn." &&
         e.message !== "Lỗi xác thực."
       )
         setErrorNews(e.message || "Lỗi tải tin tức.");
     } finally {
-      setIsLoadingNews(false);
+      if (isMountedRef.current) setIsLoadingNews(false);
     }
-  }, [refreshToken, isInitialized, setSessionStatus]);
-
+  }, [refreshToken, appIsInitialized, setSessionStatus]);
+//
   const fetchAdminHomeEvents = useCallback(async () => {
+    if (!isMountedRef.current) return;
     setIsLoadingEvents(true);
     setErrorEvents(null);
     let currentToken = localStorage.getItem("authToken");
-    const handleAuthFailure = createAuthFailureHandler(
-      () => setIsLoadingEvents(false),
-      setErrorEvents
-    );
+    const handleAuthFailure = createAuthFailureHandler(() => {
+      if (isMountedRef.current) setIsLoadingEvents(false);
+    }, setErrorEvents);
 
-    if (!currentToken && isInitialized) {
+    if (!currentToken && appIsInitialized) {
       handleAuthFailure();
       return;
     }
-    if (!currentToken && !isInitialized) {
-      setIsLoadingEvents(false);
+    if (!currentToken && !appIsInitialized) {
+      if (isMountedRef.current) setIsLoadingEvents(false);
       return;
     }
 
     try {
       let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
-      const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
+      const url = `http://localhost:8080/identity/api/events`;
       let res = await fetch(url, { headers, cache: "no-store" });
 
       if (res.status === 401 || res.status === 403) {
         const refreshResult = await refreshToken();
+        if (!isMountedRef.current) return;
         if (refreshResult.sessionExpired) {
           handleAuthFailure("expired");
           return;
@@ -329,6 +370,7 @@ export default function HomeAdmin() {
           return;
         }
       }
+      if (!isMountedRef.current) return;
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
           handleAuthFailure("expired");
@@ -363,42 +405,209 @@ export default function HomeAdmin() {
             participants: apiEvent.participants || [],
             attendees: apiEvent.attendees || [],
           }));
-        setAllEvents(formattedEvents);
+        if (isMountedRef.current) setAllEvents(formattedEvents);
       } else throw new Error(data.message || "Dữ liệu sự kiện không hợp lệ");
     } catch (err: any) {
       if (
+        isMountedRef.current &&
         err.message !== "Phiên đăng nhập hết hạn." &&
         err.message !== "Lỗi xác thực."
       )
         setErrorEvents(err.message || "Không thể tải danh sách sự kiện.");
     } finally {
-      setIsLoadingEvents(false);
+      if (isMountedRef.current) setIsLoadingEvents(false);
     }
-  }, [refreshToken, isInitialized, setSessionStatus]);
+  }, [refreshToken, appIsInitialized, setSessionStatus]);
+
+  //  fetchUserCreatedEvents
+   const fetchUserCreatedEvents = useCallback(
+      async (userId: string, token: string | null) => {
+        if (!userId || !token) {
+          setIsLoadingCreatedEventIds(false);
+          setCreatedEventIds(new Set());
+          return;
+        }
+        setIsLoadingCreatedEventIds(true);
+        let currentToken = token;
+        try {
+          const url = `http://localhost:8080/identity/api/events/creator/${userId}`;
+          let res = await fetch(url, {
+            headers: { Authorization: `Bearer ${currentToken}` },
+            cache: "no-store",
+          });
+          if (res.status === 401 || res.status === 403) {
+            const nt = await refreshToken();
+            if (nt) {
+              currentToken = nt;
+              localStorage.setItem("authToken", nt);
+              res = await fetch(url, {
+                headers: { Authorization: `Bearer ${currentToken}` },
+                cache: "no-store",
+              });
+            } else throw new Error("Unauthorized or Refresh Failed");
+          }
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          const data = await res.json();
+          if (data.code === 1000 && Array.isArray(data.result))
+            setCreatedEventIds(
+              new Set(data.result.map((event: any) => event.id))
+            );
+          else setCreatedEventIds(new Set());
+        } catch (err: any) {
+          console.error("Lỗi tải ID sự kiện đã tạo:", err);
+          setCreatedEventIds(new Set());
+          if (err.message?.includes("Unauthorized"))
+            router.push("/login?sessionExpired=true");
+        } finally {
+          setIsLoadingCreatedEventIds(false);
+        }
+      },
+      [refreshToken, router]
+    );
+
+//Sự kiện đã đăng ký
+     const fetchRegisteredEventIds = useCallback(
+        async (userId: string, token: string | null) => {
+          if (!userId || !token) {
+            setIsLoadingRegisteredIds(false);
+            setRegisteredEventIds(new Set());
+            return;
+          }
+          setIsLoadingRegisteredIds(true);
+          let currentToken = token;
+          try {
+            const url = `http://localhost:8080/identity/api/events/attendee/${userId}`;
+            let res = await fetch(url, {
+              headers: { Authorization: `Bearer ${currentToken}` },
+              cache: "no-store",
+            });
+            if (res.status === 401 || res.status === 403) {
+              const nt = await refreshToken();
+              if (nt) {
+                currentToken = nt;
+                localStorage.setItem("authToken", nt);
+                res = await fetch(url, {
+                  headers: { Authorization: `Bearer ${currentToken}` },
+                  cache: "no-store",
+                });
+              } else throw new Error("Unauthorized or Refresh Failed");
+            }
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            const data = await res.json();
+            if (data.code === 1000 && Array.isArray(data.result))
+              setRegisteredEventIds(
+                new Set(data.result.map((event: any) => event.id))
+              );
+            else {
+              setRegisteredEventIds(new Set());
+              console.warn(
+                "API /events/attendee/ không trả về cấu trúc mong đợi:",
+                data
+              );
+            }
+          } catch (err: any) {
+            console.error("Lỗi tải ID sự kiện đã đăng ký:", err);
+            setRegisteredEventIds(new Set());
+            if (err.message?.includes("Unauthorized"))
+              router.push("/login?sessionExpired=true");
+          } finally {
+            setIsLoadingRegisteredIds(false);
+          }
+        },
+        [refreshToken, router]
+      );
+
+      //
+       const fetchAllEvents = useCallback(async () => {
+          setIsLoadingEvents(true);
+          setErrorEvents(null);
+          let currentToken = localStorage.getItem("authToken");
+          try {
+            let headers: HeadersInit = {};
+            if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
+            const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
+            let res = await fetch(url, { headers, cache: "no-store" });
+            if (
+              (res.status === 401 || res.status === 403) &&
+              currentToken &&
+              refreshToken
+            ) {
+              const nt = await refreshToken();
+              if (nt) {
+                currentToken = nt;
+                localStorage.setItem("authToken", nt);
+                headers["Authorization"] = `Bearer ${currentToken}`;
+                res = await fetch(url, { headers, cache: "no-store" });
+              } else throw new Error("Unauthorized or Refresh Failed");
+            }
+            if (!res.ok) {
+              const status = res.status;
+              let msg = `HTTP ${status}`;
+              try {
+                const err = await res.json();
+                msg = err.message || msg;
+              } catch (_) {}
+              throw new Error(msg);
+            }
+            const d = await res.json();
+            if (d.code === 1000 && Array.isArray(d.result)) {
+              const fmt: EventDisplayInfo[] = d.result
+                .filter((e: any) => !e.deleted)
+                .map((e: any) => ({
+                  id: e.id,
+                  title: e.name || "N/A",
+                  name: e.name,
+                  date: e.time || e.createdAt || "",
+                  time: e.time,
+                  location: e.location || "N/A",
+                  description: e.content || e.purpose || "",
+                  content: e.content,
+                  purpose: e.purpose,
+                  avatarUrl: e.avatarUrl || null,
+                  status: e.status,
+                  createdBy: e.createdBy,
+                  organizers: e.organizers || [],
+                  participants: e.participants || [],
+                  attendees: e.attendees || [],
+                }));
+              setAllEvents(fmt);
+            } else throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
+          } catch (e: any) {
+            console.error("Lỗi fetchAllEvents:", e);
+            setErrorEvents(e.message || "Lỗi tải sự kiện.");
+            if (e.message?.includes("Unauthorized"))
+              router.push("/login?sessionExpired=true");
+          } finally {
+            setIsLoadingEvents(false);
+          }
+        }, [refreshToken, router]);
 
   const fetchNotifications = useCallback(
     async (userId: string) => {
+      if (!isMountedRef.current) return;
       setIsLoadingNotifications(true);
       setErrorNotifications(null);
       let currentToken = localStorage.getItem("authToken");
-      const handleAuthFailure = createAuthFailureHandler(
-        () => setIsLoadingNotifications(false),
-        setErrorNotifications
-      );
+      const handleAuthFailure = createAuthFailureHandler(() => {
+        if (isMountedRef.current) setIsLoadingNotifications(false);
+      }, setErrorNotifications);
 
       if (!currentToken || !userId) {
-        setIsLoadingNotifications(false);
-        setNotifications([]);
+        if (isMountedRef.current) {
+          setIsLoadingNotifications(false);
+          setNotifications([]);
+        }
         return;
       }
 
       try {
-        const limit = 10; 
+        const limit = 10;
         const url = `http://localhost:8080/identity/api/notifications?userId=${userId}&limit=${limit}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers, cache: "no-store" });
         if (res.status === 401 || res.status === 403) {
           const refreshResult = await refreshToken();
+          if (!isMountedRef.current) return;
           if (refreshResult.sessionExpired) {
             handleAuthFailure("expired");
             return;
@@ -416,6 +625,7 @@ export default function HomeAdmin() {
             return;
           }
         }
+        if (!isMountedRef.current) return;
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
             handleAuthFailure("expired");
@@ -440,33 +650,34 @@ export default function HomeAdmin() {
               userId: item.userId,
             })
           );
-          setNotifications(formattedNotifications);
+          if (isMountedRef.current) setNotifications(formattedNotifications);
         } else
           throw new Error(data.message || "Lỗi định dạng dữ liệu thông báo");
       } catch (error: any) {
         if (
+          isMountedRef.current &&
           error.message !== "Phiên đăng nhập hết hạn." &&
           error.message !== "Lỗi xác thực."
         )
           setErrorNotifications(error.message || "Lỗi tải thông báo.");
-        setNotifications([]);
+        if (isMountedRef.current) setNotifications([]);
       } finally {
-        setIsLoadingNotifications(false);
+        if (isMountedRef.current) setIsLoadingNotifications(false);
       }
     },
     [refreshToken, setSessionStatus]
   );
 
   useEffect(() => {
-    if (!isInitialized || sessionStatus === "expired") return;
-
-    let isMounted = true;
-    setIsLoadingUser(true);
-
-    const currentAuthToken = localStorage.getItem("authToken");
-    let userIdForFetches: string | null = null;
+    if (sessionStatus === "expired" || appIsInitialized) {
+      return;
+    }
 
     const loadAdminData = async () => {
+      if (!isMountedRef.current) return;
+      setIsLoadingUser(true);
+      let currentAuthToken = localStorage.getItem("authToken");
+      let userIdForFetches: string | null = null;
       let tokenForSubFetches: string | null = currentAuthToken;
 
       if (currentAuthToken) {
@@ -479,23 +690,27 @@ export default function HomeAdmin() {
 
           if (userRes.status === 401 || userRes.status === 403) {
             const refreshResult = await refreshToken();
+            if (!isMountedRef.current) return;
             if (refreshResult.sessionExpired || refreshResult.error) {
-              if (isMounted) setSessionStatus("expired");
+              setSessionStatus(
+                refreshResult.sessionExpired ? "expired" : "error"
+              );
               return;
             }
-            if (refreshResult.token && isMounted) {
+            if (refreshResult.token) {
               tokenForSubFetches = refreshResult.token;
               userRes = await fetch(userInfoUrl, {
                 headers: { Authorization: `Bearer ${tokenForSubFetches}` },
                 cache: "no-store",
               });
-            } else if (isMounted) {
+            } else {
               setSessionStatus("expired");
               return;
             }
           }
 
-          if (!userRes.ok && isMounted) {
+          if (!isMountedRef.current) return;
+          if (!userRes.ok) {
             if (userRes.status === 401 || userRes.status === 403) {
               setSessionStatus("expired");
               return;
@@ -506,66 +721,76 @@ export default function HomeAdmin() {
             );
           }
 
-          if (isMounted) {
-            const userData = await userRes.json();
-            if (userData.code === 1000 && userData.result?.id) {
-              const fetchedUser: User = userData.result;
-              if (!fetchedUser.roles?.some((r) => r.name === "ADMIN")) {
-                toast.error("Truy cập bị từ chối. Bạn không phải Admin.");
-                setSessionStatus("expired"); 
-                return;
-              } else {
-                setUser(fetchedUser);
-                userIdForFetches = fetchedUser.id;
-              }
+          const userData = await userRes.json();
+          if (!isMountedRef.current) return;
+          if (userData.code === 1000 && userData.result?.id) {
+            const fetchedUser: User = userData.result;
+            if (!fetchedUser.roles?.some((r) => r.name === "ADMIN")) {
+              toast.error("Truy cập bị từ chối. Bạn không phải Admin.");
+              setSessionStatus("expired");
+              return;
             } else {
-              throw new Error("Invalid user data structure received");
+              setUser(fetchedUser);
+              userIdForFetches = fetchedUser.id;
             }
+          } else {
+            throw new Error("Invalid user data structure received");
           }
         } catch (error: any) {
-          if (isMounted) {
+          if (isMountedRef.current) {
             setUser(null);
-            if (error.message !== "Invalid user data structure received") {
-               setSessionStatus("expired");
+            if (
+              error.message !== "Invalid user data structure received" &&
+              error.message !== "Phiên đăng nhập hết hạn." &&
+              error.message !== "Lỗi xác thực."
+            ) {
+              setSessionStatus("expired");
+            } else if (
+              error.message === "Phiên đăng nhập hết hạn." ||
+              error.message === "Lỗi xác thực."
+            ) {
+              setSessionStatus("expired");
             }
+            console.error("Error in loadAdminData (fetch user):", error);
           }
         } finally {
-          if (isMounted) setIsLoadingUser(false);
+          if (isMountedRef.current) setIsLoadingUser(false);
         }
       } else {
-        if (isMounted) {
+        if (isMountedRef.current) {
           setIsLoadingUser(false);
-          if(isInitialized) setSessionStatus("expired"); 
+          setSessionStatus("expired");
         }
         return;
       }
-      
+
       if (
         userIdForFetches &&
         tokenForSubFetches &&
-        isMounted &&
-        sessionStatus === "active" 
+        isMountedRef.current &&
+        sessionStatus === "active"
       ) {
         await Promise.all([
-          fetchAdminHomeEvents(), 
+          fetchAdminHomeEvents(),
           fetchNews(),
           fetchNotifications(userIdForFetches),
         ]);
-      } else if (isMounted && !userIdForFetches && !isLoadingUser) {
+      } else if (isMountedRef.current && !userIdForFetches && !isLoadingUser) {
         setIsLoadingEvents(false);
         setIsLoadingNews(false);
         setNotifications([]);
         setAllEvents([]);
         setNewsItems([]);
       }
+
+      if (isMountedRef.current) {
+        setAppIsInitialized(true);
+      }
     };
 
     loadAdminData();
-    return () => {
-      isMounted = false;
-    };
   }, [
-    isInitialized,
+    appIsInitialized,
     sessionStatus,
     refreshToken,
     fetchAdminHomeEvents,
@@ -609,9 +834,11 @@ export default function HomeAdmin() {
             relatedId: data.relatedId,
             userId: data.userId || user.id,
           };
-          setNotifications((prevNotifications) =>
-            [newNotification, ...prevNotifications].slice(0, 15) 
-          );
+          if (isMountedRef.current) {
+            setNotifications((prevNotifications) =>
+              [newNotification, ...prevNotifications].slice(0, 15)
+            );
+          }
         } else {
           console.warn("SOCKET (Admin): Dữ liệu thông báo không hợp lệ:", data);
         }
@@ -663,7 +890,7 @@ export default function HomeAdmin() {
     } catch (error) {
       console.error("Lỗi khi đăng xuất:", error);
     } finally {
-      setSessionStatus("expired");
+      if (isMountedRef.current) setSessionStatus("expired");
     }
   };
 
@@ -677,7 +904,6 @@ export default function HomeAdmin() {
     const handleAuthFailure = createAuthFailureHandler(undefined, (msg) =>
       toast.error(msg || "Lỗi.")
     );
-
     if (!token || !user?.id) {
       handleAuthFailure();
       return;
@@ -689,6 +915,7 @@ export default function HomeAdmin() {
       let res = await fetch(url, { method: "PUT", headers: headers });
       if (res.status === 401 || res.status === 403) {
         const refreshResult = await refreshToken();
+        if (!isMountedRef.current) return;
         if (refreshResult.sessionExpired) {
           handleAuthFailure("expired");
           return;
@@ -706,6 +933,7 @@ export default function HomeAdmin() {
           return;
         }
       }
+      if (!isMountedRef.current) return;
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
           handleAuthFailure("expired");
@@ -716,11 +944,14 @@ export default function HomeAdmin() {
           .catch(() => ({ message: `Lỗi ${res.status}` }));
         throw new Error(errorData.message || `Lỗi ${res.status}`);
       }
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-      );
+      if (isMountedRef.current) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+        );
+      }
     } catch (error: any) {
       if (
+        isMountedRef.current &&
         error.message !== "Phiên đăng nhập hết hạn." &&
         error.message !== "Lỗi xác thực."
       )
@@ -765,7 +996,7 @@ export default function HomeAdmin() {
       if (formData.imageFile)
         apiFormData.append("coverImage", formData.imageFile);
     } else {
-      apiFormData.append("type", "NEWS"); 
+      apiFormData.append("type", "NEWS");
       apiFormData.append("featured", "false");
       apiFormData.append("pinned", "false");
       apiFormData.append("createdById", user.id);
@@ -777,11 +1008,12 @@ export default function HomeAdmin() {
       let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
       let response = await fetch(API_URL, {
         method: method,
-        headers: headers, 
+        headers: headers,
         body: apiFormData,
       });
       if (response.status === 401 || response.status === 403) {
         const refreshResult = await refreshToken();
+        if (!isMountedRef.current) return;
         if (refreshResult.sessionExpired) {
           handleAuthFailure("expired");
           return;
@@ -795,7 +1027,7 @@ export default function HomeAdmin() {
           headers["Authorization"] = `Bearer ${currentToken}`;
           response = await fetch(API_URL, {
             method: method,
-            headers: headers, 
+            headers: headers,
             body: apiFormData,
           });
         } else {
@@ -803,6 +1035,7 @@ export default function HomeAdmin() {
           return;
         }
       }
+      if (!isMountedRef.current) return;
       const result = await response.json();
       if (response.ok && result.code === 1000) {
         toast.success(
@@ -811,11 +1044,13 @@ export default function HomeAdmin() {
               ? "Cập nhật tin tức thành công!"
               : "Tạo tin tức thành công!")
         );
-        refreshNewsList();
-        setIsNewsModalOpen(false);
-        setEditingNewsItem(null);
+        if (isMountedRef.current) {
+          refreshNewsList();
+          setIsNewsModalOpen(false);
+          setEditingNewsItem(null);
+        }
       } else {
-         if (response.status === 401 || response.status === 403) {
+        if (response.status === 401 || response.status === 403) {
           handleAuthFailure("expired");
           return;
         }
@@ -825,15 +1060,28 @@ export default function HomeAdmin() {
         );
       }
     } catch (error: any) {
-       if (
+      if (
+        isMountedRef.current &&
         error.message !== "Phiên đăng nhập hết hạn." &&
         error.message !== "Lỗi xác thực."
       )
-      toast.error("Lỗi khi gửi yêu cầu: " + error.message);
+        toast.error("Lỗi khi gửi yêu cầu: " + error.message);
     } finally {
-      setIsSubmittingNews(false);
+      if (isMountedRef.current) setIsSubmittingNews(false);
     }
   };
+
+  const handleRegistrationChange = useCallback(
+      (eventId: string, registered: boolean) => {
+        setRegisteredEventIds((prevIds) => {
+          const newIds = new Set(prevIds);
+          if (registered) newIds.add(eventId);
+          else newIds.delete(eventId);
+          return newIds;
+        });
+      },
+      []
+    );
 
   const handleOpenCreateModal = () => {
     if (!user) {
@@ -853,11 +1101,12 @@ export default function HomeAdmin() {
       setEditingNewsItem(null);
     }
   };
-  const handleSessionExpired = useCallback(() => {
-    setSessionStatus('expired');
-  }, [setSessionStatus]);
 
-  const isPageLoading = !isInitialized || isLoadingUser;
+  const handleSessionExpired = useCallback(() => {
+    if (isMountedRef.current) setSessionStatus("expired");
+  }, []);
+
+  const isPageReallyLoading = !appIsInitialized || isLoadingUser;
   const unreadNotificationCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications]
@@ -890,6 +1139,12 @@ export default function HomeAdmin() {
         specificHoverBg =
           activeTab === tabName ? "hover:bg-yellow-600" : "hover:bg-yellow-200";
         break;
+      case "myEvents":
+        specificBg = activeTab === tabName ? "bg-green-600" : "bg-green-100";
+        specificText = activeTab === tabName ? "" : "text-green-800";
+        specificHoverBg =
+          activeTab === tabName ? "hover:bg-green-700" : "hover:bg-green-200";
+        break;
       case "attendees":
         specificBg = activeTab === tabName ? "bg-teal-600" : "bg-teal-100";
         specificText = activeTab === tabName ? "" : "text-teal-800";
@@ -914,6 +1169,7 @@ export default function HomeAdmin() {
         specificHoverBg =
           activeTab === tabName ? "hover:bg-purple-700" : "hover:bg-purple-200";
         break;
+     
       default:
         specificBg = "bg-gray-100";
         specificText = "text-gray-800";
@@ -930,8 +1186,11 @@ export default function HomeAdmin() {
         return "border-t-indigo-600";
       case "news":
         return "border-t-green-600";
+      
       case "approval":
         return "border-t-yellow-500";
+        case "myEvents":
+        return "border-t-sky-600";
       case "attendees":
         return "border-t-teal-600";
       case "members":
@@ -940,20 +1199,24 @@ export default function HomeAdmin() {
         return "border-t-orange-500";
       case "chatList":
         return "border-t-purple-600";
+     
       default:
         return "border-t-gray-400";
     }
   };
 
-  if (isPageLoading) {
+  if (!appIsInitialized && (isLoadingUser || !user)) {
     return (
       <div className="min-h-screen flex justify-center items-center bg-gray-100 text-lg font-medium text-gray-600">
-        Đang xác thực quyền truy cập Admin...
+        Đang tải ứng dụng và xác thực...
       </div>
     );
   }
 
-  if (!user || !user.roles?.some((r) => r.name === "ADMIN")) {
+  if (
+    appIsInitialized &&
+    (!user || !user.roles?.some((r) => r.name === "ADMIN"))
+  ) {
     return (
       <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100 p-4 text-center">
         <p className="text-red-600 text-xl font-semibold mb-4">
@@ -976,17 +1239,21 @@ export default function HomeAdmin() {
   const tabs = [
     { id: "home", label: "🏠 Trang chủ" },
     { id: "news", label: "📰 Bảng tin" },
+    { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
     { id: "approval", label: "📅 Phê duyệt" },
-    { id: "attendees", label: "✅ Điểm danh / Tham gia" },
+    { id: "myEvents", label: "🛠 Sự kiện / Đăng ký", requiresAuth: true },
+    { id: "attendees", label: "✅ Điểm danh" },
     { id: "members", label: "👥 Quản lý thành viên" },
     { id: "roles", label: "📌 Quản lý Vai trò/Chức vụ" },
-    // { id: "chatList", label: "💬 Tin nhắn CLB" }, // Tạm ẩn Chat nếu chưa sẵn sàng
+    { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true },
+
+ 
   ];
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
       <Toaster position="top-center" toastOptions={{ duration: 3500 }} />
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
+      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-[55]">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">
             Quản lý Sự kiện & CLB (Admin)
@@ -1009,7 +1276,7 @@ export default function HomeAdmin() {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200">
+      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-50">
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
           {tabs.map((tab) => (
             <div key={tab.id} className="relative flex flex-col items-center">
@@ -1033,7 +1300,7 @@ export default function HomeAdmin() {
       </div>
 
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
-        {activeTab === "home" && (
+        {activeTab === "home" && user && (
           <AdminHomeTabContent
             events={allEvents}
             isLoading={isLoadingEvents}
@@ -1064,39 +1331,64 @@ export default function HomeAdmin() {
             onOpenEditModal={handleOpenEditModal}
             onNewsDeleted={refreshNewsList}
             onRefreshNews={fetchNews}
-           
           />
         )}
-        {activeTab === "approval" && (
+        {activeTab === "approval" && user && (
           <ApprovalTabContent
             user={user}
-            refreshToken={async () => {
-                const result = await refreshToken();
-                if (result.sessionExpired || result.error) {
-                    setSessionStatus(result.sessionExpired ? 'expired' : 'error');
-                    return null;
-                }
-                return result.token || null;
+            refreshTokenProp={async () => {
+              const result = await refreshToken();
+              if (!isMountedRef.current) return null;
+              if (result.sessionExpired || result.error) {
+                setSessionStatus(result.sessionExpired ? "expired" : "error");
+                return null;
+              }
+              return result.token || null;
             }}
           />
         )}
-        {activeTab === "attendees" && <AttendeesTabContent user={user} />}
-        {activeTab === "members" && (
+       { activeTab === "myEvents"&& user  && (
+                      <MyEventsTabContent
+                        user={user}
+                        initialRegisteredEventIds={registeredEventIds}
+                        isLoadingRegisteredIds={isLoadingRegisteredIds}
+                        onRegistrationChange={handleRegistrationChange}
+                        onEventUpdatedOrDeleted={() => {
+                          fetchAllEvents();
+                          const t = localStorage.getItem("authToken");
+                          if (user?.id && t) {
+                            fetchUserCreatedEvents(user.id, t);
+                            fetchRegisteredEventIds(user.id, t);
+                          }
+                        }}
+                      />
+                    )} 
+        {activeTab === "attendees" && user && (
+          <AttendeesTabContent user={user} />
+        )}
+        {activeTab === "members" && user && (
           <MembersTabContent
             user={user}
-            userRole={"ADMIN"} 
-            currentUserEmail={user?.email || null}
-            refreshToken={refreshToken} 
+            userRole={
+              user.roles?.find((r) => r.name.toUpperCase() === "ADMIN")?.name ||
+              user.roles?.[0]?.name?.toUpperCase() ||
+              "ADMIN"
+            }
+            currentUserEmail={user.email || null}
+            refreshToken={refreshToken}
             onSessionExpired={handleSessionExpired}
           />
         )}
-        {activeTab === "roles" && <RolesTabContent user={user} />}
-        {activeTab === "chatList" && <ChatTabContent currentUser={user} />}
+        {activeTab === "roles" && user && <RolesTabContent user={user} />}
+        {activeTab === "chatList" && user && (
+          <ChatTabContent currentUser={user} />
+        )}
+       
       </div>
 
-      {isInitialized && !isLoadingUser && user && (
+      {appIsInitialized && !isLoadingUser && user && (
         <div
-          className="fixed bottom-6 right-6 z-50 group"
+          className="fixed bottom-6 right-6 z-[65] group"
           ref={notificationContainerRef}
         >
           <button
@@ -1116,7 +1408,7 @@ export default function HomeAdmin() {
             )}
           </button>
           {showNotificationDropdown && (
-            <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96">
+            <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96 z-[70]">
               <NotificationDropdown
                 notifications={notifications}
                 isLoading={isLoadingNotifications}
@@ -1140,9 +1432,13 @@ export default function HomeAdmin() {
           if (confirmationState.onConfirm) confirmationState.onConfirm();
           setConfirmationState((prev) => ({ ...prev, isOpen: false }));
         }}
-        onCancel={() =>
-          setConfirmationState((prev) => ({ ...prev, isOpen: false }))
-        }
+        onCancel={() => {
+          if (confirmationState.onCancel) {
+            confirmationState.onCancel();
+          } else {
+            setConfirmationState((prev) => ({ ...prev, isOpen: false }));
+          }
+        }}
       />
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />

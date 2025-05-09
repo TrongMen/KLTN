@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast, Toaster } from "react-hot-toast";
 import Image from "next/image";
 import { User as MainUserType, ApiUser as FullApiUser } from "../../homeadmin";
-import { RefreshTokenResponse } from "../../../../hooks/useRefreshToken";
+import { RefreshTokenResponse } from "../../../hooks/useRefreshToken";
+import ConfirmationDialog from "../../../utils/ConfirmationDialog"
 import {
   CheckCircledIcon,
   CrossCircledIcon,
@@ -15,7 +16,7 @@ import {
   ReloadIcon,
   LockClosedIcon,
   LockOpen1Icon,
-  InformationCircledIcon,
+  
 } from "@radix-ui/react-icons";
 import UserProfileModal from "../modals/UserProfileModal";
 
@@ -1153,7 +1154,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   const unlockButtonClasses = `${actionButtonBaseClasses} bg-green-50 text-green-600 hover:bg-green-100 border border-green-300`;
 
   return (
-    <div className="flex flex-col h-full p-4 md:p-5 bg-gray-50 relative">
+    <div className="flex flex-col h-180 p-4 md:p-5 bg-gray-50 relative">
       <Toaster position="top-center" reverseOrder={false} />
       <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-pink-600">
@@ -1533,9 +1534,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                               <CheckCircledIcon />
                             </button>
                             <button
-                              onClick={() =>
-                                setAssigningOrganizerRoleTo(null)
-                              }
+                              onClick={() => setAssigningOrganizerRoleTo(null)}
                               className="p-1.5 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-xs"
                             >
                               <CrossCircledIcon />
@@ -1581,7 +1580,9 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                             : handleLockAccountTrigger(member)
                         }
                         className={`${
-                          member.locked ? unlockButtonClasses : lockButtonClasses
+                          member.locked
+                            ? unlockButtonClasses
+                            : lockButtonClasses
                         } w-full justify-center`}
                         disabled={
                           lockingMemberId === member.id ||

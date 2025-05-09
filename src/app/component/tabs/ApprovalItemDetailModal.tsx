@@ -3,7 +3,7 @@
 import React from 'react';
 import { EventDisplayInfo as MainEventInfo, NewsItem as MainNewsItem, User } from "../homeadmin"; // Adjust paths
 
-// Adapt types to include all necessary details from API response
+
 type EventType = MainEventInfo & { status?: string; rejectionReason?: string | null; createdBy?: string; content?: string; purpose?: string; time?: string };
 type NewsItemType = MainNewsItem & { status?: string; rejectionReason?: string | null; createdBy?: { id: string; firstName?: string; lastName?: string; avatar?: string }; content?: string; coverImageUrl?: string; createdAt?: string; publishedAt?: string | null; event?: { id: string; name?: string } | null };
 
@@ -13,16 +13,16 @@ interface ApprovalItemDetailModalProps {
     item: EventType | NewsItemType | null;
 }
 
-// Helper to check if item is an EventType
+
 function isEvent(item: EventType | NewsItemType | null): item is EventType {
-    // Use a property unique to EventType from your data (e.g., 'name' or 'purpose')
+    
     return item !== null && 'name' in item;
 }
 
-// Helper to safely render HTML content
+
 const RenderHtmlContent: React.FC<{ htmlString?: string }> = ({ htmlString }) => {
     if (!htmlString) return <p className="text-gray-500 italic">Không có nội dung.</p>;
-    // WARNING: Ensure the HTML source is trusted or sanitized before using dangerouslySetInnerHTML
+    
     return <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: htmlString }} />;
 };
 
@@ -33,8 +33,8 @@ const ApprovalItemDetailModal: React.FC<ApprovalItemDetailModalProps> = ({ isOpe
     const title = isEventItem ? item.name : item.title;
     const status = item.status;
     const rejectionReason = item.rejectionReason;
-    const createdAt = isEventItem ? (item as any).createdAt : item.createdAt; // Adjust based on actual EventType if different
-    const createdBy = isEventItem ? (item as any).createdBy : item.createdBy; // Event might just have ID
+    const createdAt = isEventItem ? (item as any).createdAt : item.createdAt;
+    const createdBy = isEventItem ? (item as any).createdBy : item.createdBy; 
 
     const formatDetailDate = (dateString?: string | null) => {
         if (!dateString) return 'N/A';
@@ -56,7 +56,7 @@ const ApprovalItemDetailModal: React.FC<ApprovalItemDetailModalProps> = ({ isOpe
                 <div className="p-5 overflow-y-auto flex-grow">
                     <h3 className="text-xl font-bold text-gray-900 mb-3">{title}</h3>
 
-                    {/* Common Details */}
+                    
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4 border-b pb-3">
                         <p><strong className="text-gray-600">ID:</strong> <span className="text-gray-800 break-all">{item.id}</span></p>
                         <p><strong className="text-gray-600">Trạng thái:</strong>
@@ -71,7 +71,7 @@ const ApprovalItemDetailModal: React.FC<ApprovalItemDetailModalProps> = ({ isOpe
                         {!isEventItem && item.publishedAt && (
                              <p><strong className="text-gray-600">Ngày đăng:</strong> <span className="text-gray-800">{formatDetailDate(item.publishedAt)}</span></p>
                         )}
-                         {/* Created By Info */}
+                        
                          <div className="sm:col-span-2 pt-2 mt-2 border-t border-dashed">
                             <strong className="text-gray-600 block mb-1">Người tạo:</strong>
                             {typeof createdBy === 'string' ? (
@@ -88,7 +88,7 @@ const ApprovalItemDetailModal: React.FC<ApprovalItemDetailModalProps> = ({ isOpe
                     </div>
 
 
-                    {/* Event Specific Details */}
+                    
                     {isEventItem && (
                         <div className="space-y-2 text-sm mb-4">
                              {item.time && <p><strong className="text-gray-600">Thời gian:</strong> <span className="text-gray-800">{formatDetailDate(item.time)}</span></p>}

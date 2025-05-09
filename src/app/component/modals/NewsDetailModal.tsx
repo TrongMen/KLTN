@@ -1,9 +1,9 @@
 "use client";
 
-import React from 'react';
-import { NewsItem, User } from "../app/component/homeuser"; // Điều chỉnh đường dẫn nếu cần
-import { Cross1Icon, Pencil1Icon, TrashIcon } from '@radix-ui/react-icons';
-import Image from 'next/image';
+import React from "react";
+import { NewsItem, User } from "../homeuser"; // Điều chỉnh đường dẫn nếu cần
+import { Cross1Icon, Pencil1Icon, TrashIcon } from "@radix-ui/react-icons";
+import Image from "next/image";
 
 interface NewsDetailModalProps {
   isOpen: boolean;
@@ -20,12 +20,12 @@ const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
   item,
   user,
   onTriggerEdit,
-  onTriggerDelete
+  onTriggerDelete,
 }) => {
   if (!isOpen || !item) return null;
 
   const isCreator = user?.id === item.createdBy?.id;
-  const isAdmin = user?.roles?.some(role => role.name === "ADMIN");
+  const isAdmin = user?.roles?.some((role) => role.name === "ADMIN");
 
   const canUpdate = isCreator && item.status === "APPROVED";
   const canDelete = isAdmin || isCreator;
@@ -52,7 +52,10 @@ const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center px-6 py-4 border-b sticky top-0 bg-white z-10 rounded-t-lg">
-          <h2 className="text-xl font-semibold text-gray-800 truncate pr-4" title={item.title || "Chi tiết tin tức"}>
+          <h2
+            className="text-xl font-semibold text-gray-800 truncate pr-4"
+            title={item.title || "Chi tiết tin tức"}
+          >
             {item.title || "Chi tiết tin tức"}
           </h2>
           <button
@@ -68,7 +71,7 @@ const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
             <div className="mb-4 relative w-full aspect-video rounded overflow-hidden bg-gray-100 max-h-[400px]">
               <Image
                 src={item.imageUrl}
-                alt={item.title || 'Hình ảnh tin tức'}
+                alt={item.title || "Hình ảnh tin tức"}
                 layout="fill"
                 objectFit="contain"
                 className="bg-gray-100"
@@ -76,10 +79,24 @@ const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
             </div>
           )}
           <div className="text-xs text-gray-500">
-            <span>Ngày đăng: {new Date(item.date || item.createdAt || Date.now()).toLocaleDateString("vi-VN", { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+            <span>
+              Ngày đăng:{" "}
+              {new Date(
+                item.date || item.createdAt || Date.now()
+              ).toLocaleDateString("vi-VN", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
             {item.createdBy && (
               <span className="ml-2">
-                | Người tạo: {`${item.createdBy.lastName || ''} ${item.createdBy.firstName || ''}`.trim() || item.createdBy.username}
+                | Người tạo:{" "}
+                {`${item.createdBy.lastName || ""} ${
+                  item.createdBy.firstName || ""
+                }`.trim() || item.createdBy.username}
               </span>
             )}
           </div>

@@ -32,7 +32,7 @@ type EditMode = {
 type ActiveTab = "position" | "role";
 
 interface RolesTabContentProps {
-  user: MainUserType | null; // Receive user info if needed for permissions later
+  user: MainUserType | null; 
 }
 
 const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {

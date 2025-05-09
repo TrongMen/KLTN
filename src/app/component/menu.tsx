@@ -8,83 +8,19 @@ import React, {
   useMemo,
 } from "react";
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FaUserCircle } from "react-icons/fa";
 import { CiCamera } from "react-icons/ci";
 import { toast, Toaster } from "react-hot-toast";
-import { useRefreshToken } from "../../hooks/useRefreshToken";
+import { useRefreshToken } from "../../hooks/useRefreshToken"; // Đảm bảo đường dẫn này chính xác
 
-interface ConfirmationDialogProps {
-  isOpen: boolean;
-  title: string;
-  message: React.ReactNode;
-  onConfirm: () => void;
-  onCancel: () => void;
-  confirmText?: string;
-  cancelText?: string;
-  confirmVariant?: "primary" | "danger";
-}
-function ConfirmationDialog({
-  isOpen,
-  title,
-  message,
-  onConfirm,
-  onCancel,
-  confirmText = "Xác nhận",
-  cancelText = "Hủy bỏ",
-  confirmVariant = "primary",
-}: ConfirmationDialogProps) {
-  if (!isOpen) return null;
-  const confirmBtnClasses = useMemo(() => {
-    let b =
-      "flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ";
-    if (confirmVariant === "danger") {
-      b +=
-        "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 cursor-pointer";
-    } else {
-      b +=
-        "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 cursor-pointer";
-    }
-    return b;
-  }, [confirmVariant]);
-  const cancelBtnClasses =
-    "flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2";
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3
-          className={`text-lg font-bold mb-3 ${
-            confirmVariant === "danger" ? "text-red-700" : "text-gray-800"
-          }`}
-        >
-          {title}
-        </h3>
-        <div className="text-sm text-gray-600 mb-5">{message}</div>
-        <div className="flex gap-3">
-          <button onClick={onCancel} className={cancelBtnClasses}>
-            {cancelText}
-          </button>
-          <button onClick={onConfirm} className={confirmBtnClasses}>
-            {confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+// Interfaces (Role, User, UserUpdateFormData, PasswordChangeData, ProfileErrors)
+// Giữ nguyên các interface bạn đã định nghĩa:
 interface Role {
   name: string;
   description?: string;
   permissions?: any[];
 }
+
 interface User {
   id: string;
   roles?: Role[];
@@ -96,7 +32,11 @@ interface User {
   email?: string;
   gender?: boolean;
   role?: string;
+  position?: {
+    name?: string;
+  }
 }
+
 interface UserUpdateFormData {
   firstName?: string;
   lastName?: string;
@@ -104,10 +44,12 @@ interface UserUpdateFormData {
   gender?: boolean;
   email?: string;
 }
+
 interface PasswordChangeData {
   passwordOld: string;
-  password?: string;
+  passwordNew?: string; // Sửa 'password' thành 'passwordNew' để rõ ràng hơn nếu API backend cũng dùng tên này
 }
+
 type ProfileErrors = {
   firstName?: string;
   lastName?: string;
@@ -123,16 +65,27 @@ const capitalizeEachWord = (str: string = ""): string => {
     .join(" ");
 };
 
-export default function UserMenu() {
-  const [isOpen, setIsOpen] = useState(false);
+
+interface UserMenuProps {
+  user: User | null;
+  onLogout: () => void; 
+}
+
+
+export default function UserMenu({ user, onLogout }: UserMenuProps) {
+  const [isOpen, setIsOpen] = useState(false); 
   const [showProfile, setShowProfile] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [updatedUser, setUpdatedUser] = useState<User | null>(null);
+  
+  // `user` giờ là prop, không cần state nội bộ `user` và `setUser` nữa
+  // const [user, setUser] = useState<User | null>(null); // XÓA DÒNG NÀY
+
+  const [updatedUser, setUpdatedUser] = useState<User | null>(null); 
+
   const [isEditing, setIsEditing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false); // State loading upload avatar
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [passwordFormData, setPasswordFormData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -149,61 +102,20 @@ export default function UserMenu() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { refreshToken } = useRefreshToken();
 
-  const fetchUserInfo = useCallback(async (showToast = false) => {
-    try {
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        setUser(null);
-        localStorage.removeItem("user");
-        return;
-      }
-      const res = await fetch("http://localhost:8080/identity/users/myInfo", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const data = await res.json();
-      if (res.ok && data.result) {
-        setUser(data.result);
-        setUpdatedUser(data.result);
-        localStorage.setItem("user", JSON.stringify(data.result));
-        if (showToast) toast.success("Refreshed user info!");
-      } else {
-        console.error("Failed fetch user info:", data.message);
-        if (res.status === 401 || res.status === 403) handleLogout();
-      }
-    } catch (error) {
-      console.error("API error fetch user info:", error);
-      setUser(null);
-      localStorage.removeItem("user");
-    }
-  }, []);
-  useEffect(() => {
-    fetchUserInfo();
-  }, [fetchUserInfo]);
+  // XÓA: fetchUserInfo và useEffect liên quan vì `user` giờ là prop
+  // const fetchUserInfo = useCallback(async (showToast = false) => { ... }, []);
+  // useEffect(() => { fetchUserInfo(); }, [fetchUserInfo]);
 
-  const handleLogout = useCallback(async () => {
-    try {
-      const token = localStorage.getItem("authToken");
-      if (token) {
-        await fetch("http://localhost:8080/identity/auth/logout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token }),
-        });
-      }
-    } catch (error) {
-      console.error("API logout error:", error);
-    } finally {
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("role");
-      localStorage.removeItem("user");
-      setUser(null);
-      router.push("/login");
+  // XÓA: handleLogout nội bộ, vì `onLogout` giờ là prop
+  // const handleLogout = useCallback(async () => { ... }, [router]);
+
+  // Cập nhật `updatedUser` khi modal profile được mở hoặc khi prop `user` thay đổi
+  useEffect(() => {
+    if (showProfile && user) {
+      setUpdatedUser(user); 
     }
-  }, [router]);
+  }, [showProfile, user]);
+
   const handleProfileChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -221,15 +133,7 @@ export default function UserMenu() {
       setProfileErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
-  const handlePasswordInputChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setPasswordFormData({
-      ...passwordFormData,
-      [e.target.name]: e.target.value,
-    });
-    if (changePasswordError) setChangePasswordError("");
-  };
+
   const validateProfile = (data: User | null): ProfileErrors => {
     const errors: ProfileErrors = {};
     if (!data) return errors;
@@ -239,10 +143,7 @@ export default function UserMenu() {
         const today = new Date();
         let age = today.getFullYear() - birthDate.getFullYear();
         const mDiff = today.getMonth() - birthDate.getMonth();
-        if (
-          mDiff < 0 ||
-          (mDiff === 0 && today.getDate() < birthDate.getDate())
-        ) {
+        if (mDiff < 0 || (mDiff === 0 && today.getDate() < birthDate.getDate())) {
           age--;
         }
         if (isNaN(age) || age < 17) {
@@ -272,12 +173,8 @@ export default function UserMenu() {
       return;
     }
     setIsSavingProfile(true);
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      toast.error("Vui lòng đăng nhập lại.");
-      setIsSavingProfile(false);
-      return;
-    }
+    let token = localStorage.getItem("authToken"); 
+
     const bodyToSend: UserUpdateFormData = {
       firstName: updatedUser.firstName,
       lastName: updatedUser.lastName,
@@ -285,45 +182,72 @@ export default function UserMenu() {
       gender: updatedUser.gender,
       email: updatedUser.email,
     };
+    // Loại bỏ các trường undefined/null
     Object.keys(bodyToSend).forEach(
       (key) =>
         (bodyToSend[key as keyof UserUpdateFormData] === undefined ||
           bodyToSend[key as keyof UserUpdateFormData] === null) &&
         delete bodyToSend[key as keyof UserUpdateFormData]
     );
-    console.log("Sending profile update:", bodyToSend);
+    
     try {
-      const res = await fetch(
-        `http://localhost:8080/identity/users/byuser/${user.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(bodyToSend),
-        }
+      let headers: HeadersInit = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      let response = await fetch(
+        `http://localhost:8080/identity/users/byuser/${user.id}`, // Sử dụng user.id từ prop
+        { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
       );
-      const data = await res.json();
-      if (res.ok && data.code === 1000) {
+
+      if ((response.status === 401 || response.status === 403) && refreshToken) {
+        const newToken = await refreshToken();
+        if (newToken) {
+          token = newToken;
+          localStorage.setItem("authToken", newToken);
+          headers["Authorization"] = `Bearer ${newToken}`;
+          response = await fetch(
+            `http://localhost:8080/identity/users/byuser/${user.id}`,
+            { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
+          );
+        } else {
+          throw new Error("Phiên làm mới token thất bại.");
+        }
+      }
+
+      const data = await response.json();
+      if (response.ok && data.code === 1000) {
         toast.success("Cập nhật thông tin thành công!");
-        setUser(data.result);
-        setUpdatedUser(data.result);
-        localStorage.setItem("user", JSON.stringify(data.result));
+        // UserHome sẽ chịu trách nhiệm cập nhật state user chính.
+        // Nếu cần, UserHome có thể fetch lại user info hoặc nhận data.result từ một callback.
+        localStorage.setItem("user", JSON.stringify(data.result)); // Cập nhật localStorage
+        setUpdatedUser(data.result); // Cập nhật state cho modal
         setIsEditing(false);
+    
       } else {
         throw new Error(data.message || "Cập nhật thất bại");
       }
     } catch (error: any) {
       console.error("Lỗi cập nhật profile:", error);
       toast.error(`Lỗi: ${error.message}`);
-      setUpdatedUser(user);
+      // Cân nhắc reset updatedUser về lại user từ prop nếu có lỗi
+      // setUpdatedUser(user); 
     } finally {
       setIsSavingProfile(false);
     }
   };
+
+  const handlePasswordInputChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setPasswordFormData({
+      ...passwordFormData,
+      [e.target.name]: e.target.value,
+    });
+    if (changePasswordError) setChangePasswordError("");
+  };
+
   const handlePasswordChangeSubmit = async () => {
-    if (!user?.id) return;
+    if (!user?.id) return; // Sử dụng user.id từ prop
     setChangePasswordError("");
     if (passwordFormData.newPassword !== passwordFormData.confirmPassword) {
       setChangePasswordError("Mật khẩu mới không khớp.");
@@ -334,40 +258,44 @@ export default function UserMenu() {
       return;
     }
     setIsChangingPassword(true);
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      toast.error("Vui lòng đăng nhập lại.");
-      setIsChangingPassword(false);
-      return;
-    }
+    let token = localStorage.getItem("authToken");
+
     const bodyToSend: PasswordChangeData = {
       passwordOld: passwordFormData.currentPassword,
-      password: passwordFormData.newPassword,
+      passwordNew: passwordFormData.newPassword, // Đổi tên field để rõ ràng hơn
     };
-    console.log("Sending password change...");
+    
     try {
-      const res = await fetch(
-        `http://localhost:8080/identity/users/byuser/${user.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(bodyToSend),
-        }
+      let headers: HeadersInit = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      let response = await fetch(
+        `http://localhost:8080/identity/users/byuser/${user.id}`, // Sử dụng user.id từ prop
+        { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
       );
-      const data = await res.json();
-      if (res.ok && data.code === 1000) {
+
+      if ((response.status === 401 || response.status === 403) && refreshToken) {
+        const newToken = await refreshToken();
+        if (newToken) {
+          token = newToken;
+          localStorage.setItem("authToken", newToken);
+          headers["Authorization"] = `Bearer ${newToken}`;
+          response = await fetch(
+            `http://localhost:8080/identity/users/byuser/${user.id}`,
+            { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
+          );
+        } else {
+          throw new Error("Phiên làm mới token thất bại.");
+        }
+      }
+      
+      const data = await response.json();
+      if (response.ok && data.code === 1000) {
         toast.success("Đổi mật khẩu thành công!");
-        setPasswordFormData({
-          currentPassword: "",
-          newPassword: "",
-          confirmPassword: "",
-        });
+        setPasswordFormData({ currentPassword: "", newPassword: "", confirmPassword: "" });
         setShowChangePassword(false);
       } else {
-        throw new Error(data.message || "Đổi mật khẩu thất bại (MK cũ sai?)");
+        throw new Error(data.message || "Đổi mật khẩu thất bại (Mật khẩu cũ sai?)");
       }
     } catch (error: any) {
       console.error("Lỗi đổi mật khẩu:", error);
@@ -377,54 +305,56 @@ export default function UserMenu() {
       setIsChangingPassword(false);
     }
   };
+
   const handleCameraClick = () => {
     inputRef.current?.click();
   };
 
-  // *** HÀM UPLOAD AVATAR MỚI ***
   const uploadAvatar = async (file: File) => {
-    if (!user?.id) return;
+    if (!user?.id) return; // Sử dụng user.id từ prop
     setIsUploadingAvatar(true);
     const uploadToastId = toast.loading("Đang tải lên ảnh đại diện...");
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      toast.error("Vui lòng đăng nhập lại.");
-      setIsUploadingAvatar(false);
-      return;
-    }
+    let token = localStorage.getItem("authToken");
 
     const formData = new FormData();
-    formData.append("file", file); // Key 'file' phải khớp với backend
+    formData.append("file", file);
 
     try {
-      const response = await fetch(
-        `http://localhost:8080/identity/users/${user.id}/avatar`,
-        {
-          method: "PATCH", // Hoặc POST tùy theo API của bạn
-          headers: {
-            // KHÔNG set 'Content-Type': 'multipart/form-data', trình duyệt sẽ tự làm
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        }
+      let headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      let response = await fetch(
+        `http://localhost:8080/identity/users/${user.id}/avatar`, // Sử dụng user.id từ prop
+        { method: "PATCH", headers, body: formData }
       );
 
-      const data = await response.json();
-
-      if (response.ok && data.code === 1000) {
-        toast.success("Cập nhật ảnh đại diện thành công!", {
-          id: uploadToastId,
-        });
-        const newAvatarUrl = data.result?.avatar; // Giả sử API trả về user object mới có avatar URL
-        if (newAvatarUrl) {
-          // Cập nhật state và localStorage
-          const updatedUserData = { ...user, avatar: newAvatarUrl };
-          setUser(updatedUserData);
-          setUpdatedUser(updatedUserData); // Cập nhật cả state trong modal
-          localStorage.setItem("user", JSON.stringify(updatedUserData));
+      if ((response.status === 401 || response.status === 403) && refreshToken) {
+        const newToken = await refreshToken();
+        if (newToken) {
+          token = newToken;
+          localStorage.setItem("authToken", newToken);
+          headers["Authorization"] = `Bearer ${newToken}`;
+          response = await fetch(
+            `http://localhost:8080/identity/users/${user.id}/avatar`,
+            { method: "PATCH", headers, body: formData }
+          );
         } else {
-          // Nếu API không trả về URL mới, fetch lại thông tin user
-          fetchUserInfo();
+          throw new Error("Phiên làm mới token thất bại.");
+        }
+      }
+
+      const data = await response.json();
+      if (response.ok && data.code === 1000) {
+        toast.success("Cập nhật ảnh đại diện thành công!", { id: uploadToastId });
+        const newAvatarUrl = data.result?.avatar;
+        if (newAvatarUrl) {
+          const updatedUserDataFromUpload = { ...(user || {}), avatar: newAvatarUrl } as User;
+        
+          setUpdatedUser(updatedUserDataFromUpload); 
+          localStorage.setItem("user", JSON.stringify(updatedUserDataFromUpload)); 
+           
+        } else {
+          
         }
       } else {
         throw new Error(data.message || "Upload ảnh đại diện thất bại");
@@ -432,7 +362,6 @@ export default function UserMenu() {
     } catch (error: any) {
       console.error("Lỗi upload avatar:", error);
       toast.error(`Lỗi upload: ${error.message}`, { id: uploadToastId });
-      // Có thể hoàn tác preview nếu muốn: setUpdatedUser(user);
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -440,8 +369,7 @@ export default function UserMenu() {
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && user?.id) {
-      // Hiển thị preview ngay lập tức
+    if (file && user?.id) { // Kiểm tra user.id từ prop
       const reader = new FileReader();
       reader.onloadend = () => {
         setUpdatedUser((prev) => ({
@@ -450,10 +378,7 @@ export default function UserMenu() {
         }));
       };
       reader.readAsDataURL(file);
-
-      // Gọi hàm upload lên server
       uploadAvatar(file);
-
       if (inputRef.current) {
         inputRef.current.value = "";
       }
@@ -468,81 +393,69 @@ export default function UserMenu() {
   return (
     <>
       <Toaster position="top-center" reverseOrder={false} />
-      <Menu as="div" className="relative inline-block text-left">
+      {/* Đảm bảo z-index này đủ cao (ví dụ z-[60]) để nổi lên trên các phần tử khác như thanh tab (z-50) */}
+      <Menu as="div" className="relative inline-block text-left z-[60]">
         <MenuButton
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 px-4 py-2  hover:bg-blue-700 text-white rounded cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2 hover:bg-blue-700 text-white rounded cursor-pointer"
         >
           <img
-            src={user?.avatar || "/default-avatar.png"}
+            src={user?.avatar || "/default-avatar.png"} // Sử dụng prop user
             alt="Avatar"
             className="w-6 h-6 rounded-full object-cover border border-blue-200"
             onError={(e) => (e.currentTarget.src = "/default-avatar.png")}
           />
           <span className="font-medium text-sm">
-            {user ? `${user.lastName} ${user.firstName}` : "Tài khoản"}
+            {user ? `${user.lastName || ""} ${user.firstName || ""}`.trim() || user.username : "Tài khoản"} {/* Sử dụng prop user */}
           </span>
         </MenuButton>
-        <Menu.Items className="absolute right-0 mt-2 w-52 border rounded-lg bg-white shadow-lg z-50 overflow-hidden focus:outline-none">
-          <Menu.Item
+        <MenuItems className="absolute right-0 mt-2 w-52 border rounded-lg bg-white shadow-lg z-[60] overflow-hidden focus:outline-none">
+          <MenuItem
             as="button"
             onClick={() => {
               setShowProfile(true);
               setIsEditing(false);
               setIsOpen(false);
-              setUpdatedUser(user);
+              setUpdatedUser(user); // Khởi tạo updatedUser từ prop user
               setProfileErrors({});
             }}
             className={menuItemClassName}
           >
-            {" "}
-            Thông tin cá nhân{" "}
-          </Menu.Item>
-          <Menu.Item
+            Thông tin cá nhân
+          </MenuItem>
+          <MenuItem
             as="button"
             onClick={() => {
               setShowChangePassword(true);
               setIsOpen(false);
               setChangePasswordError("");
-              setPasswordFormData({
-                currentPassword: "",
-                newPassword: "",
-                confirmPassword: "",
-              });
+              setPasswordFormData({ currentPassword: "", newPassword: "", confirmPassword: "" });
             }}
             className={menuItemClassName}
           >
-            {" "}
-            Đổi mật khẩu{" "}
-          </Menu.Item>
-          <Menu.Item
+            Đổi mật khẩu
+          </MenuItem>
+          <MenuItem
             as="button"
-            onClick={handleLogout}
+            onClick={onLogout} // Sử dụng prop onLogout
             className={logoutItemClassName}
           >
-            {" "}
-            Đăng xuất{" "}
-          </Menu.Item>
-        </Menu.Items>
+            Đăng xuất
+          </MenuItem>
+        </MenuItems>
       </Menu>
 
+      {/* Modal Thông tin cá nhân */}
       {showProfile && updatedUser && (
         <div
-          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50"
-          onClick={() => {
-            if (!isEditing && !isUploadingAvatar) {
-              setShowProfile(false);
-              setProfileErrors({});
-            }
-          }}
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-[70]" // z-index cao hơn dropdown
+          onClick={() => { if (!isEditing && !isUploadingAvatar) { setShowProfile(false); setProfileErrors({}); }}}
         >
           <div
             className="bg-white p-6 md:p-8 rounded-2xl shadow-xl w-full max-w-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-2xl font-bold text-center text-blue-600 mb-6">
-              Thông tin cá nhân
-            </h2>
+            <h2 className="text-2xl font-bold text-center text-blue-600 mb-6">Thông tin cá nhân</h2>
             <div className="flex flex-col items-center mb-6 gap-2">
               <div className="relative">
                 <img
@@ -553,201 +466,74 @@ export default function UserMenu() {
                 />
                 {isUploadingAvatar && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full">
-                    <svg
-                      className="animate-spin h-8 w-8 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        className="opacity-25"
-                      ></circle>
-                      <path
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        className="opacity-75"
-                      ></path>
+                    <svg className="animate-spin h-8 w-8 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
+                      <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path>
                     </svg>
                   </div>
                 )}
               </div>
               {isEditing && (
                 <>
-                  {" "}
                   <button
-                    className={`mt-2 cursor-pointer rounded-full bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-3 shadow text-xs flex items-center gap-1 ${
-                      isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
+                    className={`mt-2 cursor-pointer rounded-full bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-3 shadow text-xs flex items-center gap-1 ${isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""}`}
                     onClick={handleCameraClick}
                     disabled={isUploadingAvatar}
                   >
-                    {" "}
-                    <CiCamera /> {isUploadingAvatar
-                      ? "Đang tải..."
-                      : "Đổi ảnh"}{" "}
-                  </button>{" "}
-                  <input
-                    type="file"
-                    ref={inputRef}
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleAvatarChange}
-                  />{" "}
+                    <CiCamera /> {isUploadingAvatar ? "Đang tải..." : "Đổi ảnh"}
+                  </button>
+                  <input type="file" ref={inputRef} accept="image/*" className="hidden" onChange={handleAvatarChange}/>
                 </>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               {[
-                { label: "Họ", name: "lastName" },
-                { label: "Tên", name: "firstName" },
-                { label: "Email", name: "email" },
-                { label: "Ngày sinh", name: "dob", type: "date" },
-                { label: "Giới tính", name: "gender", type: "select" },
-                { label: "Username", name: "username", readOnly: true },
+                { label: "Họ", name: "lastName" }, { label: "Tên", name: "firstName" },
+                { label: "Email", name: "email" },{ label: "Giới tính", name: "gender", type: "select" },
+                 { label: "Mã số", name: "username", readOnly: true }, { label: "Ngày sinh", name: "dob", type: "date" },
+                { label: "Vị trí", name: "position.name",readOnly: true },{ label: "Vai trò", name: "roles.description",readOnly: true },
               ].map((field) => (
                 <div key={field.name} className="flex flex-col">
                   <label className="text-sm font-medium text-gray-600 mb-1">
                     {field.label}
-                    {isEditing &&
-                      !field.readOnly &&
-                      field.name !== "gender" &&
-                      field.name !== "username" && (
-                        <span className="text-red-500 ml-1">*</span>
-                      )}
+                    {isEditing && !field.readOnly && field.name !== "gender" && field.name !== "username" && (<span className="text-red-500 ml-1">*</span>)}
                   </label>
                   {field.type === "select" ? (
                     <select
                       name={field.name}
-                      value={
-                        updatedUser.gender === true
-                          ? "Nam"
-                          : updatedUser.gender === false
-                          ? "Nữ"
-                          : ""
-                      }
+                      value={updatedUser.gender === true ? "Nam" : updatedUser.gender === false ? "Nữ" : ""}
                       onChange={handleProfileChange}
                       disabled={!isEditing || isUploadingAvatar}
-                      className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${
-                        isEditing
-                          ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900"
-                          : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
-                      }`}
+                      className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${isEditing ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900" : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"}`}
                     >
-                      {" "}
-                      <option value="">-- Chọn --</option>{" "}
-                      <option value="Nam">Nam</option>{" "}
-                      <option value="Nữ">Nữ</option>{" "}
+                      <option value="">-- Chọn --</option> <option value="Nam">Nam</option> <option value="Nữ">Nữ</option>
                     </select>
                   ) : (
                     <input
-                      type={field.type || "text"}
-                      name={field.name}
-                      value={updatedUser[field.name as keyof User] || ""}
-                      onChange={handleProfileChange}
-                      readOnly={!isEditing || field.readOnly}
-                      disabled={isUploadingAvatar}
-                      className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${
-                        isEditing && !field.readOnly
-                          ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900"
-                          : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
-                      }`}
+                      type={field.type || "text"} name={field.name}
+                      value={(updatedUser as any)[field.name] || ""}
+                      onChange={handleProfileChange} readOnly={!isEditing || field.readOnly} disabled={isUploadingAvatar}
+                      className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${isEditing && !field.readOnly ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900" : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"}`}
                     />
                   )}
-                  {profileErrors[field.name as keyof ProfileErrors] &&
-                    isEditing && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {profileErrors[field.name as keyof ProfileErrors]}
-                      </p>
-                    )}
+                  {profileErrors[field.name as keyof ProfileErrors] && isEditing && (
+                    <p className="text-red-500 text-xs mt-1">{profileErrors[field.name as keyof ProfileErrors]}</p>
+                  )}
                 </div>
               ))}
             </div>
             <div className="flex justify-end gap-4">
               {isEditing ? (
                 <>
-                  {" "}
-                  <button
-                    onClick={handleSaveProfile}
-                    disabled={isSavingProfile || isUploadingAvatar}
-                    className={`px-5 py-2 rounded-lg font-semibold cursor-pointer shadow transition flex items-center justify-center ${
-                      isSavingProfile || isUploadingAvatar
-                        ? "bg-green-300 cursor-not-allowed"
-                        : "bg-green-500 hover:bg-green-600 text-white"
-                    }`}
-                  >
-                    {" "}
-                    {isSavingProfile ? (
-                      <>
-                        <svg
-                          className="animate-spin mr-2 h-4 w-4"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                            className="opacity-25"
-                          ></circle>
-                          <path
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            className="opacity-75"
-                          ></path>
-                        </svg>
-                        ...
-                      </>
-                    ) : (
-                      "Lưu"
-                    )}{" "}
-                  </button>{" "}
-                  <button
-                    onClick={() => {
-                      setIsEditing(false);
-                      setUpdatedUser(user);
-                      setProfileErrors({});
-                    }}
-                    disabled={isSavingProfile || isUploadingAvatar}
-                    className="px-5 py-2 bg-gray-300 hover:bg-gray-400 cursor-pointer text-gray-800 rounded-lg font-semibold shadow transition"
-                  >
-                    
-                    Hủy
+                  <button onClick={handleSaveProfile} disabled={isSavingProfile || isUploadingAvatar} className={`px-5 py-2 rounded-lg font-semibold cursor-pointer shadow transition flex items-center justify-center ${isSavingProfile || isUploadingAvatar ? "bg-green-300 cursor-not-allowed" : "bg-green-500 hover:bg-green-600 text-white"}`}>
+                    {isSavingProfile ? (<><svg className="animate-spin mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>...</>) : ("Lưu")}
                   </button>
+                  <button onClick={() => { setIsEditing(false); setUpdatedUser(user); setProfileErrors({});}} disabled={isSavingProfile || isUploadingAvatar} className="px-5 py-2 bg-gray-300 hover:bg-gray-400 cursor-pointer text-gray-800 rounded-lg font-semibold shadow transition">Hủy</button>
                 </>
               ) : (
                 <>
-                  {" "}
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    disabled={isUploadingAvatar}
-                    className={`px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold shadow transition cursor-pointer ${
-                      isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                  >
-                    {" "}
-                    Cập nhật{" "}
-                  </button>{" "}
-                  <button
-                    onClick={() => {
-                      setShowProfile(false);
-                      setProfileErrors({});
-                    }}
-                    disabled={isUploadingAvatar}
-                    className={`px-5 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg font-semibold shadow transition cursor-pointer ${
-                      isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                  >
-                    {" "}
-                    Đóng{" "}
-                  </button>{" "}
+                  <button onClick={() => setIsEditing(true)} disabled={isUploadingAvatar} className={`px-5 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold shadow transition cursor-pointer ${isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""}`}>Cập nhật</button>
+                  <button onClick={() => { setShowProfile(false); setProfileErrors({});}} disabled={isUploadingAvatar} className={`px-5 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg font-semibold shadow transition cursor-pointer ${isUploadingAvatar ? "opacity-50 cursor-not-allowed" : ""}`}>Đóng</button>
                 </>
               )}
             </div>
@@ -755,9 +541,10 @@ export default function UserMenu() {
         </div>
       )}
 
+      {/* Modal Đổi mật khẩu */}
       {showChangePassword && (
         <div
-          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-50"
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-[70]" // z-index cao hơn dropdown
           onClick={() => setShowChangePassword(false)}
         >
           <div
@@ -765,11 +552,8 @@ export default function UserMenu() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-center mb-6">
-              {" "}
-              <h2 className="text-2xl font-bold text-pink-600">
-                Đổi mật khẩu
-              </h2>{" "}
-              <p className="text-sm text-gray-500"> Cập nhật mật khẩu mới </p>{" "}
+              <h2 className="text-2xl font-bold text-pink-600">Đổi mật khẩu</h2>
+              <p className="text-sm text-gray-500">Cập nhật mật khẩu mới</p>
             </div>
             {[
               { label: "Mật khẩu hiện tại", name: "currentPassword" },
@@ -778,99 +562,32 @@ export default function UserMenu() {
             ].map((field) => (
               <div key={field.name} className="mb-4 relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {" "}
                   {field.label} <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type={
-                    showPassword[field.name as keyof typeof showPassword]
-                      ? "text"
-                      : "password"
-                  }
+                  type={showPassword[field.name as keyof typeof showPassword] ? "text" : "password"}
                   name={field.name}
-                  value={
-                    passwordFormData[
-                      field.name as keyof typeof passwordFormData
-                    ]
-                  }
+                  value={passwordFormData[field.name as keyof typeof passwordFormData]}
                   onChange={handlePasswordInputChange}
                   required
                   className="w-full px-4 py-2 text-black pr-10 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-pink-400"
                 />
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowPassword((prev) => ({
-                      ...prev,
-                      [field.name]:
-                        !prev[field.name as keyof typeof showPassword],
-                    }))
-                  }
+                  onClick={() => setShowPassword((prev) => ({...prev, [field.name]:!prev[field.name as keyof typeof showPassword]}))}
                   className="absolute right-3 top-8 text-gray-500 hover:text-gray-800"
                 >
-                  {" "}
-                  {showPassword[field.name as keyof typeof showPassword]
-                    ? "🙈"
-                    : "👁️"}{" "}
+                  {showPassword[field.name as keyof typeof showPassword] ? "🙈" : "👁️"}
                 </button>
               </div>
             ))}
-            {changePasswordError && (
-              <p className="text-red-500 text-sm text-center mb-4">
-                {changePasswordError}
-              </p>
-            )}
+            {changePasswordError && (<p className="text-red-500 text-sm text-center mb-4">{changePasswordError}</p>)}
             <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={handlePasswordChangeSubmit}
-                disabled={isChangingPassword}
-                className={`bg-gradient-to-r from-pink-500 to-pink-600 text-white px-4 py-2 rounded hover:opacity-90 shadow flex items-center justify-center ${
-                  isChangingPassword ? "cursor-wait" : "cursor-pointer"
-                }`}
-              >
-                {" "}
-                {isChangingPassword ? (
-                  <>
-                    <svg
-                      className="animate-spin mr-2 h-4 w-4"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        className="opacity-25"
-                      ></circle>
-                      <path
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        className="opacity-75"
-                      ></path>
-                    </svg>
-                    ...
-                  </>
-                ) : (
-                  "Xác nhận"
-                )}{" "}
+              <button onClick={handlePasswordChangeSubmit} disabled={isChangingPassword} className={`bg-gradient-to-r from-pink-500 to-pink-600 text-white px-4 py-2 rounded hover:opacity-90 shadow flex items-center justify-center ${isChangingPassword ? "cursor-wait" : "cursor-pointer"}`}>
+                {isChangingPassword ? (<><svg className="animate-spin mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg>...</>) : ("Xác nhận")}
               </button>
-              <button
-                onClick={() => {
-                  setShowChangePassword(false);
-                  setChangePasswordError("");
-                  setPasswordFormData({
-                    currentPassword: "",
-                    newPassword: "",
-                    confirmPassword: "",
-                  });
-                }}
-                className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 cursor-pointer"
-              >
-                {" "}
-                Đóng{" "}
+              <button onClick={() => { setShowChangePassword(false); setChangePasswordError(""); setPasswordFormData({ currentPassword: "", newPassword: "", confirmPassword: "" });}} className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 cursor-pointer">
+                Đóng
               </button>
             </div>
           </div>

@@ -879,9 +879,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               
               
             
-              
-
-
+      
             
               {viewingEventDetails.createdAt && (
                 <p>

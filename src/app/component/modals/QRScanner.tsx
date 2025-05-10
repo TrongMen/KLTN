@@ -1,171 +1,238 @@
-'use client';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { BrowserMultiFormatReader, Result, NotFoundException, Exception } from '@zxing/library';
 
-import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode';
-import { useEffect, useRef, useState } from 'react';
-
-interface QRScannerProps {
-  onScanSuccess: (decodedText: string) => void;
-  onScanError: (errorMessage: string) => void;
+interface QrScannerProps {
+  onScanSuccess: (result: string) => void;
+  onScanError: (error: string) => void;
 }
 
-export default function QRScanner({ onScanSuccess, onScanError }: QRScannerProps) {
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
+const CameraSwitchIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>
+    <path d="M13 5H20a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-5"/>
+    <line x1="15" y1="9" x2="18" y2="12"/>
+    <line x1="15" y1="15" x2="18" y2="12"/>
+    <line x1="9" y1="15" x2="6" y2="12"/>
+    <line x1="9" y1="9" x2="6" y2="12"/>
+  </svg>
+);
+
+const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const codeReader = useRef<BrowserMultiFormatReader>(new BrowserMultiFormatReader());
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [isScannerActive, setIsScannerActive] = useState<boolean>(false);
+
+  const stopCamera = useCallback(() => {
+    if (codeReader.current) {
+      codeReader.current.reset();
+    }
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      if (stream && typeof stream.getTracks === 'function') {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      videoRef.current.srcObject = null;
+    }
+    setIsScannerActive(false);
+  }, []);
 
   useEffect(() => {
-    const initScanner = () => {
-      try {
-        const scanner = new Html5QrcodeScanner(
-          'reader',
-          {
-            qrbox: { width: 250, height: 250 },
-            fps: 10,
-            disableFlip: false,
-            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-          },
-          false
-        );
+    setPermissionError(null);
+    setIsScannerActive(false); 
 
-        scannerRef.current = scanner;
-        setIsScanning(true);
-
-        const successHandler = (decodedText: string) => {
-          try {
-            scanner.pause();
-            onScanSuccess(decodedText);
-          } catch (error) {
-            console.error('Error pausing scanner:', error);
-            onScanSuccess(decodedText);
+    codeReader.current.listVideoInputDevices()
+      .then(videoInputDevices => {
+        if (videoInputDevices.length > 0) {
+          setDevices(videoInputDevices);
+          if (!selectedDeviceId && videoInputDevices[0]) {
+            setSelectedDeviceId(videoInputDevices[0].deviceId);
           }
-        };
-
-        const errorHandler = (errorMessage: string) => {
-          if (!errorMessage.includes('NotFoundException')) {
-            setCameraError(errorMessage);
-            onScanError(errorMessage);
-          }
-        };
-
-        scanner.render(successHandler, errorHandler);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to initialize scanner';
-        setCameraError(errorMessage);
-      }
-    };
-
-    initScanner();
+          setIsScannerActive(true);
+        } else {
+          const noDeviceError = "Không tìm thấy thiết bị camera nào.";
+          setPermissionError(noDeviceError);
+          onScanError(noDeviceError);
+          setIsScannerActive(false);
+        }
+      })
+      .catch(err => {
+        let errorMsg = "Lỗi khi truy cập camera.";
+        if (err instanceof Error) {
+            if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                errorMsg = "Quyền truy cập camera bị từ chối. Vui lòng cấp quyền trong cài đặt trình duyệt.";
+            } else {
+                errorMsg = `Lỗi camera: ${err.message}`;
+            }
+        }
+        setPermissionError(errorMsg);
+        onScanError(errorMsg);
+        setIsScannerActive(false);
+      });
 
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear()
-          .then(() => {
-            console.log('Scanner cleaned up');
-            setIsScanning(false);
-          })
-          .catch((error: Error) => {
-            console.error('Scanner cleanup error:', error);
-          });
+      stopCamera();
+    };
+  }, [onScanError, stopCamera, selectedDeviceId]); 
+
+
+  useEffect(() => {
+    if (!selectedDeviceId || !videoRef.current || permissionError || !isScannerActive) {
+      if (isScannerActive && codeReader.current) { 
+         codeReader.current.reset();
+      }
+      return;
+    }
+    
+    const currentVideoElement = videoRef.current;
+
+    codeReader.current.decodeFromVideoDevice(
+      selectedDeviceId,
+      currentVideoElement,
+      (result: Result | undefined, err: Exception | undefined) => {
+        if (result) {
+          stopCamera(); 
+          onScanSuccess(result.getText()); 
+        }
+        if (err && !(err instanceof NotFoundException)) {
+           if (err.name === 'NotAllowedError' || err.name === "PermissionDeniedError") {
+             const permError = "Quyền truy cập camera đã bị thu hồi hoặc bị từ chối.";
+             setPermissionError(permError);
+             onScanError(permError);
+             stopCamera();
+           } else if (err.message.includes("video input is missing")) {
+              // Bỏ qua
+           }
+        }
+      }
+    ).catch(err => {
+        let errorMsg = "Không thể bắt đầu quét từ camera đã chọn.";
+         if (err instanceof Error) {
+            if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                errorMsg = "Quyền truy cập camera bị từ chối cho thiết bị này.";
+            } else if (err.message.includes("Requested device not found")) {
+                errorMsg = "Không tìm thấy camera đã chọn.";
+            } else if (!err.message.includes("video input is missing")) { 
+                 errorMsg = `Lỗi camera: ${err.message}`;
+            } else {
+                return; 
+            }
+        }
+        setPermissionError(errorMsg);
+        onScanError(errorMsg);
+        stopCamera();
+    });
+
+    return () => {
+      if (codeReader.current) {
+        codeReader.current.reset();
       }
     };
-  }, [onScanSuccess, onScanError]);
+  }, [selectedDeviceId, onScanSuccess, onScanError, permissionError, isScannerActive, stopCamera]);
 
-  const requestCameraAccess = () => {
-    setCameraError(null);
-    if (scannerRef.current) {
-      try {
-        // Note: The html5-qrcode library's resume() method doesn't return a Promise
-        scannerRef.current.resume();
-        setIsScanning(true);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to access camera';
-        setCameraError(errorMessage);
-      }
-    }
+
+  const handleSwitchCamera = () => {
+    if (devices.length <= 1) return;
+    
+    stopCamera(); 
+    setPermissionError(null);
+
+    const currentIndex = devices.findIndex(device => device.deviceId === selectedDeviceId);
+    const nextIndex = (currentIndex + 1) % devices.length;
+    const newDeviceId = devices[nextIndex].deviceId;
+    
+    setSelectedDeviceId(newDeviceId);
+    setIsScannerActive(true); 
+    stopCamera(); 
   };
 
-  return (
-    <div className="w-full">
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-        QR Code Scanner
-      </h2>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-        Scan a QR code to proceed
-      </p>
-      
-      <div className="relative mt-4">
-        <div
-          id="reader"
-          className="w-full aspect-square bg-gray-100 dark:bg-gray-900 relative"
-        >{!isScanning && !cameraError && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="animate-pulse text-gray-400 dark:text-gray-600">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-12 w-12"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </div>
-            </div>
-          )}
-        </div>
-        
-        {/* Scanner frame overlay */}
-        {isScanning && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="border-4 border-blue-500 rounded-lg w-64 h-64 relative">
-              <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-blue-500"></div>
-              <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-blue-500"></div>
-              <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-blue-500"></div>
-              <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-blue-500"></div>
-            </div>
-          </div>
-        )}
-      </div>
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
 
-      {cameraError && (
-        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-          <div className="flex items-start">
-            <svg
-              className="h-5 w-5 text-red-500 dark:text-red-400 mt-0.5 mr-2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-            <div>
-              <p className="text-red-600 dark:text-red-400">{cameraError}</p>
-              <button
-                onClick={requestCameraAccess}
-                className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
-              >
-                Try Again
-              </button>
+  return (
+    <div className="scanner-container w-full">
+      <div 
+        className='relative w-full bg-black rounded-md border border-gray-400 shadow-inner'
+        style={{ 
+          paddingBottom: '75%',
+          minHeight: '200px',
+          maxHeight: '400px' 
+        }}
+      >
+        <video
+          ref={videoRef}
+          className="absolute top-0 left-0 w-full h-full object-cover rounded-md"
+          playsInline 
+          muted 
+        />
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div 
+            className="relative w-3/4 h-3/4 rounded-lg overflow-hidden"
+            style={{maxWidth: '260px', maxHeight: '260px'}}
+          >
+            <div className="absolute top-0 left-0 w-full h-full">
+              <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-green-500 rounded-tl-lg"></div>
+              <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-green-500 rounded-tr-lg"></div>
+              <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-green-500 rounded-bl-lg"></div>
+              <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-green-500 rounded-br-lg"></div>
             </div>
+            {isScannerActive && !permissionError && selectedDeviceId && (
+                 <div className="scanning-line"></div>
+            )}
           </div>
+        </div>
+      </div>
+      
+      {devices.length > 1 && !permissionError && isScannerActive && (
+        <div className="mt-3 flex justify-center">
+          <button
+            onClick={handleSwitchCamera}
+            className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+            title="Đổi camera"
+          >
+            <CameraSwitchIcon />
+            <span className="ml-2">Đổi Camera</span>
+          </button>
         </div>
       )}
+
+       {permissionError && (
+        <p className="text-red-500 text-sm mt-3 text-center font-medium">{permissionError}</p>
+      )}
+      <style jsx>{`
+        .scanning-line {
+          position: absolute;
+          left: 5%; 
+          right: 5%;
+          width: 90%;
+          top: 0;
+          height: 3px;
+          background: #00ff00; 
+          box-shadow: 0 0 10px #00ff00, 0 0 15px #00ff00, 0 0 20px #39ff14;
+          border-radius: 3px;
+          animation: scanY 2.8s infinite cubic-bezier(0.45, 0.05, 0.55, 0.95) alternate;
+          z-index: 10;
+        }
+
+        @keyframes scanY {
+          from {
+            top: 3%; 
+          }
+          to {
+            top: calc(97% - 3px); 
+          }
+        }
+        video {
+           /* transform: scaleX(-1); */
+        }
+      `}</style>
     </div>
   );
-}
+};
+
+export default QRScanner;

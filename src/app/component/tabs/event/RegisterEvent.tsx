@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import ConfirmationDialog from "../../../utils/ConfirmationDialog";
+import ConfirmationDialog from "../../../../utils/ConfirmationDialog";
 import {
   MagnifyingGlassIcon,
   ReloadIcon,
@@ -15,7 +15,7 @@ import {
   Component1Icon,
   ListBulletIcon,
 } from "@radix-ui/react-icons";
-import { User as MainUserType } from "../homeuser";
+import { User as MainUserType } from "../../homeuser";
 
 interface EventType {
   id: string;

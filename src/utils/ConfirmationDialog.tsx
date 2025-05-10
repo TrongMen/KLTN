@@ -10,7 +10,7 @@ export interface ConfirmationDialogProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
-  confirmVariant?: "primary" | "danger" | "warning"; // SỬA Ở ĐÂY: Thêm "warning"
+  confirmVariant?: "primary" | "danger" | "warning"; 
 }
 
 export function ConfirmationDialog({
@@ -32,11 +32,11 @@ export function ConfirmationDialog({
       base +=
         "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 cursor-pointer";
     } else if (confirmVariant === "warning") {
-      // THÊM LOGIC CHO WARNING (NẾU CẦN MÀU KHÁC)
+      
       base +=
-        "bg-yellow-500 hover:bg-yellow-600 text-gray-800 focus:ring-yellow-400 cursor-pointer"; // Ví dụ màu vàng
+        "bg-yellow-500 hover:bg-yellow-600 text-gray-800 focus:ring-yellow-400 cursor-pointer"; 
     } else {
-      // primary
+   
       base +=
         "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 cursor-pointer";
     }

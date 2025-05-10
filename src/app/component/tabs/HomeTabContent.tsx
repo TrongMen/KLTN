@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType, NewsItem, EventDisplayInfo } from "../homeuser";
+import { User as MainUserType, NewsItem, EventDisplayInfo } from "../types/appTypes";
 
 import {
   ReloadIcon,

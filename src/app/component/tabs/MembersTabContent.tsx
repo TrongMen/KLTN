@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast, Toaster } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType, ApiUser as FullApiUser } from "../../homeadmin";
+import { User as MainUserType, ApiUser as FullApiUser } from "../types/appTypes";
 import { RefreshTokenResponse } from "../../../hooks/useRefreshToken";
 import ConfirmationDialog from "../../../utils/ConfirmationDialog"
 import {

@@ -33,79 +33,14 @@ import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
 
-interface Role {
-  name: string;
-  description?: string;
-  permissions?: any[];
-}
-export interface User {
-  id: string;
-  roles?: Role[];
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-  avatar?: string;
-  email?: string;
-}
-interface Participant {
-  id: string | number;
-  name: string;
-  avatar?: string;
-}
-export interface Conversation {
-  id: number | string;
-  name: string;
-  isGroup: boolean;
-  participants?: Participant[];
-  message: string;
-  avatar?: string;
-}
-export interface EventDisplayInfo {
-  id: string;
-  title: string;
-  name?: string;
-  date: string;
-  location: string;
-  description: string;
-  content?: string;
-  speaker?: string;
-  image?: string;
-  avatarUrl?: string | null;
-  time?: string;
-  status?: string;
-  purpose?: string;
-  createdBy?: string;
-  organizers?: { userId: string; roleName?: string; positionName?: string }[];
-  participants?: { userId: string; roleName?: string; positionName?: string }[];
-  attendees?: {
-    userId: string;
-    fullName?: string;
-    studentCode?: string;
-    checkedInAt?: string | null;
-    attending?: boolean;
-  }[];
-}
-export interface NewsItem {
-  id: string;
-  title: string;
-  summary?: string;
-  date?: string;
-  createdAt?: string;
-  publishedAt?: string | null;
-  imageUrl?: string;
-  content?: string;
-  status?: "PENDING" | "APPROVED" | "REJECTED";
-  createdBy?: {
-    id: string;
-    firstName?: string;
-    lastName?: string;
-    username?: string;
-    avatar?: string;
-  };
-  event?: { id: string; name?: string } | null;
-  coverImageUrl?: string;
-  rejectionReason?: string | null;
-}
+import {
+  Role,
+  User,
+  EventDisplayInfo,
+  NewsItem,
+  Conversation,
+  Participant,
+} from "./types/appTypes"; 
 
 
 

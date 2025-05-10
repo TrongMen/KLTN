@@ -15,7 +15,7 @@ import {
   type ParticipantSectionHandle,
 } from "../../../sections/ParticipantSection";
 import EventList from "../../../sections/ListEvenUser";
-import { User as MainUserType } from "../homeuser";
+import { User as MainUserType } from "../types/appTypes";
 import type { OrganizerData } from "../../../sections/BTCSection";
 import type { ParticipantData } from "../../../sections/ParticipantSection";
 

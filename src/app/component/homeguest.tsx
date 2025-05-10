@@ -21,184 +21,26 @@ import NewsTabContent from "./tabs/NewsTabContent";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
-import { BellIcon, ReloadIcon } from "@radix-ui/react-icons"; // Import ReloadIcon
-
-// --- Interfaces ---
-interface Role {
-  name: string;
-  description?: string;
-  permissions?: any[];
-}
-export interface User {
-  id: string;
-  roles?: Role[];
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-  dob?: string;
-  avatar?: string;
-  email?: string;
-  gender?: boolean;
-}
-interface Participant {
-  id: string | number;
-  name: string;
-  avatar?: string;
-}
-export interface Conversation {
-  id: number | string;
-  name: string;
-  isGroup: boolean;
-  participants?: Participant[];
-  message: string;
-  avatar?: string;
-}
-export interface EventDisplayInfo {
-  id: string;
-  title: string;
-  name?: string;
-  date: string;
-  time?: string;
-  location: string;
-  description: string;
-  content?: string;
-  purpose?: string;
-  speaker?: string;
-  image?: string;
-  avatarUrl?: string | null;
-  status?: string;
-  createdBy?: string;
-  organizers?: { userId: string; roleName?: string; positionName?: string }[];
-  participants?: { userId: string; roleName?: string; positionName?: string }[];
-  attendees?: {
-    userId: string;
-    fullName?: string;
-    studentCode?: string;
-    checkedInAt?: string | null;
-    attending?: boolean;
-  }[];
-}
-export interface NewsItem {
-  id: string;
-  title: string;
-  summary?: string;
-  date?: string;
-  createdAt?: string;
-  publishedAt?: string | null;
-  imageUrl?: string;
-  content?: string;
-  status?: "PENDING" | "APPROVED" | "REJECTED";
-  createdBy?: {
-    id: string;
-    firstName?: string;
-    lastName?: string;
-    username?: string;
-    avatar?: string;
-  };
-  event?: { id: string; name?: string } | null;
-  coverImageUrl?: string;
-  rejectionReason?: string | null;
-}
-
-
-interface ConfirmationDialogProps {
-  isOpen: boolean;
-  title: string;
-  message: React.ReactNode;
-  onConfirm: () => void;
-  onCancel: () => void;
-  confirmText?: string;
-  cancelText?: string;
-  confirmVariant?: "primary" | "danger";
-}
-
-function ConfirmationDialog({
-  isOpen,
-  title,
-  message,
-  onConfirm,
-  onCancel,
-  confirmText = "Xác nhận",
-  cancelText = "Hủy bỏ",
-  confirmVariant = "primary",
-}: ConfirmationDialogProps) {
-  if (!isOpen) return null;
-
-  const confirmBtnClasses = useMemo(() => {
-    let base =
-      "flex-1 px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 ";
-    if (confirmVariant === "danger") {
-      base +=
-        "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 cursor-pointer";
-    } else {
-      base +=
-        "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 cursor-pointer";
-    }
-    return base;
-  }, [confirmVariant]);
-
-  const cancelBtnClasses =
-    "flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm font-semibold transition-colors shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2";
-
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3
-          className={`text-lg font-bold mb-3 ${
-            confirmVariant === "danger" ? "text-red-700" : "text-gray-800"
-          }`}
-        >
-          {title}
-        </h3>
-        <div className="text-sm text-gray-600 mb-5">{message}</div>
-        <div className="flex gap-3">
-          <button onClick={onCancel} className={cancelBtnClasses}>
-            {cancelText}
-          </button>
-          <button onClick={onConfirm} className={confirmBtnClasses}>
-            {confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// --- Utility Functions (Giữ nguyên) ---
-const getWeekRange = (
-  refDate: Date
-): { startOfWeek: Date; endOfWeek: Date } => {
-  const d = new Date(refDate);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const start = new Date(d.setDate(diff));
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  return { startOfWeek: start, endOfWeek: end };
-};
-const getMonthRange = (
-  refDate: Date
-): { startOfMonth: Date; endOfMonth: Date } => {
-  const d = new Date(refDate);
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  end.setHours(23, 59, 59, 999);
-  return { startOfMonth: start, endOfMonth: end };
-};
+import { BellIcon } from "@radix-ui/react-icons";
+import {
+  User,
+  EventDisplayInfo,
+  NewsItem,
+} from "./types/appTypes";
+import {
+  ChatMessageNotificationPayload,
+  MainConversationType,
+  Message,
+  ApiUserDetail,
+  ApiGroupChatListItem,
+  ApiGroupChatDetail,
+  Participant as ChatParticipant,
+} from "./tabs/chat/ChatTabContentTypes";
+import ConfirmationDialog from "../../utils/ConfirmationDialog";
 
 type ActiveTab = "home" | "news" | "registeredEvents" | "members" | "chatList";
 
 export default function HomeGuest() {
-  // --- State Variables ---
   const [search, setSearch] = useState("");
   const [allEvents, setAllEvents] = useState<EventDisplayInfo[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
@@ -232,6 +74,7 @@ export default function HomeGuest() {
     confirmVariant?: "primary" | "danger";
     confirmText?: string;
     cancelText?: string;
+    onCancel?: () => void;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
 
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
@@ -249,16 +92,667 @@ export default function HomeGuest() {
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
   const notificationContainerRef = useRef<HTMLDivElement>(null);
 
-  // --- Thêm Socket Ref ---
   const socketRef = useRef<Socket | null>(null);
   const initializedRef = useRef(false);
-  // --- Hooks ---
   const router = useRouter();
   const { refreshToken } = useRefreshToken();
 
-  // --- Fetch Functions ---
+  const [globalChatPayloadForTab, setGlobalChatPayloadForTab] = useState<ChatMessageNotificationPayload | null>(null);
+  const [chatUserCache, setChatUserCache] = useState<Record<string, ApiUserDetail>>({});
+  const [chatConversations, setChatConversations] = useState<MainConversationType[]>([]);
+  const [isLoadingChatConversations, setIsLoadingChatConversations] = useState<boolean>(true);
+  const [errorChatConversations, setErrorChatConversations] = useState<string | null>(null);
+  const [selectedChatConversation, setSelectedChatConversation] = useState<MainConversationType | null>(null);
+  const [isLoadingChatDetails, setIsLoadingChatDetails] = useState<boolean>(false);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [isLoadingChatMessages, setIsLoadingChatMessages] = useState<boolean>(false);
+  const [errorChatMessages, setErrorChatMessages] = useState<string | null>(null);
+  const [chatMediaMessages, setChatMediaMessages] = useState<Message[]>([]);
+  const [chatFileMessages, setChatFileMessages] = useState<Message[]>([]);
+  const [chatAudioMessages, setChatAudioMessages] = useState<Message[]>([]);
+  const [isLoadingChatMedia, setIsLoadingChatMedia] = useState<boolean>(false);
+  const [isLoadingChatFiles, setIsLoadingChatFiles] = useState<boolean>(false);
+  const [isLoadingChatAudio, setIsLoadingChatAudio] = useState<boolean>(false);
+  const [errorChatMedia, setErrorChatMedia] = useState<string | null>(null);
+  const [errorChatFiles, setErrorChatFiles] = useState<string | null>(null);
+  const [errorChatAudio, setErrorChatAudio] = useState<string | null>(null);
+  const [isProcessingChatAction, setIsProcessingChatAction] = useState<boolean>(false);
+  const [downloadingChatFileId, setDownloadingChatFileId] = useState<string | null>(null);
 
-  // fetchNews với toast
+  const fetchChatUserDetailsWithCache = useCallback(async (userId: string, tokenParam: string | null): Promise<ApiUserDetail | null> => {
+    const effectiveToken = tokenParam || localStorage.getItem("authToken");
+    if (!effectiveToken) {
+      return null;
+    }
+    try {
+      const userUrl = `http://localhost:8080/identity/users/notoken/${userId}`;
+      let userRes = await fetch(userUrl, {
+        headers: { Authorization: `Bearer ${effectiveToken}` }
+      });
+
+      if (userRes.status === 401 || userRes.status === 403) {
+        const newRefreshedToken = await refreshToken();
+        if (newRefreshedToken) {
+            userRes = await fetch(userUrl, {
+                headers: { Authorization: `Bearer ${newRefreshedToken}` }
+            });
+        } else {
+            console.error("Failed to refresh token for user details (HomeGuest)");
+            return null;
+        }
+      }
+
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        if (userData.code === 1000 && userData.result) {
+          return userData.result as ApiUserDetail;
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching user details for chat (HomeGuest):", err);
+    }
+    return null;
+  }, [refreshToken]);
+
+  const getChatDisplayName = useCallback((detail: ApiUserDetail | ChatParticipant | null, fallbackName?: string): string => {
+    if (!detail) return fallbackName || "Người dùng không xác định";
+    if ('firstName' in detail || 'lastName' in detail) {
+      const apiDetail = detail as ApiUserDetail;
+      const fullName = `${apiDetail.lastName || ""} ${apiDetail.firstName || ""}`.trim();
+      return fullName || apiDetail.username || fallbackName || `User (${String(apiDetail.id).substring(0, 4)})`;
+    } else if ('name' in detail && 'id' in detail && typeof detail.id !== 'undefined') {
+      const participantDetail = detail as ChatParticipant;
+      return participantDetail.name || fallbackName || `User (${String(participantDetail.id).substring(0, 4)})`;
+    }
+    return fallbackName || "Người dùng không xác định";
+  }, []);
+
+  const fetchChatConversationsAPI = useCallback(async () => {
+    if (!user?.id) {
+      setErrorChatConversations("Thông tin người dùng không hợp lệ để tải cuộc trò chuyện.");
+      setIsLoadingChatConversations(false);
+      setChatConversations([]);
+      return;
+    }
+    setIsLoadingChatConversations(true);
+    setErrorChatConversations(null);
+    const currentUserId = user.id;
+    let token = localStorage.getItem("authToken");
+    const newFetchedUserDetailsGlobally: Record<string, ApiUserDetail> = {};
+
+    try {
+      if (!token) {
+        const refreshedToken = await refreshToken();
+        if (refreshedToken) {
+          token = refreshedToken;
+          localStorage.setItem("authToken", token);
+        } else {
+          throw new Error("Yêu cầu xác thực.");
+        }
+      }
+
+      const listUrl = `http://localhost:8080/identity/api/events/group-chats/user/${currentUserId}`;
+      let listResponse = await fetch(listUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+
+      if (listResponse.status === 401 || listResponse.status === 403) {
+        const refreshedToken = await refreshToken();
+        if (refreshedToken) {
+          token = refreshedToken;
+          localStorage.setItem("authToken", token);
+          listResponse = await fetch(listUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          });
+        } else {
+          throw new Error("Không thể làm mới token và truy cập danh sách nhóm.");
+        }
+      }
+
+      if (!listResponse.ok) {
+        const errorData = await listResponse.json().catch(() => ({ message: `Lỗi ${listResponse.status} khi tải danh sách nhóm.` }));
+        throw new Error(errorData.message || `Lỗi ${listResponse.status} khi tải danh sách nhóm.`);
+      }
+
+      const listData = await listResponse.json();
+
+      if (listData.code !== 1000 || !Array.isArray(listData.result)) {
+        throw new Error(listData.message || "Dữ liệu danh sách nhóm không hợp lệ.");
+      }
+
+      const groupBaseInfo: { id: string; name: string; groupLeaderId: string | null; avatar: string; }[] =
+        listData.result.map((g: ApiGroupChatListItem) => ({
+          id: g.id, name: g.name, groupLeaderId: g.groupLeaderId,
+          avatar: g.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(g.name)}&background=random&font-size=0.4`,
+        }));
+
+      if (groupBaseInfo.length === 0) {
+        setChatConversations([]);
+        // setIsLoadingChatConversations(false); // Moved to finally block
+        return;
+      }
+
+      const conversationPromises = groupBaseInfo.map(async (groupInfo) => {
+        let lastMessageContent = "Chưa có tin nhắn";
+        let sentAt: string | undefined = undefined;
+        let lastMessageSenderId: string | undefined = undefined;
+        let lastMessageSenderNameDisplay: string | undefined = undefined;
+
+        try {
+          const messagesUrl = `http://localhost:8080/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
+          const messagesResponse = await fetch(messagesUrl, {
+            headers: { Authorization: `Bearer ${token!}` },
+            cache: "no-store",
+          });
+          if (messagesResponse.ok) {
+            const messagesData = await messagesResponse.json();
+            const messagesResult = messagesData.result?.content || messagesData.result;
+            if (messagesData.code === 1000 && Array.isArray(messagesResult) && messagesResult.length > 0) {
+              const lastMessage = messagesResult[0] as Message;
+              lastMessageContent = lastMessage.content ?? `Đã gửi: ${lastMessage.fileName || "File"}`;
+              sentAt = lastMessage.sentAt;
+              lastMessageSenderId = lastMessage.senderId;
+
+              if (lastMessage.senderId === currentUserId) {
+                lastMessageSenderNameDisplay = "Bạn";
+              } else {
+                // Check existing global cache first
+                let userDetail = chatUserCache[lastMessage.senderId] || newFetchedUserDetailsGlobally[lastMessage.senderId];
+                if (!userDetail) {
+                  const fetchedDetail = await fetchChatUserDetailsWithCache(lastMessage.senderId, token);
+                  if (fetchedDetail) {
+                    newFetchedUserDetailsGlobally[lastMessage.senderId] = fetchedDetail; // Store for batch update
+                    userDetail = fetchedDetail;
+                  }
+                }
+                lastMessageSenderNameDisplay = getChatDisplayName(userDetail, lastMessage.senderName || `User (${lastMessage.senderId.substring(0, 4)})`);
+              }
+            }
+          } else {
+             console.warn(`Could not fetch last message for group ${groupInfo.id}: ${messagesResponse.status} (HomeGuest)`);
+          }
+        } catch (err) {
+          console.error(`Error fetching last message for group ${groupInfo.id} (HomeGuest):`, err);
+        }
+        return {
+          id: groupInfo.id, name: groupInfo.name, isGroup: true, groupLeaderId: groupInfo.groupLeaderId,
+          avatar: groupInfo.avatar, participants: [], message: lastMessageContent, sentAt: sentAt,
+          lastMessageSenderId: lastMessageSenderId, lastMessageSenderName: lastMessageSenderNameDisplay,
+        };
+      });
+
+      const resolvedConversations = await Promise.all(conversationPromises);
+      if (Object.keys(newFetchedUserDetailsGlobally).length > 0) {
+        setChatUserCache(prev => ({ ...prev, ...newFetchedUserDetailsGlobally }));
+      }
+
+      const sortedChats = resolvedConversations.sort(
+        (a, b) =>
+        (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
+        (a.sentAt ? new Date(a.sentAt).getTime() : 0)
+      );
+      setChatConversations(sortedChats);
+    } catch (error: any) {
+      setErrorChatConversations(error.message || "Lỗi tải danh sách cuộc trò chuyện.");
+      toast.error(error.message || "Lỗi tải danh sách cuộc trò chuyện.");
+      setChatConversations([]);
+      if (error.message?.includes("Yêu cầu xác thực") || error.message?.includes("Không thể làm mới token")) {
+        router.push("/login?sessionExpired=true");
+      }
+    } finally {
+      setIsLoadingChatConversations(false);
+    }
+  }, [user, refreshToken, router, getChatDisplayName, fetchChatUserDetailsWithCache, chatUserCache]);
+
+  const fetchChatMessagesAPI = useCallback(async (groupId: string) => {
+    if (!groupId || !user?.id) return;
+    setIsLoadingChatMessages(true);
+    setErrorChatMessages(null);
+    let token = localStorage.getItem("authToken");
+    const currentUserId = user.id;
+    const newFetchedUserDetailsGlobally: Record<string, ApiUserDetail> = {};
+
+    try {
+        if (!token) {
+            const refreshedToken = await refreshToken();
+            if (refreshedToken) { token = refreshedToken; localStorage.setItem("authToken", token); }
+            else throw new Error("Yêu cầu xác thực.");
+        }
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
+        let response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        if (response.status === 401 || response.status === 403) {
+            const refreshedToken = await refreshToken();
+            if (refreshedToken) { token = refreshedToken; localStorage.setItem("authToken", token); response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }); }
+            else throw new Error("Không thể làm mới token và tải tin nhắn.");
+        }
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: `Lỗi ${response.status}` }));
+            throw new Error(errorData.message || `Lỗi ${response.status}`);
+        }
+        const data = await response.json();
+        if (data.code === 1000 && data.result) {
+            let fetchedMessages: Message[] = [];
+            if (Array.isArray(data.result)) fetchedMessages = data.result;
+            else if (data.result.content && Array.isArray(data.result.content)) fetchedMessages = data.result.content;
+            else throw new Error("Định dạng dữ liệu tin nhắn không hợp lệ từ API.");
+
+            const messagesWithSenderNames = await Promise.all(
+                fetchedMessages.map(async (msg) => {
+                    if (msg.senderId === currentUserId) return { ...msg, senderName: "Bạn" };
+                    let senderDetail = chatUserCache[msg.senderId] || newFetchedUserDetailsGlobally[msg.senderId] || selectedChatConversation?.participants?.find(p => p.id === msg.senderId);
+                    if (!senderDetail) {
+                        const fetchedDetail = await fetchChatUserDetailsWithCache(msg.senderId, token);
+                        if (fetchedDetail) { newFetchedUserDetailsGlobally[msg.senderId] = fetchedDetail; senderDetail = fetchedDetail; }
+                    }
+                    const displayName = getChatDisplayName(senderDetail, msg.senderName || `User (${msg.senderId.substring(0,4)})`);
+                    return { ...msg, senderName: displayName };
+                })
+            );
+            if (Object.keys(newFetchedUserDetailsGlobally).length > 0) {
+                setChatUserCache(prev => ({ ...prev, ...newFetchedUserDetailsGlobally }));
+            }
+            const sortedMessages = messagesWithSenderNames.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+            setChatMessages(sortedMessages);
+        } else if (data.code === 1000 && ((Array.isArray(data.result) && data.result.length === 0) || (data.result.content && Array.isArray(data.result.content) && data.result.content.length === 0))) {
+            setChatMessages([]);
+        } else throw new Error(data.message || "Định dạng dữ liệu tin nhắn không hợp lệ.");
+    } catch (error: any) {
+        setErrorChatMessages(error.message || "Lỗi tải tin nhắn.");
+        toast.error(`Lỗi tải tin nhắn: ${error.message}`);
+        setChatMessages([]);
+        if (error.message?.includes("Yêu cầu xác thực") || error.message?.includes("Không thể làm mới token")) {
+            router.push("/login?sessionExpired=true");
+        }
+    } finally {
+        setIsLoadingChatMessages(false);
+    }
+  }, [user, refreshToken, router, fetchChatUserDetailsWithCache, getChatDisplayName, selectedChatConversation?.participants, chatUserCache]);
+
+  const fetchGroupChatDetailsAPI = useCallback(async (groupId: string) => {
+    if (!groupId || !user?.id) return;
+    setIsLoadingChatDetails(true);
+    const currentSummary = chatConversations.find(c => String(c.id) === groupId);
+    setSelectedChatConversation(prev => ({
+        ...(prev || {} as MainConversationType),
+        ...(currentSummary || { id: groupId, name: "Đang tải..." }),
+        id: groupId,
+        participants: prev?.participants || [],
+    }));
+    let token = localStorage.getItem("authToken");
+    const newFetchedUserDetailsGlobally: Record<string, ApiUserDetail> = {};
+    if (!token) {
+        const nt = await refreshToken();
+        if (nt) token = nt; else { toast.error("Yêu cầu xác thực."); setIsLoadingChatDetails(false); return; }
+    }
+    try {
+        const groupUrl = `http://localhost:8080/identity/api/events/group-chats/${groupId}`;
+        let groupResponse = await fetch(groupUrl, { headers: { Authorization: `Bearer ${token}` } });
+        if (groupResponse.status === 401 || groupResponse.status === 403) {
+            const nt = await refreshToken();
+            if (nt) { token = nt; groupResponse = await fetch(groupUrl, { headers: { Authorization: `Bearer ${token}` } });}
+            else throw new Error("Làm mới token thất bại");
+        }
+        if (!groupResponse.ok) {
+            const errData = await groupResponse.json().catch(() => ({message: `Lỗi ${groupResponse.status}`}));
+            throw new Error(errData.message || `Lỗi ${groupResponse.status}`);
+        }
+        const groupData = await groupResponse.json();
+        if (groupData.code !== 1000 || !groupData.result) {
+            throw new Error(groupData.message || "Không lấy được chi tiết nhóm.");
+        }
+        const groupDetailsApi = groupData.result as ApiGroupChatDetail;
+        const memberIds = new Set<string>(groupDetailsApi.memberIds || []);
+        if (groupDetailsApi.groupLeaderId) memberIds.add(groupDetailsApi.groupLeaderId);
+
+        const participantPromises = Array.from(memberIds).map(async (id) => {
+            let detail = chatUserCache[id] || newFetchedUserDetailsGlobally[id];
+            if (!detail) {
+                const fetched = await fetchChatUserDetailsWithCache(id, token);
+                if (fetched) { newFetchedUserDetailsGlobally[id] = fetched; detail = fetched; }
+            }
+            return detail;
+        });
+        const fetchedUserDetailsArray = (await Promise.all(participantPromises)).filter(Boolean) as ApiUserDetail[];
+        if (Object.keys(newFetchedUserDetailsGlobally).length > 0) {
+            setChatUserCache(prev => ({ ...prev, ...newFetchedUserDetailsGlobally }));
+        }
+        const finalParticipantList: ChatParticipant[] = Array.from(memberIds).map((id) => {
+            const userDetail = fetchedUserDetailsArray.find(u => u.id === id) || chatUserCache[id];
+            const name = getChatDisplayName(userDetail, `User (${id.substring(0,4)})`);
+            const avatar = userDetail?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name.charAt(0) || "?")}&background=random&size=32`;
+            return { id, name, avatar };
+        });
+        setSelectedChatConversation(prev => ({
+            ...(prev || {} as MainConversationType),
+            id: groupDetailsApi.id, name: groupDetailsApi.name, isGroup: true,
+            groupLeaderId: groupDetailsApi.groupLeaderId, participants: finalParticipantList,
+            avatar: prev?.avatar || currentSummary?.avatar || groupDetailsApi.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(groupDetailsApi.name)}&background=random&font-size=0.4`,
+            message: prev?.message || currentSummary?.message || "...", sentAt: prev?.sentAt || currentSummary?.sentAt,
+            lastMessageSenderId: prev?.lastMessageSenderId || currentSummary?.lastMessageSenderId,
+            lastMessageSenderName: prev?.lastMessageSenderName || currentSummary?.lastMessageSenderName,
+        }));
+    } catch (error: any) {
+        toast.error(`Lỗi tải chi tiết nhóm: ${error.message}`);
+        setSelectedChatConversation(prev => ({ ...(prev || {} as MainConversationType), id: groupId, name: prev?.name || "Lỗi tải tên nhóm", participants: prev?.participants || [], }));
+        if (error.message?.includes("Yêu cầu xác thực") || error.message?.includes("Làm mới token thất bại")) {
+            router.push("/login?sessionExpired=true");
+        }
+    } finally {
+        setIsLoadingChatDetails(false);
+    }
+  }, [chatConversations, user, refreshToken, router, fetchChatUserDetailsWithCache, getChatDisplayName, chatUserCache]);
+
+  const fetchChatMediaMessagesAPI = useCallback(async (groupId: string) => {
+    if (!groupId || !user?.id) return; setIsLoadingChatMedia(true); setErrorChatMedia(null);
+    let token = localStorage.getItem("authToken");
+    try {
+        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages/media`;
+        let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.status === 401 || res.status === 403) {
+             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });}
+             else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result)) setChatMediaMessages(data.result);
+        else if (data.code === 1000 && data.result.length === 0) setChatMediaMessages([]);
+        else throw new Error(data.message || "Cannot load media list.");
+    } catch (error: any) { setErrorChatMedia(error.message || "Error loading media."); setChatMediaMessages([]); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
+    finally { setIsLoadingChatMedia(false); }
+  }, [user?.id, refreshToken, router]);
+
+  const fetchChatFileMessagesAPI = useCallback(async (groupId: string) => {
+    if (!groupId || !user?.id) return; setIsLoadingChatFiles(true); setErrorChatFiles(null);
+    let token = localStorage.getItem("authToken");
+    try {
+        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages/files`;
+        let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+         if (res.status === 401 || res.status === 403) {
+             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });}
+             else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result)) setChatFileMessages(data.result);
+        else if (data.code === 1000 && data.result.length === 0) setChatFileMessages([]);
+        else throw new Error(data.message || "Cannot load file list.");
+    } catch (error: any) { setErrorChatFiles(error.message || "Error loading files."); setChatFileMessages([]); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
+    finally { setIsLoadingChatFiles(false); }
+  }, [user?.id, refreshToken, router]);
+
+  const fetchChatAudioMessagesAPI = useCallback(async (groupId: string) => {
+    if (!groupId || !user?.id) return; setIsLoadingChatAudio(true); setErrorChatAudio(null);
+    let token = localStorage.getItem("authToken");
+    try {
+        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audios`;
+        let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+         if (res.status === 401 || res.status === 403) {
+             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });}
+             else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result)) setChatAudioMessages(data.result);
+        else if (data.code === 1000 && data.result.length === 0) setChatAudioMessages([]);
+        else throw new Error(data.message || "Cannot load audio list.");
+    } catch (error: any) { setErrorChatAudio(error.message || "Error loading audio."); setChatAudioMessages([]); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
+    finally { setIsLoadingChatAudio(false); }
+  }, [user?.id, refreshToken, router]);
+
+  const handleRemoveMemberChatAPI = useCallback(async (groupId: string | number, memberId: string, leaderId: string) => {
+    if (!groupId || !memberId || !leaderId || !user?.id) { toast.error("Thông tin không đầy đủ hoặc người dùng không hợp lệ."); return; }
+    setIsProcessingChatAction(true); const tId = toast.loading("Đang xóa thành viên...");
+    let token = localStorage.getItem("authToken");
+    try {
+        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
+        let res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+        if (res.status === 401 || res.status === 403) {
+             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });}
+             else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
+        toast.success("Đã xóa thành viên!", { id: tId });
+        fetchGroupChatDetailsAPI(String(groupId));
+    } catch (error: any) { toast.error(`Thất bại: ${error.message}`, { id: tId }); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
+    finally { setIsProcessingChatAction(false); }
+  }, [user?.id, refreshToken, router, fetchGroupChatDetailsAPI]);
+
+  const handleLeaveGroupChatAPI = useCallback(async (groupId: string | number, memberId: string) => {
+    if (!groupId || !memberId || !user?.id) { toast.error("Thông tin không đầy đủ hoặc người dùng không hợp lệ."); return; }
+    setIsProcessingChatAction(true); const tId = toast.loading("Đang rời nhóm...");
+    let token = localStorage.getItem("authToken");
+    try {
+        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
+        let res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+         if (res.status === 401 || res.status === 403) {
+             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` } });}
+             else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
+        toast.success("Đã rời nhóm!", { id: tId });
+        setChatConversations(prev => prev.filter(c => String(c.id) !== String(groupId)));
+        setSelectedChatConversation(null);
+    } catch (error: any) { toast.error(`Thất bại: ${error.message}`, { id: tId }); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
+    finally { setIsProcessingChatAction(false); }
+  }, [user?.id, refreshToken, router]);
+
+  const handleSendMessageChatAPI = useCallback(async (groupId: string, senderId: string, messageText: string, tempMessageId: string): Promise<Message | null> => {
+    if(!user?.id) { toast.error("Người dùng không hợp lệ."); return null; }
+    setIsProcessingChatAction(true);
+    let token = localStorage.getItem("authToken");
+    try {
+        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+        if (!groupId) throw new Error("Group ID không tồn tại.");
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
+        const form = new FormData(); form.append("senderId", senderId); form.append("content", messageText);
+        let res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+         if (res.status === 401 || res.status === 403) {
+             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });}
+             else throw new Error("Refresh token failed");
+        }
+        const data = await res.json();
+        if (!res.ok || !(data.code === 1000 && data.result && data.result.id)) {
+             throw new Error(data.message || `Lỗi ${res.status || 'gửi tin nhắn'}`);
+        }
+        const actualMessageFromServer = { ...data.result, senderName: "Bạn" } as Message;
+        
+        setChatMessages(prevMessages => {
+            const filteredMessages = prevMessages.filter(
+                msg => msg.id !== tempMessageId && msg.id !== actualMessageFromServer.id
+            );
+            return [...filteredMessages, actualMessageFromServer].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+        });
+
+        setChatConversations((prevList) => {
+            const idx = prevList.findIndex((c) => String(c.id) === String(groupId));
+            if (idx === -1) return prevList;
+            const updatedConvo = {
+                ...prevList[idx],
+                message: actualMessageFromServer.content ?? `Đã gửi: ${actualMessageFromServer.fileName || "File"}`,
+                sentAt: actualMessageFromServer.sentAt,
+                lastMessageSenderId: actualMessageFromServer.senderId,
+                lastMessageSenderName: "Bạn",
+            };
+            const newList = prevList.filter(c => String(c.id) !== String(groupId));
+            newList.unshift(updatedConvo);
+            return newList.sort((a, b) => (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime()));
+        });
+        return actualMessageFromServer;
+    } catch (error: any) {
+        toast.error(`Gửi thất bại: ${error.message}`);
+        if (tempMessageId) {
+             setChatMessages(prev => prev.filter(m => m.id !== tempMessageId));
+        }
+        if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");
+        return null;
+    } finally {
+        setIsProcessingChatAction(false);
+    }
+  }, [user?.id, refreshToken, router]);
+
+  const handleSendFileChatAPI = useCallback(async (
+    groupId: string,
+    senderId: string,
+    file: File
+  ): Promise<Message | null> => {
+    if (!user?.id) {
+      toast.error("Người dùng không hợp lệ.");
+      return null;
+    }
+    setIsProcessingChatAction(true);
+    const tId = toast.loading(`Đang tải lên ${file.name}...`);
+    let token = localStorage.getItem("authToken");
+
+    try {
+      if (!token) {
+        const nt = await refreshToken();
+        if (nt) { token = nt; localStorage.setItem("authToken", token); }
+        else { throw new Error("Auth required."); }
+      }
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
+      const form = new FormData();
+      form.append("senderId", senderId);
+      form.append("file", file);
+      let res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, });
+      if (res.status === 401 || res.status === 403) {
+        const nt = await refreshToken();
+        if (nt) { token = nt; localStorage.setItem("authToken", token); res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, }); }
+        else { throw new Error("Refresh token failed"); }
+      }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.message || `Lỗi ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.code === 1000 && data.result) {
+        toast.success(`Đã gửi ${file.name}!`, { id: tId });
+        const sentMessage = { ...data.result, senderName: "Bạn" } as Message;
+        setChatMessages(prevMessages => {
+            const filteredMessages = prevMessages.filter(msg => msg.id !== sentMessage.id);
+            return [...filteredMessages, sentMessage].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+        });
+        setChatConversations((prevList) => {
+          const idx = prevList.findIndex((c) => String(c.id) === String(groupId));
+          if (idx === -1) return prevList;
+          const updatedConvo = {
+            ...prevList[idx],
+            message: `Đã gửi: ${sentMessage.fileName || "File"}`,
+            sentAt: sentMessage.sentAt,
+            lastMessageSenderId: sentMessage.senderId,
+            lastMessageSenderName: "Bạn",
+          };
+          const newList = prevList.filter(c => String(c.id) !== String(groupId));
+          newList.unshift(updatedConvo);
+          return newList.sort((a, b) => (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime()));
+        });
+        return sentMessage;
+      } else {
+        throw new Error(data.message || `Gửi thất bại ${file.name}.`);
+      }
+    } catch (error: any) {
+      toast.error(`Gửi thất bại: ${error.message}`, { id: tId });
+      if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) {
+        router.push("/login?sessionExpired=true");
+      }
+      return null;
+    } finally {
+      setIsProcessingChatAction(false);
+    }
+  }, [user?.id, refreshToken, router]);
+
+  const handleDeleteMessageChatAPI = useCallback(async (messageId: string, userIdParam: string, currentGroupId: string | number): Promise<boolean> => {
+    if(!user?.id || userIdParam !== user.id) { toast.error("Không có quyền xóa hoặc người dùng không hợp lệ."); return false;}
+    setIsProcessingChatAction(true); const toastId = toast.loading("Đang xóa tin nhắn...");
+    let token = localStorage.getItem("authToken");
+    try {
+        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}?userId=${userIdParam}`;
+        let response = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+         if (response.status === 401 || response.status === 403) {
+             const nt = await refreshToken(); if (nt) {token = nt; response = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });}
+             else throw new Error("Refresh token failed");
+        }
+        const responseText = await response.text();
+        let responseData;
+        try { responseData = responseText ? JSON.parse(responseText) : { code: response.ok ? 1000 : 0 }; }
+        catch (e) { if (response.ok && !responseText) responseData = { code: 1000 }; else throw new Error("Phản hồi xóa không hợp lệ."); }
+        if (!response.ok && responseData.code !== 1000) throw new Error(responseData.message || `Lỗi ${response.status}`);
+        toast.success("Đã xóa tin nhắn!", { id: toastId });
+
+        let newLastMessage: Message | null = null;
+        setChatMessages((prevMessages) => {
+            const remaining = prevMessages.filter((msg) => msg.id !== messageId);
+            if (remaining.length > 0) newLastMessage = remaining[remaining.length - 1];
+            return remaining;
+        });
+        setChatConversations((prevList) => {
+            const idx = prevList.findIndex((c) => String(c.id) === String(currentGroupId));
+            if (idx === -1) return prevList;
+            const senderDetails = selectedChatConversation?.participants?.find(p => p.id === newLastMessage?.senderId) || (newLastMessage ? chatUserCache[newLastMessage.senderId] : null);
+            const senderName = newLastMessage ? (newLastMessage.senderId === user?.id ? "Bạn" : getChatDisplayName(senderDetails, newLastMessage.senderName)) : undefined;
+            const updatedConvo = {
+                ...prevList[idx],
+                message: newLastMessage ? (newLastMessage.content ?? `Đã gửi: ${newLastMessage.fileName || "File"}`) : "Chưa có tin nhắn",
+                sentAt: newLastMessage?.sentAt, lastMessageSenderId: newLastMessage?.senderId, lastMessageSenderName: senderName,
+            };
+            const newList = prevList.filter(c => String(c.id) !== String(currentGroupId));
+            newList.unshift(updatedConvo); return newList.sort((a, b) => (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime()));
+        });
+        return true;
+    } catch (error: any) {
+        toast.error(`Xóa thất bại: ${error.message}`, { id: toastId });
+        if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");
+        return false;
+    } finally {
+        setIsProcessingChatAction(false);
+    }
+  }, [user?.id, refreshToken, router, selectedChatConversation?.participants, chatUserCache, getChatDisplayName]);
+
+  const handleDownloadFileChatAPI = useCallback(async (messageId: string, fileName?: string | null) => {
+    if (!messageId || !user?.id) { toast.error("Thông tin không hợp lệ."); return; }
+    setDownloadingChatFileId(messageId);
+    const tId = toast.loading(`Đang tải ${fileName || "tệp"}...`);
+    let token = localStorage.getItem("authToken");
+    try {
+        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}/download`;
+        let res = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
+         if (res.status === 401 || res.status === 403) {
+             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}` } });}
+             else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) {
+            const e = await res.json().catch(()=>({message: `Lỗi tải xuống: ${res.status}`}));
+            throw new Error(e.message || `Lỗi tải xuống: ${res.status}`);
+        }
+        const disposition = res.headers.get("content-disposition"); let finalFName = fileName || "downloaded_file";
+        if (disposition) {
+            const m = disposition.match(/filename\*?=['"]?([^'";]+)['"]?/i);
+            if (m && m[1]) {
+                const encoded = m[1];
+                if (encoded.toLowerCase().startsWith("utf-8''")) finalFName = decodeURIComponent(encoded.substring(7));
+                else { try { finalFName = decodeURIComponent(escape(encoded)); } catch (e) { finalFName = encoded; } }
+            }
+        }
+        const blob = await res.blob(); const dlUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.style.display = "none"; a.href = dlUrl; a.download = finalFName;
+        document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(dlUrl); a.remove();
+        toast.success(`Đã tải ${finalFName}!`, { id: tId });
+    } catch (error: any) {
+        toast.error(`Tải thất bại: ${error.message || "Lỗi không xác định"}`, { id: tId });
+        if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");
+    } finally {
+        setDownloadingChatFileId(null);
+    }
+  }, [user?.id, refreshToken, router]);
+
   const fetchNews = useCallback(async () => {
     setIsLoadingNews(true);
     setErrorNews(null);
@@ -287,7 +781,8 @@ export default function HomeGuest() {
         const status = res.status;
         let msg = `HTTP ${status} news fetch`;
         try {
-          const err = await res.json();
+          const errText = await res.text();
+          const err = errText ? JSON.parse(errText) : {};
           msg = err.message || msg;
         } catch (_) {}
         throw new Error(msg);
@@ -314,21 +809,20 @@ export default function HomeGuest() {
           rejectionReason: item.rejectionReason,
         }));
         setNewsItems(fmt);
-        toast.success("Đã làm mới bảng tin!"); // Toast success
+        if(activeTab === 'news') toast.success("Đã làm mới bảng tin!");
       } else {
-         throw new Error(d.message || "Lỗi định dạng dữ liệu tin tức");
+        throw new Error(d.message || "Lỗi định dạng dữ liệu tin tức");
       }
     } catch (e: any) {
       console.error("Lỗi fetchNews (HomeGuest):", e);
       setErrorNews(e.message || "Lỗi tải tin tức.");
       setNewsItems([]);
-      toast.error(`Làm mới thất bại: ${e.message || 'Lỗi không xác định'}`); // Toast error
+      if(activeTab === 'news') toast.error(`Làm mới bảng tin thất bại: ${e.message || 'Lỗi không xác định'}`);
     } finally {
       setIsLoadingNews(false);
     }
-  }, [refreshToken]);
+  }, [refreshToken, activeTab]);
 
-  // fetchAllEvents với toast
   const fetchAllEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     setErrorEvents(null);
@@ -357,7 +851,8 @@ export default function HomeGuest() {
         const status = res.status;
         let msg = `HTTP ${status}`;
         try {
-          const err = await res.json();
+          const errText = await res.text();
+          const err = errText ? JSON.parse(errText) : {};
           msg = err.message || msg;
         } catch (_) {}
         throw new Error(msg);
@@ -384,34 +879,30 @@ export default function HomeGuest() {
             attendees: e.attendees || [],
           }));
         setAllEvents(fmt);
-        toast.success("Đã làm mới danh sách sự kiện!"); // Toast success
+         if(activeTab === 'home') toast.success("Đã làm mới danh sách sự kiện!");
       } else {
         throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
       }
     } catch (e: any) {
       console.error("Lỗi fetchAllEvents (HomeGuest):", e);
       setErrorEvents(e.message || "Lỗi tải sự kiện.");
-      toast.error(`Làm mới thất bại: ${e.message || 'Lỗi không xác định'}`); // Toast error
+      if(activeTab === 'home') toast.error(`Làm mới sự kiện thất bại: ${e.message || 'Lỗi không xác định'}`);
     } finally {
       setIsLoadingEvents(false);
     }
-  }, [refreshToken]);
+  }, [refreshToken, activeTab]);
 
   const fetchRegisteredEventIds = useCallback(
-    async (userId: string) => {
-      if (!userId) {
-        setIsLoadingRegisteredIds(false);
-        return;
-      }
-      setIsLoadingRegisteredIds(true);
-      let currentToken = localStorage.getItem("authToken");
-      if (!currentToken) {
+    async (userIdParam: string, token: string | null) => {
+      if (!userIdParam || !token) {
         setIsLoadingRegisteredIds(false);
         setRegisteredEventIds(new Set());
         return;
       }
+      setIsLoadingRegisteredIds(true);
+      let currentToken = token;
       try {
-        const url = `http://localhost:8080/identity/api/events/attendee/${userId}`;
+        const url = `http://localhost:8080/identity/api/events/attendee/${userIdParam}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers: headers, cache: "no-store" });
         if ((res.status === 401 || res.status === 403) && refreshToken) {
@@ -432,7 +923,6 @@ export default function HomeGuest() {
             new Set(data.result.map((event: any) => event.id))
           );
         } else {
-          console.warn("API /events/attendee/ structure:", data);
           setRegisteredEventIds(new Set());
         }
       } catch (err: any) {
@@ -442,30 +932,26 @@ export default function HomeGuest() {
           err.message?.includes("Unauthorized") ||
           err.message?.includes("Refresh Failed")
         ) {
-          /* Optional */
+          router.push("/login?sessionExpired=true");
         }
       } finally {
         setIsLoadingRegisteredIds(false);
       }
     },
-    [refreshToken]
+    [refreshToken, router]
   );
 
   const fetchUserCreatedEvents = useCallback(
-    async (userId: string) => {
-      if (!userId) {
-        setIsLoadingCreatedEventIds(false);
-        return;
-      }
-      setIsLoadingCreatedEventIds(true);
-      let currentToken = localStorage.getItem("authToken");
-      if (!currentToken) {
+    async (userIdParam: string, token: string | null) => {
+      if (!userIdParam || !token) {
         setIsLoadingCreatedEventIds(false);
         setCreatedEventIds(new Set());
         return;
       }
+      setIsLoadingCreatedEventIds(true);
+      let currentToken = token;
       try {
-        const url = `http://localhost:8080/identity/api/events/creator/${userId}`;
+        const url = `http://localhost:8080/identity/api/events/creator/${userIdParam}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers: headers, cache: "no-store" });
         if ((res.status === 401 || res.status === 403) && refreshToken) {
@@ -495,19 +981,20 @@ export default function HomeGuest() {
           err.message?.includes("Unauthorized") ||
           err.message?.includes("Refresh Failed")
         ) {
-          /* Optional */
+         router.push("/login?sessionExpired=true");
         }
       } finally {
         setIsLoadingCreatedEventIds(false);
       }
     },
-    [refreshToken]
+    [refreshToken, router]
   );
 
   const fetchNotifications = useCallback(
-    async (userId: string, token: string | null) => {
-      if (!userId || !token) {
+    async (userIdParam: string, token: string | null) => {
+      if (!userIdParam || !token) {
         setNotifications([]);
+        setIsLoadingNotifications(false);
         return;
       }
       setIsLoadingNotifications(true);
@@ -515,7 +1002,7 @@ export default function HomeGuest() {
       const limit = 10;
       let currentToken = token;
       try {
-        const url = `http://localhost:8080/identity/api/notifications?userId=${userId}&limit=${limit}`;
+        const url = `http://localhost:8080/identity/api/notifications?userId=${userIdParam}&limit=${limit}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers, cache: "no-store" });
         if ((res.status === 401 || res.status === 403) && refreshToken) {
@@ -548,8 +1035,8 @@ export default function HomeGuest() {
               type: item.type,
               read: item.read,
               createdAt: item.createdAt,
-              relatedId: item.relatedId,
-              userId: item.userId,
+              relatedId: item.relatedId ?? null,
+              userId: item.userId ?? null,
             })
           );
           setNotifications(formattedNotifications);
@@ -573,25 +1060,24 @@ export default function HomeGuest() {
     [refreshToken, router]
   );
 
-  // --- Effects ---
-
- useEffect(() => {
+  useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
     const loadInitialData = async () => {
       setIsLoadingUser(true);
       setIsLoadingEvents(true);
+      setIsLoadingNews(true);
       setIsLoadingRegisteredIds(true);
       setIsLoadingCreatedEventIds(true);
-      setIsLoadingNews(true);
+      setIsLoadingNotifications(true);
+      setIsLoadingChatConversations(true);
 
       const currentAuthToken = localStorage.getItem("authToken");
       let userIdForFetches: string | null = null;
       let tokenForSubFetches: string | null = currentAuthToken;
 
       try {
-        // Fetch user info
         if (currentAuthToken) {
           const headers: HeadersInit = {
             Authorization: `Bearer ${currentAuthToken}`,
@@ -612,12 +1098,14 @@ export default function HomeGuest() {
                 cache: "no-store",
               });
             } else {
-              throw new Error("Unauthorized or Refresh Failed");
+              throw new Error("Unauthorized or Refresh Failed during user fetch");
             }
           }
 
           if (!userRes.ok) {
-            throw new Error(`Workspace user info failed: ${userRes.status}`);
+              const errorText = await userRes.text();
+              const errorJson = errorText ? JSON.parse(errorText) : {};
+              throw new Error(errorJson.message || `Workspace user info failed: ${userRes.status}`);
           }
 
           const userData = await userRes.json();
@@ -626,24 +1114,25 @@ export default function HomeGuest() {
             userIdForFetches = fetchedUser.id;
             setUser(fetchedUser);
           } else {
-            throw new Error("Invalid user data received");
+            setUser(null);
           }
         } else {
           setUser(null);
         }
       } catch (error: any) {
-        console.error("Lỗi fetch user info (UserHome):", error.message);
+        console.error("Lỗi fetch user info (HomeGuest):", error.message);
         setUser(null);
         userIdForFetches = null;
         tokenForSubFetches = null;
-        if (!error.message?.includes("Invalid user data")) {
+        if (error.message?.includes("Unauthorized or Refresh Failed") || error.message?.includes("Workspace user info failed")) {
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("refreshToken");
           router.push("/login?sessionExpired=true");
         }
       } finally {
         setIsLoadingUser(false);
       }
 
-      // Fetch other data in parallel
       await Promise.all([fetchAllEvents(), fetchNews()]);
 
       if (userIdForFetches && tokenForSubFetches) {
@@ -652,13 +1141,16 @@ export default function HomeGuest() {
           fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
           fetchNotifications(userIdForFetches, tokenForSubFetches),
         ]);
+        fetchChatConversationsAPI(); // Called after user is set and other initial data is fetched
       } else {
         setIsLoadingRegisteredIds(false);
         setIsLoadingCreatedEventIds(false);
         setNotifications([]);
+        setIsLoadingNotifications(false);
+        setChatConversations([]);
+        setIsLoadingChatConversations(false);
       }
     };
-
     loadInitialData();
   }, [
     fetchAllEvents,
@@ -666,98 +1158,12 @@ export default function HomeGuest() {
     fetchUserCreatedEvents,
     fetchNews,
     fetchNotifications,
+    fetchChatConversationsAPI, // Keep as dependency if its stability is ensured
     refreshToken,
     router,
   ]);
-  // --- Thêm useEffect để quản lý Socket Connection ---
-  // useEffect(() => {
-  //   // Chỉ kết nối khi có user ID (đã đăng nhập)
-  //   if (user?.id) {
-  //     // Ngắt kết nối cũ nếu có (trường hợp user thay đổi)
-  //     if (socketRef.current) {
-  //       socketRef.current.disconnect();
-  //     }
 
-  //     console.log(`SOCKET: Đang kết nối cho user: ${user.id}`);
-  //     // Tạo kết nối mới
-  //     const socket = io("ws://localhost:9099", {
-  //       path: "/socket.io", 
-  //       query: {
-  //         userId: user.id, 
-  //       },
-  //       transports: ["websocket"], 
-  //       reconnectionAttempts: 5, 
-  //       reconnectionDelay: 3000, 
-  //     });
-  //     socketRef.current = socket; // Lưu instance vào ref
-
-  //     // Lắng nghe các sự kiện từ socket
-  //     socket.on("connect", () => {
-  //       console.log("SOCKET: Đã kết nối - ID:", socket.id);
-  //     });
-
-  //     socket.on("disconnect", (reason) => {
-  //       console.log("SOCKET: Đã ngắt kết nối - Lý do:", reason);
-  //       if (reason === "io server disconnect") {
-  //         toast.error("Mất kết nối máy chủ thông báo.", {
-  //           id: "socket-disconnect",
-  //         });
-  //       }
-  //     });
-
-  //     socket.on("connect_error", (error) => {
-  //       console.error("SOCKET: Lỗi kết nối:", error);
-  //       toast.error("Không thể kết nối máy chủ thông báo.", {
-  //         id: "socket-error",
-  //       });
-  //     });
-
-  //     // --- Lắng nghe sự kiện 'notification' ---
-  //     socket.on("notification", (data: any) => {
-  //       console.log("SOCKET: Nhận được thông báo:", data);
-  //       if (data && typeof data === "object") {
-  //         toast(`🔔 ${data.title || "Bạn có thông báo mới!"}`, {
-  //           duration: 5000,
-  //         });
-  //         const newNotification: NotificationItem = {
-  //           id: data.id || `socket-${Date.now()}`, 
-  //           title: data.title || "Thông báo",
-  //           content: data.content || "",
-  //           type: data.type || "SYSTEM",
-  //           read: data.read !== undefined ? data.read : false, 
-  //           createdAt: data.createdAt || new Date().toISOString(),
-  //           relatedId: data.relatedId,
-  //           userId: data.userId || user.id, 
-  //         };
-  //         setNotifications((prevNotifications) =>
-  //           [newNotification, ...prevNotifications].slice(0, 15) 
-  //         );
-  //       } else {
-  //         console.warn("SOCKET: Dữ liệu thông báo không hợp lệ:", data);
-  //       }
-  //     });
-
-  //     // Hàm cleanup
-  //     return () => {
-  //       if (socketRef.current) {
-  //         console.log("SOCKET: Ngắt kết nối...");
-  //         socketRef.current.off("connect"); 
-  //         socketRef.current.off("disconnect");
-  //         socketRef.current.off("connect_error");
-  //         socketRef.current.off("notification"); 
-  //         socketRef.current.disconnect(); 
-  //         socketRef.current = null; 
-  //       }
-  //     };
-  //   } else {
-  //     if (socketRef.current) {
-  //       console.log("SOCKET: Ngắt kết nối do không có user.");
-  //       socketRef.current.disconnect();
-  //       socketRef.current = null;
-  //     }
-  //   }
-  // }, [user?.id, setNotifications]); // Dependency là user.id
- useEffect(() => {
+  useEffect(() => {
     if (!user?.id) {
       if (socketRef.current) {
         socketRef.current.disconnect();
@@ -766,7 +1172,6 @@ export default function HomeGuest() {
       return;
     }
 
-    // Only initialize socket if not already connected
     if (!socketRef.current) {
       const socket = io("ws://localhost:9099", {
         path: "/socket.io",
@@ -775,19 +1180,22 @@ export default function HomeGuest() {
         reconnectionAttempts: 5,
         reconnectionDelay: 3000,
       });
-
       socketRef.current = socket;
 
       socket.on("connect", () => {
-        console.log("SOCKET (UserHome): Đã kết nối - ID:", socket.id);
+        console.log("SOCKET (HomeGuest): Đã kết nối - ID:", socket.id);
       });
 
       socket.on("disconnect", (reason) => {
-        console.log("SOCKET (UserHome): Đã ngắt kết nối - Lý do:", reason);
+        console.log("SOCKET (HomeGuest): Đã ngắt kết nối - Lý do:", reason);
+         if (reason === "io server disconnect") {
+           toast.error("Mất kết nối máy chủ thông báo.", {id: "socket-disconnect"});
+        }
       });
 
       socket.on("connect_error", (error) => {
-        console.error("SOCKET (UserHome): Lỗi kết nối:", error);
+        console.error("SOCKET (HomeGuest): Lỗi kết nối:", error);
+        toast.error("Không thể kết nối máy chủ thông báo.", {id: "socket-error"});
       });
 
       socket.on("notification", (data: any) => {
@@ -796,7 +1204,7 @@ export default function HomeGuest() {
             duration: 5000,
           });
           const newNotification: NotificationItem = {
-            id: data.id || `socket-user-${Date.now()}`,
+            id: data.id || `socket-guest-${Date.now()}`,
             title: data.title || "Thông báo",
             content: data.content || "",
             type: data.type || "SYSTEM",
@@ -810,10 +1218,74 @@ export default function HomeGuest() {
           );
         } else {
           console.warn(
-            "SOCKET (UserHome): Dữ liệu thông báo không hợp lệ:",
+            "SOCKET (HomeGuest): Dữ liệu thông báo không hợp lệ:",
             data
           );
         }
+      });
+
+      socket.on("global_chat_notification", (payload: ChatMessageNotificationPayload) => {
+        if (!user) return;
+        setGlobalChatPayloadForTab(payload);
+
+        if (payload.senderId !== user.id) {
+            let notificationDisplayContent = payload.actualMessageContent || payload.messageContentPreview || "Có tin nhắn mới";
+            if (payload.messageType === "FILE" && payload.fileName) {
+                notificationDisplayContent = `Đã gửi một tệp: ${payload.fileName}`;
+            } else if (payload.messageType === "IMAGE") {
+                notificationDisplayContent = "Đã gửi một hình ảnh.";
+            } else if (payload.messageType === "VIDEO") {
+                notificationDisplayContent = "Đã gửi một video.";
+            } else if (payload.messageType === "AUDIO") {
+                notificationDisplayContent = "Đã gửi một đoạn âm thanh.";
+            }
+            toast(`💬 ${payload.senderName}: ${notificationDisplayContent.substring(0, 50)}${notificationDisplayContent.length > 50 ? "..." : ""}`, { duration: 4000 });
+            const chatNotification: NotificationItem = {
+                id: `chat-${payload.messageId}-${Date.now()}`,
+                title: `Tin nhắn mới từ ${payload.senderName} (Nhóm: ${payload.groupName})`,
+                content: notificationDisplayContent.substring(0, 150) + (notificationDisplayContent.length > 150 ? "..." : ""),
+                type: "NEW_CHAT_MESSAGE", read: false, createdAt: payload.sentAt || new Date().toISOString(),
+                relatedId: payload.groupId, userId: user.id,
+            };
+            setNotifications((prevNotifications) => [chatNotification, ...prevNotifications].slice(0, 15));
+        }
+
+        if (selectedChatConversation && String(selectedChatConversation.id) === String(payload.groupId)) {
+            const newMessageFromServer: Message = {
+                id: payload.messageId, content: payload.actualMessageContent, senderId: payload.senderId,
+                senderName: payload.senderName, sentAt: payload.sentAt, groupId: payload.groupId,
+                fileName: payload.fileName, fileUrl: payload.fileUrl, fileSize: payload.fileSize,
+                type: payload.messageType || "TEXT",
+            };
+            setChatMessages(prevMessages => {
+                const existingMessageIndex = prevMessages.findIndex(msg => msg.id === newMessageFromServer.id);
+                if (existingMessageIndex > -1) {
+                    const updatedMessages = [...prevMessages];
+                    updatedMessages[existingMessageIndex] = { ...updatedMessages[existingMessageIndex], ...newMessageFromServer };
+                    return updatedMessages.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+                } else {
+                    return [...prevMessages, newMessageFromServer].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+                }
+            });
+        }
+        setChatConversations(prevList => {
+            const idx = prevList.findIndex(c => String(c.id) === String(payload.groupId));
+            if (idx === -1) { fetchChatConversationsAPI(); return prevList; }
+
+            let lastMessageDisplay = payload.actualMessageContent || payload.messageContentPreview || "Có tin nhắn mới";
+            if (payload.messageType === "FILE" && payload.fileName) lastMessageDisplay = `Đã gửi tệp: ${payload.fileName}`;
+            else if (payload.messageType === "IMAGE") lastMessageDisplay = "Đã gửi hình ảnh.";
+            else if (payload.messageType === "VIDEO") lastMessageDisplay = "Đã gửi video.";
+            else if (payload.messageType === "AUDIO") lastMessageDisplay = "Đã gửi đoạn âm thanh.";
+
+            const updatedConvo = {
+                ...prevList[idx], message: lastMessageDisplay, sentAt: payload.sentAt,
+                lastMessageSenderId: payload.senderId, lastMessageSenderName: payload.senderName,
+            };
+            const newList = prevList.filter(c => String(c.id) !== String(payload.groupId));
+            newList.unshift(updatedConvo);
+            return newList.sort((a, b) => (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime()));
+        });
       });
     }
 
@@ -823,12 +1295,13 @@ export default function HomeGuest() {
         socketRef.current.off("disconnect");
         socketRef.current.off("connect_error");
         socketRef.current.off("notification");
+        socketRef.current.off("global_chat_notification");
         socketRef.current.disconnect();
         socketRef.current = null;
       }
     };
-  }, [user?.id]);
-  // Effect for handling clicks outside notification dropdown (Giữ nguyên)
+  }, [user, toast, selectedChatConversation, fetchChatConversationsAPI, setGlobalChatPayloadForTab, setNotifications, getChatDisplayName, chatUserCache]); // Added getChatDisplayName and chatUserCache if used by senderName logic
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -846,12 +1319,8 @@ export default function HomeGuest() {
     };
   }, []);
 
-  // --- Event Handlers ---
-
-  // Cập nhật handleLogout để ngắt kết nối socket
   const handleLogout = async () => {
     if (socketRef.current) {
-      console.log("SOCKET: Ngắt kết nối khi logout...");
       socketRef.current.disconnect();
       socketRef.current = null;
     }
@@ -874,6 +1343,10 @@ export default function HomeGuest() {
       setNewsItems([]);
       setNotifications([]);
       setShowNotificationDropdown(false);
+      setChatConversations([]);
+      setSelectedChatConversation(null);
+      setChatMessages([]);
+      setChatUserCache({});
       setActiveTab("home");
       window.location.reload();
     }
@@ -925,6 +1398,7 @@ export default function HomeGuest() {
       if (data.code === 1000) {
         toast.success(`Đã đăng ký "${event.title}"!`);
         setRegisteredEventIds((prev) => new Set(prev).add(event.id));
+        fetchChatConversationsAPI();
       } else {
         throw new Error(data.message || "Lỗi đăng ký từ server.");
       }
@@ -952,7 +1426,6 @@ export default function HomeGuest() {
               <strong>"{event.title}"</strong>.
             </span>
             <div className="flex gap-2 w-full">
-              {" "}
               <button
                 onClick={() => {
                   toast.dismiss(t.id);
@@ -960,16 +1433,14 @@ export default function HomeGuest() {
                 }}
                 className="flex-1 px-3 py-1.5 rounded bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700"
               >
-                {" "}
-                Đăng nhập{" "}
-              </button>{" "}
+                Đăng nhập
+              </button>
               <button
                 onClick={() => toast.dismiss(t.id)}
                 className="flex-1 px-3 py-1.5 rounded bg-gray-200 text-gray-700 text-sm hover:bg-gray-300"
               >
-                {" "}
-                Để sau{" "}
-              </button>{" "}
+                Để sau
+              </button>
             </div>
           </div>
         ),
@@ -1022,12 +1493,14 @@ export default function HomeGuest() {
         else newIds.delete(eventId);
         return newIds;
       });
+      fetchChatConversationsAPI();
     },
-    []
+    [fetchChatConversationsAPI]
   );
 
   const handleEventClick = (event: EventDisplayInfo) => setSelectedEvent(event);
   const handleBackToList = () => setSelectedEvent(null);
+  
   const refreshNewsList = useCallback(() => {
     fetchNews();
   }, [fetchNews]);
@@ -1080,19 +1553,84 @@ export default function HomeGuest() {
       }
     }
   };
+  const handleOpenCreateNewsModalForGuest = () => {
+  if (!user) {
+    toast.error("Vui lòng đăng nhập để tạo tin tức.");
+    router.push("/login");
+    return;
+  }
 
-  // --- Computed Values ---
-  const isPageLoading =
-    isLoadingUser ||
-    isLoadingEvents ||
-    isLoadingRegisteredIds ||
-    isLoadingCreatedEventIds;
+  toast.custom((t) => (
+    <div
+      className={`${
+        t.visible ? 'animate-enter' : 'animate-leave'
+      } max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+    >
+      <div className="flex-1 w-0 p-4">
+        <div className="flex items-start">
+          <div className="ml-3 flex-1">
+            <p className="text-sm font-medium text-gray-900">
+              Thông báo
+            </p>
+            <p className="mt-1 text-sm text-gray-500">
+              Chức năng tạo tin tức không có sẵn ở giao diện này. Vui lòng sử dụng trang quản lý (nếu có quyền).
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="flex border-l border-gray-200">
+        <button
+          onClick={() => toast.dismiss(t.id)}
+          className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+  ), { duration: 6000});
+};
+
+const handleOpenEditNewsModalForGuest = (newsItem: NewsItem) => {
+  if (!user) {
+    toast.error("Vui lòng đăng nhập để chỉnh sửa tin tức.");
+    router.push("/login");
+    return;
+  }
+  toast.custom((t) => (
+     <div
+      className={`${
+        t.visible ? 'animate-enter' : 'animate-leave'
+      } max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+    >
+      <div className="flex-1 w-0 p-4">
+        <div className="flex items-start">
+          <div className="ml-3 flex-1">
+            <p className="text-sm font-medium text-gray-900">
+              Thông báo
+            </p>
+            <p className="mt-1 text-sm text-gray-500">
+              Chức năng chỉnh sửa tin tức "{newsItem.title}" không có sẵn ở giao diện này. Vui lòng sử dụng trang quản lý (nếu có quyền).
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="flex border-l border-gray-200">
+        <button
+          onClick={() => toast.dismiss(t.id)}
+          className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+  ), { duration: 8000});
+};
+
   const unreadNotificationCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications]
   );
 
-  // --- Styling Functions (Giữ nguyên) ---
   const getTabButtonClasses = (tabName: ActiveTab): string => {
     const base =
       "cursor-pointer px-4 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition";
@@ -1170,7 +1708,6 @@ export default function HomeGuest() {
     { id: "chatList", label: "💬 Danh sách chat", requiresAuth: true },
   ];
 
-  // --- Render Logic ---
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
       <Toaster toastOptions={{ duration: 4000 }} position="top-center" />
@@ -1178,20 +1715,19 @@ export default function HomeGuest() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-          <span
+            <span
               className="cursor-pointer hover:text-gray-300 transition-colors"
               onClick={() => setShowAboutModal(true)}
             >
               Giới thiệu
             </span>
-            
             <span
               className="cursor-pointer hover:text-gray-300 transition-colors"
               onClick={() => setShowContactModal(true)}
             >
               Liên hệ
             </span>
-            {initializedRef &&
+            {initializedRef.current &&
               !isLoadingUser &&
               (user ? (
                 <UserMenu user={user} onLogout={handleLogout} />
@@ -1202,23 +1738,24 @@ export default function HomeGuest() {
                   </span>
                 </Link>
               ))}
-            {(!initializedRef || isLoadingUser) && (
+            {(!initializedRef.current || isLoadingUser) && (
               <span className="text-gray-400">Đang tải...</span>
             )}
           </div>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200">
-        <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3"> {/* Use items-center */}
+      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30">
+        <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
           {tabs.map((tab) => {
-            const showTab =
-              !tab.requiresAuth ||
-              (tab.requiresAuth && initializedRef && !isLoadingUser && user);
-            if (!showTab) return null;
+             const showTabButton =
+             !tab.requiresAuth ||
+             (tab.requiresAuth && initializedRef.current && user);
+           
+           if (!showTabButton && tab.requiresAuth && !user && isLoadingUser && !initializedRef.current) return null;
+
             return (
               <div key={tab.id} className="relative flex flex-col items-center">
-                {" "}
                 <button
                   onClick={() => {
                     if (tab.requiresAuth && !user) {
@@ -1228,11 +1765,11 @@ export default function HomeGuest() {
                       setActiveTab(tab.id as ActiveTab);
                     }
                   }}
+                  disabled={tab.requiresAuth && !user && isLoadingUser}
                   className={getTabButtonClasses(tab.id as ActiveTab)}
                 >
-                  {" "}
-                  {tab.label}{" "}
-                </button>{" "}
+                  {tab.label}
+                </button>
                 {activeTab === tab.id && (
                   <div
                     className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
@@ -1240,13 +1777,12 @@ export default function HomeGuest() {
                     )} border-r-[6px] border-r-transparent`}
                     style={{ left: "50%", transform: "translateX(-50%)" }}
                   >
-                    {" "}
                   </div>
-                )}{" "}
+                )}
               </div>
             );
           })}
-          {initializedRef &&
+          {initializedRef.current &&
             !user &&
             !isLoadingUser &&
             tabs.some((t) => t.requiresAuth) && (
@@ -1254,98 +1790,145 @@ export default function HomeGuest() {
                 (Đăng nhập để xem các mục khác)
               </span>
             )}
-           {/* Nút Làm mới */}
-          {/* {(activeTab === 'home' || activeTab === 'news') && (
-            <button
-              onClick={activeTab === 'home' ? fetchAllEvents : fetchNews}
-              disabled={activeTab === 'home' ? isLoadingEvents : isLoadingNews}
-              className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-4" // Added ml-4 for spacing
-              title={`Làm mới ${activeTab === 'home' ? 'sự kiện' : 'tin tức'}`}
-            >
-              {(activeTab === 'home' ? isLoadingEvents : isLoadingNews) ? (
-                <ReloadIcon className={`w-5 h-5 animate-spin ${activeTab === 'home' ? 'text-indigo-600' : 'text-green-600'}`} />
-              ) : (
-                <ReloadIcon className={`w-5 h-5 ${activeTab === 'home' ? 'text-indigo-600' : 'text-green-600'}`} />
-              )}
-              <span className="ml-2 hidden sm:inline">Làm mới</span>
-            </button>
-          )} */}
         </div>
       </div>
-
+      
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
-        {isPageLoading && activeTab !== "news" && activeTab !== "home" ? (
-          <p className="text-center text-gray-500 italic py-6">
-            Đang tải dữ liệu...
-          </p>
-        ) : (
+        {isLoadingUser && (activeTab === "registeredEvents" || activeTab === "members" || activeTab === "chatList") && (
+          <p className="text-center text-gray-500 italic py-6">Đang tải thông tin người dùng...</p>
+        )}
+
+        <div style={{ display: activeTab === "home" ? "block" : "none" }}>
+          <HomeTabContent
+            allEvents={allEvents}
+            isLoadingEvents={isLoadingEvents}
+            errorEvents={errorEvents}
+            registeredEventIds={registeredEventIds}
+            createdEventIds={createdEventIds}
+            user={user}
+            isLoadingRegisteredIds={isLoadingRegisteredIds}
+            isLoadingCreatedEventIds={isLoadingCreatedEventIds}
+            isRegistering={isRegistering}
+            onRegister={handleRegister}
+            onEventClick={handleEventClick}
+            selectedEvent={selectedEvent}
+            onBackToList={handleBackToList}
+            search={search}
+            setSearch={setSearch}
+            sortOption={sortOption}
+            setSortOption={setSortOption}
+            timeFilterOption={timeFilterOption}
+            setTimeFilterOption={setTimeFilterOption}
+            refreshToken={refreshToken}
+            onRefreshEvents={fetchAllEvents}
+            newsItems={newsItems}
+            isLoadingNews={isLoadingNews}
+            errorNews={errorNews}
+            refreshNewsList={refreshNewsList}
+          />
+        </div>
+
+        <div style={{ display: activeTab === "news" ? "block" : "none" }}>
+          <NewsTabContent
+            newsItems={newsItems}
+            isLoading={isLoadingNews}
+            error={errorNews}
+            user={user}
+            onNewsDeleted={refreshNewsList}
+            onRefreshNews={fetchNews}
+            onOpenCreateModal={handleOpenCreateNewsModalForGuest}
+            onOpenEditModal={handleOpenEditNewsModalForGuest} 
+          />
+        </div>
+        
+        {!isLoadingUser && user && (
           <>
-            {activeTab === "home" && (
-              <HomeTabContent
-                allEvents={allEvents}
-                isLoadingEvents={isLoadingEvents}
-                errorEvents={errorEvents}
-                registeredEventIds={registeredEventIds}
-                createdEventIds={createdEventIds}
-                user={user}
-                isLoadingRegisteredIds={isLoadingRegisteredIds}
-                isLoadingCreatedEventIds={isLoadingCreatedEventIds}
-                isRegistering={isRegistering}
-                onRegister={handleRegister}
-                onEventClick={handleEventClick}
-                selectedEvent={selectedEvent}
-                onBackToList={handleBackToList}
-                search={search}
-                setSearch={setSearch}
-                sortOption={sortOption}
-                setSortOption={setSortOption}
-                timeFilterOption={timeFilterOption}
-                setTimeFilterOption={setTimeFilterOption}
-                refreshToken={refreshToken}
-              />
-            )}
-            {activeTab === "news" && (
-              <NewsTabContent
-                newsItems={newsItems}
-                isLoading={isLoadingNews}
-                error={errorNews}
-                user={user}
-                onNewsDeleted={refreshNewsList}
-                // refreshToken={refreshToken}
-              />
-            )}
-            {activeTab === "registeredEvents" && user && !isLoadingUser && (
+            <div style={{ display: activeTab === "registeredEvents" ? "block" : "none" }}>
               <RegisteredEventsTabContent
                 currentUserId={user.id}
-                isLoadingUserId={isLoadingUser}
+                isLoadingUserId={false} 
                 registeredEventIds={registeredEventIds}
                 createdEventIds={createdEventIds}
                 onRegistrationChange={handleRegistrationChange}
               />
-            )}
-            {activeTab === "members" && user && !isLoadingUser && (
+            </div>
+
+            <div style={{ display: activeTab === "members" ? "block" : "none" }}>
               <MembersTabContent
                 user={user}
                 userRole={user.roles?.[0]?.name?.toUpperCase() || "GUEST"}
                 currentUserEmail={user.email || null}
+                onSessionExpired={() => router.push("/login?sessionExpired=true")}
+                refreshToken={refreshToken}
               />
-            )}
-            {activeTab === "chatList" && user && !isLoadingUser && (
-              <ChatTabContent currentUser={user} />
-            )}
-            {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
-              !user &&
-              !isLoadingUser && (
-                <p className="text-center text-red-500 py-6">
-                  Vui lòng đăng nhập để truy cập mục này.
-                </p>
+            </div>
+
+            <div style={{ display: activeTab === "chatList" ? "block" : "none" }}>
+              {(isLoadingChatConversations && chatConversations.length === 0 && !errorChatConversations) && (
+                 <p className="text-center text-gray-500 italic py-6">Đang tải danh sách trò chuyện...</p>
               )}
+              {errorChatConversations && chatConversations.length === 0 && (
+                 <p className="text-center text-red-500 italic py-6">{errorChatConversations}</p>
+              )}
+              {(!isLoadingChatConversations || chatConversations.length > 0 || errorChatConversations) && (
+                <ChatTabContent
+                  currentUser={user}
+                  globalChatMessagePayload={globalChatPayloadForTab}
+                  conversations={chatConversations}
+                  isLoadingConversations={isLoadingChatConversations}
+                  errorConversations={errorChatConversations}
+                  fetchConversations={fetchChatConversationsAPI}
+                  setConversations={setChatConversations}
+                  selectedConversation={selectedChatConversation}
+                  setSelectedConversation={setSelectedChatConversation}
+                  isLoadingDetails={isLoadingChatDetails}
+                  fetchGroupChatDetails={fetchGroupChatDetailsAPI}
+                  messages={chatMessages}
+                  isLoadingMessages={isLoadingChatMessages}
+                  errorMessages={errorChatMessages}
+                  fetchMessages={fetchChatMessagesAPI}
+                  setMessages={setChatMessages}
+                  mediaMessages={chatMediaMessages}
+                  fileMessages={chatFileMessages}
+                  audioMessages={chatAudioMessages}
+                  isLoadingMedia={isLoadingChatMedia}
+                  isLoadingFiles={isLoadingChatFiles}
+                  isLoadingAudio={isLoadingChatAudio}
+                  errorMedia={errorChatMedia}
+                  errorFiles={errorChatFiles}
+                  errorAudio={errorChatAudio}
+                  fetchMediaMessages={fetchChatMediaMessagesAPI}
+                  fetchFileMessages={fetchChatFileMessagesAPI}
+                  fetchAudioMessages={fetchChatAudioMessagesAPI}
+                  setMediaMessages={setChatMediaMessages}
+                  setFileMessages={setChatFileMessages}
+                  setAudioMessages={setChatAudioMessages}
+                  userCache={chatUserCache}
+                  fetchUserDetailsWithCache={fetchChatUserDetailsWithCache}
+                  getDisplayName={getChatDisplayName}
+                  handleRemoveMember={handleRemoveMemberChatAPI}
+                  handleLeaveGroup={handleLeaveGroupChatAPI}
+                  handleSendMessageAPI={handleSendMessageChatAPI}
+                  handleSendFileAPI={handleSendFileChatAPI}
+                  handleDeleteMessageAPI={handleDeleteMessageChatAPI}
+                  handleDownloadFileAPI={handleDownloadFileChatAPI}
+                  isProcessingChatAction={isProcessingChatAction}
+                  downloadingFileId={downloadingChatFileId}
+                  setDownloadingFileId={setDownloadingChatFileId}
+                />
+              )}
+            </div>
           </>
+        )}
+
+        {!isLoadingUser && !user && tabs.find((t) => t.id === activeTab)?.requiresAuth && (
+          <p className="text-center text-red-500 py-6">
+            Vui lòng đăng nhập để truy cập mục này.
+          </p>
         )}
       </div>
 
-      {/* Notification Bell */}
-      {initializedRef && !isLoadingUser && user && (
+      {initializedRef.current && !isLoadingUser && user && (
         <div
           className="fixed bottom-6 right-6 z-50 group"
           ref={notificationContainerRef}
@@ -1362,23 +1945,21 @@ export default function HomeGuest() {
             <BellIcon className="h-6 w-6" aria-hidden="true" />
             {unreadNotificationCount > 0 && (
               <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white transform translate-x-1/4 -translate-y-1/4 ring-2 ring-white pointer-events-none">
-                {" "}
                 {unreadNotificationCount > 9
                   ? "9+"
-                  : unreadNotificationCount}{" "}
+                  : unreadNotificationCount}
               </span>
             )}
           </button>
           {showNotificationDropdown && (
             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96">
-              {" "}
               <NotificationDropdown
                 notifications={notifications}
-                isLoading={isLoadingNotifications}
+                isLoading={isLoadingNotifications && notifications.length === 0}
                 error={errorNotifications}
                 onMarkAsRead={handleMarkAsRead}
                 onClose={() => setShowNotificationDropdown(false)}
-              />{" "}
+              />
             </div>
           )}
         </div>
@@ -1395,17 +1976,18 @@ export default function HomeGuest() {
           if (confirmationState.onConfirm) confirmationState.onConfirm();
           setConfirmationState((prev) => ({ ...prev, isOpen: false }));
         }}
-        onCancel={() =>
-          setConfirmationState((prev) => ({ ...prev, isOpen: false }))
-        }
+        onCancel={() => {
+            if(confirmationState.onCancel) confirmationState.onCancel();
+            else setConfirmationState((prev) => ({ ...prev, isOpen: false }));
+        }}
       />
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
       )}
 
       {showAboutModal && (
-            <AboutModal onClose={() => setShowAboutModal(false)} />
-          )}
+        <AboutModal onClose={() => setShowAboutModal(false)} />
+      )}
     </div>
   );
 }

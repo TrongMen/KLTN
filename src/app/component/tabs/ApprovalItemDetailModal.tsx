@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { EventDisplayInfo as MainEventInfo, NewsItem as MainNewsItem, User } from "../homeadmin"; // Adjust paths
+import { EventDisplayInfo as MainEventInfo, NewsItem as MainNewsItem, User } from "../types/appTypes"; // Adjust paths
 
 
 type EventType = MainEventInfo & { status?: string; rejectionReason?: string | null; createdBy?: string; content?: string; purpose?: string; time?: string };

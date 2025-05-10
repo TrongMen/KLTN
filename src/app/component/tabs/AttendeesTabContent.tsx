@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType } from "../homeuser";
+import { User as MainUserType } from "../types/appTypes";
 import QRScanner from "../modals/QRScanner"; 
 import ConfirmationDialog from "../../../utils/ConfirmationDialog";
 

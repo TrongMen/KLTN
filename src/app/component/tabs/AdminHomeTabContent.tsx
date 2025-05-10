@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "react-hot-toast";
-import { EventDisplayInfo } from "../homeadmin"; // Điều chỉnh đường dẫn nếu cần
+import { EventDisplayInfo } from "../types/appTypes"; // Điều chỉnh đường dẫn nếu cần
 import {
   ReloadIcon,
   CheckCircledIcon,

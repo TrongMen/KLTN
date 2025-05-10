@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Image from "next/image";
 import { toast } from "react-hot-toast";
-import { NewsItem, User } from "../homeuser";
+import { NewsItem, User } from "../types/appTypes";
 import { ConfirmationDialog } from "../../../utils/ConfirmationDialog";
 import NewsDetailModal from "../modals/NewsDetailModal";
 import {

@@ -6,7 +6,7 @@ import {
   User as MainUserType,
   NewsItem as MainNewsItem,
   EventDisplayInfo as MainEventInfo,
-} from "../../homeadmin"; 
+} from "../types/appTypes"; 
 import ApprovalItemDetailModal from "./ApprovalItemDetailModal";
 import { ReloadIcon } from "@radix-ui/react-icons";
 

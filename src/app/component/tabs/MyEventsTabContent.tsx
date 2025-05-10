@@ -9,11 +9,11 @@ import React, {
 } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType } from "../homeuser";
+import { User as MainUserType } from "../types/appTypes";
 import UpdateEventModal from "../modals/UpdateEventModal";
 import ConfirmationDialog from "../../../utils/ConfirmationDialog";
-import MyCreatedEventsTab from "./MyEvent";
-import RegisteredEventsTab from "./RegisterEvent";
+import MyCreatedEventsTab from "./event/MyEvent";
+import RegisteredEventsTab from "./event/RegisterEvent";
 import {
   ReloadIcon,
   DownloadIcon,
@@ -22,7 +22,7 @@ import {
   ArchiveIcon,
   ExclamationTriangleIcon,
   ChevronLeftIcon,
-  CalendarIcon,
+  CalendarIcon as RadixCalendarIcon, // Đổi tên để tránh trùng lặp nếu bạn có CalendarIcon khác
 } from "@radix-ui/react-icons";
 
 interface OrganizerInfo {
@@ -32,6 +32,9 @@ interface OrganizerInfo {
   firstName?: string;
   lastName?: string;
   fullName?: string;
+  id?: string; // Thêm id nếu có, hoặc fetchUserDetailsAPI trả về
+  name?: string; // Thêm name nếu có
+  username?: string; // Thêm username nếu có
 }
 
 interface ParticipantInfo {
@@ -42,6 +45,9 @@ interface ParticipantInfo {
   fullName?: string;
   lastName?: string;
   firstName?: string;
+  id?: string;
+  name?: string;
+  username?: string;
 }
 
 interface EventType {
@@ -54,7 +60,7 @@ interface EventType {
   status: "APPROVED" | "PENDING" | "REJECTED" | string;
   rejectionReason?: string | null;
   purpose?: string;
-  createdBy?: string;
+  createdBy?: string ;
   createdAt?: string;
   organizers?: OrganizerInfo[];
   participants?: ParticipantInfo[];
@@ -92,7 +98,7 @@ const getFilenameFromHeader = (header: string | null): string => {
         filename = decodeURIComponent(filename);
       }
     } catch (e) {
-      console.error("Error decoding filename:", e);
+      // console.error("Error decoding filename:", e);
     }
     if (!filename.toLowerCase().endsWith(".docx")) {
       const nameWithoutExt = filename.includes(".")
@@ -113,33 +119,30 @@ async function fetchUserDetailsAPI(
       `http://localhost:8080/identity/users/notoken/${userId}`
     );
     if (!response.ok) {
-      console.error(
-        `Lỗi fetch chi tiết người dùng ${userId}: ${response.status}`
-      );
-      return null;
+      return { userId, fullName: `ID: ${userId}` };
     }
     const data = await response.json();
     if (data.code === 1000 && data.result) {
-      const { firstName, lastName } = data.result;
+      const { firstName, lastName, username, id, position, roles } = data.result;
       return {
-        userId,
+        userId: userId, // Giữ userId gốc nếu id từ API khác
+        id: id, // id từ API user
         firstName,
         lastName,
-        fullName: `${lastName || ""} ${firstName || ""}`.trim(),
+        username,
+        fullName: `${lastName || ""} ${firstName || ""}`.trim() || username || `ID: ${id}`,
+        positionName: position?.name,
+        roleName: roles && roles.length > 0 ? roles[0].name : undefined,
       };
     }
-    console.error(
-      `Cấu trúc dữ liệu không hợp lệ cho người dùng ${userId}:`,
-      data
-    );
-    return null;
+    return { userId, fullName: `ID: ${userId}` };
   } catch (error) {
-    console.error(`Lỗi fetch chi tiết người dùng ${userId}:`, error);
-    return null;
+    return { userId, fullName: `ID: ${userId}` };
   }
 }
 
-const getVietnameseEventStatus = (status: string): string => {
+const getVietnameseEventStatus = (status?: string): string => {
+  if(!status) return "Không xác định";
   const upperStatus = status.toUpperCase();
   switch (upperStatus) {
     case "APPROVED":
@@ -148,6 +151,8 @@ const getVietnameseEventStatus = (status: string): string => {
       return "Chờ duyệt";
     case "REJECTED":
       return "Đã từ chối";
+    case "CANCELLED":
+        return "Đã hủy";
     default:
       return status;
   }
@@ -213,13 +218,12 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
 
   const currentUserId = user?.id ?? null;
-  const organizerDetailsCacheRef = useRef<Record<string, OrganizerInfo>>({});
+  const personDetailsCacheRef = useRef<Record<string, OrganizerInfo | ParticipantInfo>>({});
+
 
   const callOnEventNeedsRefresh = useCallback(() => {
     if (typeof onEventNeedsRefresh === 'function') {
       onEventNeedsRefresh();
-    } else {
-      console.warn("MyEventsTabContent: prop 'onEventNeedsRefresh' is not a function or was not provided by the parent component.");
     }
   }, [onEventNeedsRefresh]);
 
@@ -413,7 +417,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           const dr = await res.json();
           messageAPI = dr.message || messageAPI;
         } catch (e) {
-          console.warn("Could not parse delete response body");
+          //
         }
       }
       toast.success(messageAPI);
@@ -591,6 +595,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           const errData = await response.json();
           errorMsg = errData.message || errorMsg;
         } catch (e) {
+          //
         }
         throw new Error(errorMsg);
       }
@@ -613,61 +618,89 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     }
   };
 
-  const enhanceEventDetailsWithNames = useCallback(
+ const enhanceEventDetailsWithNames = useCallback(
     async (event: EventType): Promise<EventType> => {
       if (!event) return event;
-      let needsUpdate = false;
-      const newOrganizers = event.organizers ? [...event.organizers] : [];
-      const newParticipants = event.participants ? [...event.participants] : [];
-
-      if (event.organizers) {
-        for (let i = 0; i < newOrganizers.length; i++) {
-          let org = newOrganizers[i];
-          if (!org.fullName && org.userId) {
-            if (organizerDetailsCacheRef.current[org.userId]) {
-              org = { ...org, ...organizerDetailsCacheRef.current[org.userId] };
-            } else {
-              const details = await fetchUserDetailsAPI(org.userId);
+      
+      const enhanceList = async (list: (OrganizerInfo | ParticipantInfo)[] | undefined): Promise<(OrganizerInfo | ParticipantInfo)[]> => {
+        if (!list || list.length === 0) return [];
+        const enhancedList = await Promise.all(
+          list.map(async (person) => {
+            // Đảm bảo person.userId tồn tại và là string trước khi fetch
+            if (person && typeof person.userId === 'string' && (!person.fullName && !person.firstName && !person.lastName)) { 
+              if (personDetailsCacheRef.current[person.userId]) {
+                return { ...person, ...personDetailsCacheRef.current[person.userId] };
+              }
+              const details = await fetchUserDetailsAPI(person.userId);
               if (details) {
-                organizerDetailsCacheRef.current[org.userId] = details;
-                org = { ...org, ...details };
+                personDetailsCacheRef.current[person.userId] = details;
+                return { ...person, ...details };
               }
             }
-            newOrganizers[i] = org;
-            needsUpdate = true;
-          }
-        }
-      }
-      if (event.participants) {
-        for (let i = 0; i < newParticipants.length; i++) {
-          let participant = newParticipants[i];
-          if (!participant.fullName && participant.userId) {
-            if (organizerDetailsCacheRef.current[participant.userId]) {
-              participant = {
-                ...participant,
-                ...organizerDetailsCacheRef.current[participant.userId],
-              };
-            } else {
-              const details = await fetchUserDetailsAPI(participant.userId);
+            return person;
+          })
+        );
+        return enhancedList as (OrganizerInfo | ParticipantInfo)[];
+      };
+
+      const newOrganizers = await enhanceList(event.organizers);
+      const newParticipants = await enhanceList(event.participants);
+      
+      let newCreatedById: string | undefined = undefined;
+
+      if (typeof event.createdBy === 'string' && event.createdBy) {
+          const creatorId = event.createdBy;
+          const cachedCreatorDetails = personDetailsCacheRef.current[creatorId];
+
+          if (cachedCreatorDetails) {
+              newCreatedById = cachedCreatorDetails.userId; // Lấy userId từ cache
+          } else {
+              const details = await fetchUserDetailsAPI(creatorId); // details là OrganizerInfo | null
               if (details) {
-                organizerDetailsCacheRef.current[participant.userId] = details;
-                participant = { ...participant, ...details };
+                  personDetailsCacheRef.current[creatorId] = details; // Cache toàn bộ object details
+                  newCreatedById = details.userId; // Gán userId (string) cho newCreatedById
+              } else {
+                  // Nếu fetchUserDetailsAPI trả về null (ví dụ: lỗi mạng), newCreatedById sẽ là undefined
+                  newCreatedById = undefined; 
               }
-            }
-            newParticipants[i] = participant;
-            needsUpdate = true;
           }
-        }
+      } else if (event.createdBy && typeof event.createdBy === 'object') {
+          // Nếu event.createdBy ban đầu là một object, cố gắng lấy userId hoặc id từ nó
+          const creatorObject = event.createdBy as any; // Ép kiểu để truy cập thuộc tính
+          if (typeof creatorObject.userId === 'string') {
+              newCreatedById = creatorObject.userId;
+          } else if (typeof creatorObject.id === 'string') { // Một số object User có thể dùng 'id'
+              newCreatedById = creatorObject.id;
+          }
+      }
+      // Nếu event.createdBy là null hoặc undefined, newCreatedById sẽ giữ giá trị undefined đã khởi tạo.
+
+
+      // Kiểm tra xem có thực sự cần tạo object mới không
+      // So sánh newCreatedById với event.createdBy ban đầu (nếu nó là string) hoặc với ID trích xuất từ object
+      let originalCreatedById: string | undefined | null = null;
+      if(typeof event.createdBy === 'string') {
+        originalCreatedById = event.createdBy;
+      } else if (event.createdBy && typeof event.createdBy === 'object') {
+        originalCreatedById = (event.createdBy as any).userId || (event.createdBy as any).id || null;
       }
 
-      if (needsUpdate) {
+
+      if (newOrganizers !== event.organizers || newParticipants !== event.participants || newCreatedById !== originalCreatedById) {
         return {
           ...event,
-          organizers: newOrganizers,
-          participants: newParticipants,
+          organizers: newOrganizers as OrganizerInfo[],
+          participants: newParticipants as ParticipantInfo[],
+          createdBy: newCreatedById, // createdBy bây giờ là string | undefined
         };
       }
-      return event;
+      
+      return {
+        ...event,
+        organizers: newOrganizers as OrganizerInfo[],
+        participants: newParticipants as ParticipantInfo[],
+        createdBy: newCreatedById,
+      };
     },
     []
   );
@@ -690,221 +723,240 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     callOnEventNeedsRefresh();
   }, [callOnEventNeedsRefresh]);
 
+  const formatPersonForDisplay = (person: OrganizerInfo | ParticipantInfo | string): string => {
+    if (typeof person === 'string') return `ID: ${person}`;
+
+    const p = person as OrganizerInfo; // Cast to OrganizerInfo or a combined type
+
+    let displayName = p.fullName || ""; // fullName from enrichment
+    if (!displayName && (p.firstName || p.lastName)) {
+        displayName = `${p.lastName || ""} ${p.firstName || ""}`.trim();
+    }
+    if (!displayName && (p as any).username) { // Check for username if available
+        displayName = (p as any).username;
+    }
+    if (!displayName) {
+        displayName = `ID: ${p.userId}`;
+    }
+    
+    const parts: string[] = [displayName];
+
+    if (p.positionName) {
+        parts.push(p.positionName);
+    }
+    if (p.roleName && p.roleName.toUpperCase() !== "GUEST" && p.roleName.toUpperCase() !== "USER") {
+        parts.push(p.roleName);
+    }
+    
+    const finalParts = parts.filter(part => part && part.trim() !== "" && part.toLowerCase() !== "không rõ");
+    if (finalParts.length === 0) return `ID: ${p.userId}`;
+    
+    return Array.from(new Set(finalParts)).join(" - ");
+};
+
+
   const renderEventDetails = (event: EventType) => {
     const isDeletedEvent = event.deleted;
-    const descriptionToShow =
-      event.description || event.content || event.purpose;
-    const eventName = event.name || event.title;
-    const vietnameseStatus = event.status
-      ? getVietnameseEventStatus(event.status)
-      : "";
+    const eventName = event.name || event.title || "Sự kiện không tên";
+    const descriptionContent = event.description || event.content || event.purpose;
+    const vietnameseStatus = getVietnameseEventStatus(event.status);
 
-    const formatPersonDetails = (person: OrganizerInfo | ParticipantInfo) => {
-        const name = person.fullName || `${person.lastName || ""} ${person.firstName || ""}`.trim() || `ID: ${person.userId}`;
-        const parts = [name];
-        if (person.positionName) {
-            parts.push(person.positionName);
+    let statusColorClass = "text-gray-600 bg-gray-200 border-gray-300";
+    if (event.status) {
+        const upperStatus = event.status.toUpperCase();
+        if (upperStatus === "APPROVED") statusColorClass = "text-green-700 bg-green-100 border-green-300";
+        else if (upperStatus === "PENDING") statusColorClass = "text-yellow-700 bg-yellow-100 border-yellow-300";
+        else if (upperStatus === "REJECTED" || upperStatus === "CANCELLED") statusColorClass = "text-red-700 bg-red-100 border-red-300";
+    }
+
+    let creatorDisplay = "Không rõ";
+    const creatorData = event.createdBy;
+    if (creatorData) {
+        if (typeof creatorData === 'object' && creatorData !== null) {
+            creatorDisplay = formatPersonForDisplay(creatorData as OrganizerInfo);
+        } else if (typeof creatorData === 'string') {
+            const cachedCreator = personDetailsCacheRef.current[creatorData];
+            if (cachedCreator) {
+                creatorDisplay = formatPersonForDisplay(cachedCreator);
+            } else {
+                creatorDisplay = `ID: ${creatorData}`;
+            }
         }
-        if (person.roleName) {
-            parts.push(person.roleName);
-        }
-        return parts.join(" - ");
-    };
+    }
+    if (creatorDisplay.trim().toLowerCase() === "id:" || creatorDisplay.trim() === "" || creatorDisplay.toLowerCase() === "không rõ id:" || creatorDisplay.toLowerCase() === "id: null" || creatorDisplay.toLowerCase() === "id: undefined") {
+        creatorDisplay = "Không rõ";
+    }
 
     return (
-      <div className="p-4 flex-grow overflow-y-auto mb-4 pr-2 bg-white rounded-lg shadow border">
+      <div className="p-4 bg-white rounded-lg shadow border">
         <button
           onClick={() => setViewingEventDetails(null)}
-          className="mb-4 text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer p-1 rounded hover:bg-blue-50"
+          className="mb-6 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer group font-medium"
         >
-          <ChevronLeftIcon className="h-4 w-4 mr-1" /> Quay lại
+          <ChevronLeftIcon className="h-5 w-5 mr-1.5 group-hover:-translate-x-1 transition-transform duration-150" />
+          Quay lại danh sách
         </button>
-        {isLoadingEventDetailsEnhancement && (
-          <p className="text-center text-gray-500 py-4">
-            Đang tải chi tiết...
-          </p>
+
+        {isLoadingEventDetailsEnhancement && !viewingEventDetails?.organizers?.some(o => o.fullName) && (
+            <div className="p-4 md:p-6 bg-white rounded-lg shadow-xl border border-gray-200 text-center min-h-[400px] flex flex-col justify-center items-center">
+                <ReloadIcon className="w-10 h-10 animate-spin text-indigo-500 mx-auto my-4" />
+                <p className="text-gray-600 text-lg">Đang tải chi tiết sự kiện...</p>
+            </div>
         )}
-        {!isLoadingEventDetailsEnhancement && viewingEventDetails && (
+
+        {!isLoadingEventDetailsEnhancement && event && (
           <>
-            <div className="flex items-start gap-4 mb-4">
-              {viewingEventDetails.avatarUrl ? (
-                <Image
-                  src={viewingEventDetails.avatarUrl}
-                  alt={`Avatar cho ${eventName}`}
-                  width={80}
-                  height={80}
-                  className="w-20 h-20 rounded-lg object-cover border p-0.5 bg-gray-100 shadow-sm flex-shrink-0"
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-3xl font-semibold border flex-shrink-0">
-                  {eventName?.charAt(0).toUpperCase() || "?"}
-                </div>
-              )}
-              <div className="flex-grow">
-                <h3 className="text-xl font-bold text-gray-800 mb-1">
-                  {eventName}
-                </h3>
-                {!isDeletedEvent && viewingEventDetails.status && (
-                  <p className="text-sm">
-                    <strong className="font-medium text-gray-900">
-                      Trạng thái:{" "}
-                    </strong>
-                    <span
-                      className={`font-semibold px-2 py-0.5 rounded-full text-xs ${
-                        viewingEventDetails.status.toUpperCase() === "APPROVED"
-                          ? "bg-green-100 text-green-700"
-                          : viewingEventDetails.status.toUpperCase() ===
-                            "PENDING"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : viewingEventDetails.status.toUpperCase() ===
-                            "REJECTED"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {vietnameseStatus}
-                    </span>
-                  </p>
-                )}
-                {isDeletedEvent && (
-                  <p className="text-red-600 font-semibold text-sm mt-1">
-                    <ExclamationTriangleIcon className="inline-block mr-1 h-4 w-4" />
-                    Đã bị xóa.
-                  </p>
+            <div className="flex flex-col lg:flex-row gap-6 xl:gap-8">
+              <div className="flex-shrink-0 lg:w-2/5 xl:w-1/3">
+                {event.avatarUrl ? (
+                  <div className="aspect-[4/3] relative w-full">
+                    <Image
+                        src={event.avatarUrl}
+                        alt={`Ảnh bìa cho ${eventName}`}
+                        layout="fill"
+                        objectFit="cover"
+                        className="rounded-lg shadow-lg border border-gray-200"
+                    />
+                  </div>
+                ) : (
+                 <div className="w-full h-52 lg:h-full bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center text-gray-400 shadow-lg aspect-[4/3] border">
+                    <RadixCalendarIcon className="w-16 h-16 lg:w-20 lg:h-20 opacity-50" />
+                  </div>
                 )}
               </div>
-            </div>
-            <div className="space-y-2 text-sm text-gray-700">
-              {isDeletedEvent && viewingEventDetails.deletedAt && (
-                <p>
-                  <strong className="font-medium text-gray-900 w-28 inline-block">
-                    Thời gian xóa:{" "}
-                  </strong>
-                  {new Date(viewingEventDetails.deletedAt).toLocaleString(
-                    "vi-VN",
-                    { dateStyle: "full", timeStyle: "short" }
-                  )}
-                </p>
-              )}
-              {isDeletedEvent && viewingEventDetails.deletedBy && (
-                <p>
-                  <strong className="font-medium text-gray-900 w-28 inline-block">
-                    Người xóa:{" "}
-                  </strong>
-                  {viewingEventDetails.deletedBy.lastName}{" "}
-                  {viewingEventDetails.deletedBy.firstName} (
-                  {viewingEventDetails.deletedBy.username}){" "}
-                  {viewingEventDetails.deletedBy.avatar && (
-                    <img
-                      src={viewingEventDetails.deletedBy.avatar}
-                      alt="Avatar"
-                      className="inline-block ml-2 h-5 w-5 rounded-full"
-                    />
-                  )}
-                </p>
-              )}
-              {(viewingEventDetails.time || viewingEventDetails.date) && (
-                <p>
-                  <strong className="font-medium text-gray-900 w-28 inline-block">
-                    Thời gian:{" "}
-                  </strong>
-                  {new Date(
-                    viewingEventDetails.time || viewingEventDetails.date!
-                  ).toLocaleString("vi-VN", {
-                    dateStyle: "full",
-                    timeStyle: "short",
-                  })}
-                </p>
-              )}
-              {viewingEventDetails.location && (
-                <p>
-                  <strong className="font-medium text-gray-900 w-28 inline-block">
-                    Địa điểm:{" "}
-                  </strong>
-                  {viewingEventDetails.location}
-                </p>
-              )}
-              {!isDeletedEvent && viewingEventDetails.purpose && (
-                <p>
-                  <strong className="font-medium text-gray-900 w-28 inline-block">
-                    Mục đích:{" "}
-                  </strong>
-                  {viewingEventDetails.purpose}
-                </p>
-              )}
-              {!isDeletedEvent &&
-                (descriptionToShow ||
-                  (mainTab === "myEvents" && viewingEventDetails.content)) && (
-                  <p>
-                    <strong className="font-medium text-gray-900 w-28 inline-block align-top">
-                      {mainTab === "myEvents" || viewingEventDetails.content
-                        ? "Nội dung:"
-                        : "Mô tả:"}
-                    </strong>
-                    <span className="inline-block whitespace-pre-wrap max-w-[calc(100%-7rem)]">
-                      {mainTab === "myEvents"
-                        ? viewingEventDetails.content
-                        : descriptionToShow}
+
+              <div className="flex-grow">
+                <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3 leading-tight">{eventName}</h1>
+                {!isDeletedEvent && event.status && (
+                  <div className="mb-5">
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${statusColorClass} border`}>
+                      {vietnameseStatus}
                     </span>
-                  </p>
+                  </div>
+                )}
+                 {isDeletedEvent && (
+                    <p className="text-red-600 font-semibold text-sm mt-1 mb-3">
+                        <ExclamationTriangleIcon className="inline-block mr-1 h-4 w-4" />
+                        Sự kiện này đã bị xóa.
+                    </p>
                 )}
                 
-              {!isDeletedEvent && viewingEventDetails.organizers && viewingEventDetails.organizers.length > 0 && (
-                <div className="pt-2">
-                  <strong className="font-medium text-gray-900 w-28 inline-block align-top">Ban tổ chức:</strong>
-                  <ul className="inline-block list-none pl-0 ml-1 max-w-[calc(100%-7.5rem)]">
-                    {viewingEventDetails.organizers.map((organizer, index) => (
-                      <li key={organizer.userId || index} className="mb-1 text-sm text-gray-600">
-                        {formatPersonDetails(organizer)}
-                      </li>
-                    ))}
-                  </ul>
+                <div className="space-y-4 text-base text-gray-700">
+                  {(event.time || event.date) && (
+                    <div className="flex items-start">
+                      <RadixCalendarIcon className="w-5 h-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" />
+                      <div>
+                        <p className="font-semibold text-gray-800">Thời gian diễn ra:</p>
+                        <p className="text-gray-600">{new Date(event.time || event.date!).toLocaleString("vi-VN", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                    </div>
+                  )}
+                  {event.location && (
+                    <div className="flex items-start">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <div>
+                        <p className="font-semibold text-gray-800">Địa điểm:</p>
+                        <p className="text-gray-600">{event.location}</p>
+                      </div>
+                    </div>
+                  )}
+                  {event.maxAttendees !== null && event.maxAttendees !== undefined && (
+                      <div className="flex items-start">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.268-.25-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.268.25-1.857m0 0A5.002 5.002 0 0112 15a5.002 5.002 0 014.745 3.143M12 13a3 3 0 100-6 3 3 0 000 6z" />
+                          </svg>
+                          <div>
+                              <p className="font-semibold text-gray-800">Số lượng dự kiến:</p>
+                              <p className="text-gray-600">
+                                {event.currentAttendeesCount !== null && event.currentAttendeesCount !== undefined ? event.currentAttendeesCount : (event.attendees?.length || 0)} / {event.maxAttendees}
+                              </p>
+                          </div>
+                      </div>
+                  )}
                 </div>
-              )}
+              </div>
+            </div>
 
-              {!isDeletedEvent && viewingEventDetails.participants && viewingEventDetails.participants.length > 0 && (
-                 <div className="pt-2">
-                    <strong className="font-medium text-gray-900 w-28 inline-block align-top">Người tham dự:</strong>
-                    <ul className="inline-block list-none pl-0 ml-1 max-w-[calc(100%-7.5rem)]">
-                        {viewingEventDetails.participants.map((participant, index) => (
-                            <li key={participant.userId || index} className="mb-1 text-sm text-gray-600">
-                                {formatPersonDetails(participant)}
+            {(descriptionContent || event.purpose || event.content) && !isDeletedEvent && (
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                    <h4 className="text-xl font-semibold text-gray-800 mb-3">Chi tiết sự kiện</h4>
+                    {event.purpose && (
+                        <div className="mb-4">
+                            <strong className="block font-medium text-gray-900 mb-1">Mục đích:</strong>
+                            <p className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap break-words p-3 bg-gray-50 rounded-md border">{event.purpose}</p>
+                        </div>
+                    )}
+                    {(event.description || event.content) && (
+                        <div className="mb-4">
+                            <strong className="block font-medium text-gray-900 mb-1">{event.content ? "Nội dung:" : "Mô tả:"}</strong>
+                            <p className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap break-words p-3 bg-gray-50 rounded-md border">{event.content || event.description}</p>
+                        </div>
+                    )}
+                </div>
+            )}
+            
+             {!isDeletedEvent && event.organizers && event.organizers.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                    <h4 className="text-xl font-semibold text-gray-800 mb-3">Ban tổ chức</h4>
+                    <ul className="space-y-2 text-sm">
+                        {event.organizers.map((org, index) => (
+                            <li key={org.userId || index} className="p-3 bg-gray-50 rounded-md border text-gray-700">
+                                {formatPersonForDisplay(org)}
                             </li>
                         ))}
                     </ul>
-                 </div>
-              )}
+                </div>
+            )}
 
-             
-              
-              
-            
-      
-            
-              {viewingEventDetails.createdAt && (
-                <p>
-                  <strong className="font-medium text-gray-900 w-28 inline-block">
-                    Ngày tạo:{" "}
-                  </strong>
-                  {new Date(viewingEventDetails.createdAt).toLocaleString(
-                    "vi-VN",
-                    { dateStyle: "short", timeStyle: "short" }
-                  )}
-                </p>
-              )}
-            </div>
-            <div className="mt-6 pt-4 border-t flex flex-wrap justify-end gap-3">
+            {!isDeletedEvent && event.participants && event.participants.length > 0 && (
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                <h4 className="text-xl font-semibold text-gray-800 mb-3">Người tham dự</h4>
+                <ul className="space-y-2 text-sm">
+                    {event.participants.map((par, index) => (
+                      <li key={par.userId || index} className="p-3 bg-gray-50 rounded-md border text-gray-700">
+                        {formatPersonForDisplay(par)}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+             {isDeletedEvent && event.deletedAt && (
+                 <div className="mt-8 pt-6 border-t border-gray-200">
+                    <h4 className="text-xl font-semibold text-gray-800 mb-3">Thông tin xóa</h4>
+                     <p className="text-sm text-gray-600"><strong className="font-medium text-gray-900">Thời gian xóa:</strong> {new Date(event.deletedAt).toLocaleString("vi-VN", { dateStyle: "full", timeStyle: "short" })}</p>
+                     {event.deletedBy && (
+                        <p className="text-sm text-gray-600 mt-1">
+                            <strong className="font-medium text-gray-900">Người xóa:</strong> {event.deletedBy.lastName} {event.deletedBy.firstName} ({event.deletedBy.username})
+                            {event.deletedBy.avatar && <img src={event.deletedBy.avatar} alt="Avatar người xóa" className="inline-block ml-2 h-5 w-5 rounded-full" />}
+                        </p>
+                     )}
+                 </div>
+             )}
+
+
+            {(creatorDisplay && creatorDisplay !== "Không rõ") || event.createdAt ? (
+                 <div className="mt-8 pt-6 border-t border-gray-200">
+                    <h4 className="text-xl font-semibold text-gray-800 mb-3">Thông tin khác</h4>
+                    {creatorDisplay && creatorDisplay !== "Không rõ" && (
+                        <p className="text-sm text-gray-700 mb-1"><strong className="font-medium text-gray-900">Tạo bởi:</strong> {creatorDisplay}</p>
+                    )}
+                    {event.createdAt && (
+                        <p className="text-sm text-gray-600"><strong className="font-medium text-gray-900">Ngày tạo sự kiện:</strong> {new Date(event.createdAt).toLocaleString("vi-VN", { dateStyle: 'long', timeStyle: 'short' })}</p>
+                    )}
+                </div>
+            ) : null}
+
+            <div className="mt-10 pt-6 border-t-2 border-gray-300 flex flex-col sm:flex-row justify-end gap-3">
               {mainTab === "myEvents" && !isDeletedEvent && (
                 <>
                   <button
-                    onClick={() => handleOpenUpdateModal(viewingEventDetails)}
-                    disabled={
-                      deletingEventId === viewingEventDetails.id ||
-                      restoringEventId === viewingEventDetails.id
-                    }
-                    className={`bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-md text-sm cursor-pointer flex items-center shadow-sm transition ${
-                      deletingEventId === viewingEventDetails.id ||
-                      restoringEventId === viewingEventDetails.id
+                    onClick={() => handleOpenUpdateModal(event)}
+                    disabled={deletingEventId === event.id || restoringEventId === event.id}
+                    className={`w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                      deletingEventId === event.id || restoringEventId === event.id
                         ? "opacity-50 cursor-wait"
                         : ""
                     }`}
@@ -912,24 +964,20 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                     <Pencil1Icon className="h-4 w-4 mr-2" /> Chỉnh sửa
                   </button>
                   <button
-                    onClick={() => handleDeleteClick(viewingEventDetails)}
-                    disabled={
-                      deletingEventId === viewingEventDetails.id ||
-                      restoringEventId === viewingEventDetails.id
-                    }
-                    className={`bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm cursor-pointer flex items-center shadow-sm transition ${
-                      deletingEventId === viewingEventDetails.id ||
-                      restoringEventId === viewingEventDetails.id
+                    onClick={() => handleDeleteClick(event)}
+                    disabled={deletingEventId === event.id || restoringEventId === event.id}
+                    className={`w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                      deletingEventId === event.id || restoringEventId === event.id
                         ? "opacity-50 cursor-wait"
                         : ""
                     }`}
                   >
-                    {deletingEventId === viewingEventDetails.id ? (
+                    {deletingEventId === event.id ? (
                       <ReloadIcon className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
                       <TrashIcon className="h-4 w-4 mr-2" />
                     )}
-                    {deletingEventId === viewingEventDetails.id
+                    {deletingEventId === event.id
                       ? "Đang xóa..."
                       : "Xóa sự kiện"}
                   </button>
@@ -937,38 +985,32 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
               {mainTab === "myEvents" && isDeletedEvent && (
                 <button
-                  onClick={() => handleRestoreClick(viewingEventDetails)}
-                  disabled={restoringEventId === viewingEventDetails.id}
-                  className={`bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md text-sm cursor-pointer flex items-center shadow-sm transition ${
-                    restoringEventId === viewingEventDetails.id
+                  onClick={() => handleRestoreClick(event)}
+                  disabled={restoringEventId === event.id}
+                  className={`w-full sm:w-auto bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                    restoringEventId === event.id
                       ? "opacity-50 cursor-wait"
                       : ""
                   }`}
                 >
-                  {restoringEventId === viewingEventDetails.id ? (
+                  {restoringEventId === event.id ? (
                     <ReloadIcon className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <ArchiveIcon className="h-4 w-4 mr-2" />
                   )}
-                  {restoringEventId === viewingEventDetails.id
+                  {restoringEventId === event.id
                     ? "Đang khôi phục..."
                     : "Khôi phục sự kiện"}
                 </button>
               )}
               {mainTab === "myEvents" &&
                 !isDeletedEvent &&
-                viewingEventDetails.status === "APPROVED" && (
+                event.status === "APPROVED" && (
                   <button
-                    onClick={() => handleExportClick(viewingEventDetails.id)}
-                    disabled={
-                      isExporting ||
-                      deletingEventId === viewingEventDetails.id ||
-                      restoringEventId === viewingEventDetails.id
-                    }
-                    className={`bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm cursor-pointer flex items-center shadow-sm transition ${
-                      isExporting ||
-                      deletingEventId === viewingEventDetails.id ||
-                      restoringEventId === viewingEventDetails.id
+                    onClick={() => handleExportClick(event.id)}
+                    disabled={isExporting || deletingEventId === event.id || restoringEventId === event.id}
+                    className={`w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                      isExporting || deletingEventId === event.id || restoringEventId === event.id
                         ? "opacity-50 cursor-not-allowed"
                         : ""
                     }`}
@@ -983,7 +1025,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 )}
               <button
                 onClick={() => setViewingEventDetails(null)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm font-medium cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
               >
                 Đóng
               </button>
@@ -1039,7 +1081,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
             deletedError={deletedError}
             fetchMyEvents={fetchMyEvents}
             fetchDeletedEvents={fetchDeletedEvents}
-            viewingEventDetails={null}
+            viewingEventDetails={null} 
             setViewingEventDetails={handleSetViewingEventDetails}
             onOpenUpdateModal={handleOpenUpdateModal}
             onDeleteClick={handleDeleteClick}
@@ -1050,7 +1092,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
             deletingEventId={deletingEventId}
             isExporting={isExporting}
             handleRefresh={handleRefreshLocal}
-            fetchOrganizerDetailsById={fetchUserDetailsAPI}
+            fetchOrganizerDetailsById={fetchUserDetailsAPI} 
           />
         ) : (
           <RegisteredEventsTab
@@ -1060,7 +1102,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
             onRegistrationChange={onRegistrationChange}
             isCreatedByUser={isCreatedByUserCallback}
             isRegistered={isRegisteredCallback}
-            setViewingEventDetails={handleSetViewingEventDetails}
+            setViewingEventDetails={handleSetViewingEventDetails} 
             onMainRefreshTrigger={triggerParentRefreshAsync}
             isParentRefreshing={isRefreshing}
             

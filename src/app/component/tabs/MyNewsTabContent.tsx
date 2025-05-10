@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast, Toaster } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType, NewsItem } from "../homeuser";
+import { User as MainUserType, NewsItem } from "../types/appTypes";
 import ConfirmationDialog from "../../../utils/ConfirmationDialog";
 import {
   ArrowLeftIcon,

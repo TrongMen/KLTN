@@ -9,7 +9,7 @@ import {
   CheckIcon,
   Cross2Icon,
 } from "@radix-ui/react-icons";
-import { User as MainUserType } from "../homeadmin"; // Assuming User type is needed from parent
+import { User as MainUserType } from "../types/appTypes"; 
 
 interface Item {
   id: number | string;

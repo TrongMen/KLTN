@@ -1,12 +1,15 @@
-
-tôi đã tách tab Sự kiện của tôi ra 1 file riểng như dưới đây:
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import Image from "next/image";
 import { User as MainUserType } from "../homeuser";
 import {
-  ArrowLeftIcon,
   CheckIcon,
   Cross2Icon,
   CalendarIcon,
@@ -14,15 +17,20 @@ import {
   ListBulletIcon,
   MagnifyingGlassIcon,
   ReloadIcon,
-  DownloadIcon,
-  InfoCircledIcon,
   Pencil1Icon,
   TrashIcon,
   ArchiveIcon,
-  ExclamationTriangleIcon,
-  ChevronLeftIcon,
 } from "@radix-ui/react-icons";
 import { toast } from "react-hot-toast";
+
+interface OrganizerInfo {
+  userId: string;
+  roleName?: string;
+  positionName?: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+}
 
 interface EventType {
   id: string;
@@ -36,17 +44,8 @@ interface EventType {
   purpose?: string;
   createdBy?: string;
   createdAt?: string;
-  organizers?: { userId: string; fullName?: string; lastName?: string; firstName?: string; roleName?: string; positionName?: string; [key: string]: any }[];
-  participants?: {
-    userId: string;
-    roleId?: string;
-    roleName?: string;
-    positionName?: string;
-    fullName?: string;
-    lastName?: string;
-    firstName?: string;
-    [key: string]: any;
-  }[];
+  organizers?: OrganizerInfo[];
+  participants?: any[];
   attendees?: any[];
   permissions?: string[];
   deleted?: boolean;
@@ -61,6 +60,10 @@ interface EventType {
   avatarUrl?: string | null;
   qrCodeUrl?: string | null;
   progressStatus?: string;
+  title?: string;
+  date?: string;
+  maxAttendees?: number | null;
+  currentAttendeesCount?: number;
 }
 
 const getWeekRange = (
@@ -110,30 +113,27 @@ interface MyCreatedEventsTabProps {
   deletingEventId: string | null;
   isExporting: boolean;
   handleRefresh: () => Promise<void>;
+  fetchOrganizerDetailsById: (userId: string) => Promise<OrganizerInfo | null>;
 }
 
 const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   user,
-  currentUserId,
-  myEvents,
-  deletedEvents,
+  myEvents: initialMyEvents,
+  deletedEvents: initialDeletedEvents,
   myLoading,
   deletedLoading,
   myError,
   deletedError,
-  fetchMyEvents,
-  fetchDeletedEvents,
-  viewingEventDetails,
   setViewingEventDetails,
   onOpenUpdateModal,
   onDeleteClick,
   onRestoreClick,
-  onExportClick,
   isRefreshing,
   restoringEventId,
   deletingEventId,
   isExporting,
   handleRefresh,
+  fetchOrganizerDetailsById,
 }) => {
   const [myTab, setMyTab] = useState<
     "approved" | "pending" | "rejected" | "deleted"
@@ -145,7 +145,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   >("all");
   const [myStartDateFilter, setMyStartDateFilter] = useState<string>("");
   const [myEndDateFilter, setMyEndDateFilter] = useState<string>("");
-  const [myViewMode, setMyViewMode] = useState<"card" | "list">("card");
+  const [myViewMode, setMyViewMode] = useState<"card" | "list">("list"); // Default to list
 
   const [deletedSearchTerm, setDeletedSearchTerm] = useState("");
   const [deletedSortOrder, setDeletedSortOrder] = useState<"az" | "za">("az");
@@ -156,11 +156,81 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
     useState<string>("");
   const [deletedEndDateFilter, setDeletedEndDateFilter] = useState<string>("");
   const [deletedViewMode, setDeletedViewMode] = useState<"card" | "list">(
-    "card"
+    "list" // Default to list
   );
 
+  const [enrichedMyEvents, setEnrichedMyEvents] =
+    useState<EventType[]>(initialMyEvents);
+  const [enrichedDeletedEvents, setEnrichedDeletedEvents] =
+    useState<EventType[]>(initialDeletedEvents);
+  const organizerDetailsCacheRef = useRef<Record<string, OrganizerInfo>>({});
+  const [isEnrichingEvents, setIsEnrichingEvents] = useState(false);
+
+  const enrichEventsWithFullNames = useCallback(
+    async (events: EventType[]): Promise<EventType[]> => {
+      const eventsToUpdate = events.map(async (event) => {
+        let needsOrganizerUpdate = false;
+        const newOrganizers = event.organizers ? [...event.organizers] : [];
+
+        if (event.organizers) {
+          for (let i = 0; i < newOrganizers.length; i++) {
+            let org = newOrganizers[i];
+            if (
+              (!org.firstName || !org.lastName) &&
+              !org.fullName &&
+              org.userId
+            ) {
+              if (organizerDetailsCacheRef.current[org.userId]) {
+                org = {
+                  ...org,
+                  ...organizerDetailsCacheRef.current[org.userId],
+                };
+              } else {
+                const details = await fetchOrganizerDetailsById(org.userId);
+                if (details) {
+                  organizerDetailsCacheRef.current[org.userId] = details;
+                  org = { ...org, ...details };
+                }
+              }
+              newOrganizers[i] = org;
+              needsOrganizerUpdate = true;
+            }
+          }
+        }
+        if (needsOrganizerUpdate) {
+          return { ...event, organizers: newOrganizers };
+        }
+        return event;
+      });
+      return Promise.all(eventsToUpdate);
+    },
+    [fetchOrganizerDetailsById]
+  );
+
+  useEffect(() => {
+    if (initialMyEvents.length > 0) {
+      setIsEnrichingEvents(true);
+      enrichEventsWithFullNames(initialMyEvents)
+        .then(setEnrichedMyEvents)
+        .finally(() => setIsEnrichingEvents(false));
+    } else {
+      setEnrichedMyEvents([]);
+    }
+  }, [initialMyEvents, enrichEventsWithFullNames]);
+
+  useEffect(() => {
+    if (myTab === "deleted" && initialDeletedEvents.length > 0) {
+      setIsEnrichingEvents(true);
+      enrichEventsWithFullNames(initialDeletedEvents)
+        .then(setEnrichedDeletedEvents)
+        .finally(() => setIsEnrichingEvents(false));
+    } else if (myTab !== "deleted") {
+      setEnrichedDeletedEvents([]);
+    }
+  }, [initialDeletedEvents, myTab, enrichEventsWithFullNames]);
+
   const processedMyEvents = useMemo(() => {
-    let eventsToProcess = [...myEvents];
+    let eventsToProcess = [...enrichedMyEvents];
     eventsToProcess = eventsToProcess.filter((event) => {
       const s = event.status?.toUpperCase();
       if (myTab === "approved") return s === "APPROVED";
@@ -174,7 +244,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
       const todayEnd = new Date();
       todayEnd.setHours(23, 59, 59, 999);
       eventsToProcess = eventsToProcess.filter((event) => {
-        const dateStrToUse = event.time || event.createdAt;
+        const dateStrToUse = event.time || event.createdAt || event.date;
         if (!dateStrToUse) return false;
         try {
           const eventDate = new Date(dateStrToUse);
@@ -214,23 +284,23 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
       const lowerSearchTerm = mySearchTerm.trim().toLowerCase();
       eventsToProcess = eventsToProcess.filter(
         (event) =>
-          event.name.toLowerCase().includes(lowerSearchTerm) ||
+          (event.name || event.title || "")
+            .toLowerCase()
+            .includes(lowerSearchTerm) ||
           (event.location &&
             event.location.toLowerCase().includes(lowerSearchTerm))
       );
     }
-    if (mySortOrder === "za") {
-      eventsToProcess.sort((a, b) =>
-        b.name.localeCompare(a.name, "vi", { sensitivity: "base" })
-      );
-    } else {
-      eventsToProcess.sort((a, b) =>
-        a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
-      );
-    }
+    eventsToProcess.sort((a, b) => {
+      const nameA = a.name || a.title || "";
+      const nameB = b.name || b.title || "";
+      return mySortOrder === "za"
+        ? nameB.localeCompare(nameA, "vi", { sensitivity: "base" })
+        : nameA.localeCompare(nameB, "vi", { sensitivity: "base" });
+    });
     return eventsToProcess;
   }, [
-    myEvents,
+    enrichedMyEvents,
     myTab,
     myTimeFilterOption,
     myStartDateFilter,
@@ -241,14 +311,15 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
 
   const processedDeletedEvents = useMemo(() => {
     if (myTab !== "deleted") return [];
-    let eventsToProcess = [...deletedEvents];
+    let eventsToProcess = [...enrichedDeletedEvents];
     if (deletedTimeFilterOption !== "all") {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date();
       todayEnd.setHours(23, 59, 59, 999);
       eventsToProcess = eventsToProcess.filter((event) => {
-        const dateStrToUse = event.deletedAt || event.time || event.createdAt;
+        const dateStrToUse =
+          event.deletedAt || event.time || event.createdAt || event.date;
         if (!dateStrToUse) return false;
         try {
           const eventDate = new Date(dateStrToUse);
@@ -289,25 +360,25 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
       const lowerSearchTerm = deletedSearchTerm.trim().toLowerCase();
       eventsToProcess = eventsToProcess.filter(
         (event) =>
-          event.name.toLowerCase().includes(lowerSearchTerm) ||
+          (event.name || event.title || "")
+            .toLowerCase()
+            .includes(lowerSearchTerm) ||
           (event.location &&
             event.location.toLowerCase().includes(lowerSearchTerm)) ||
           (event.deletedBy?.username &&
             event.deletedBy.username.toLowerCase().includes(lowerSearchTerm))
       );
     }
-    if (deletedSortOrder === "za") {
-      eventsToProcess.sort((a, b) =>
-        b.name.localeCompare(a.name, "vi", { sensitivity: "base" })
-      );
-    } else {
-      eventsToProcess.sort((a, b) =>
-        a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
-      );
-    }
+    eventsToProcess.sort((a, b) => {
+      const nameA = a.name || a.title || "";
+      const nameB = b.name || b.title || "";
+      return deletedSortOrder === "za"
+        ? nameB.localeCompare(nameA, "vi", { sensitivity: "base" })
+        : nameA.localeCompare(nameB, "vi", { sensitivity: "base" });
+    });
     return eventsToProcess;
   }, [
-    deletedEvents,
+    enrichedDeletedEvents,
     myTab,
     deletedTimeFilterOption,
     deletedStartDateFilter,
@@ -350,28 +421,32 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   };
 
   const renderMyEventsSection = () => {
-    const isLoading = myTab === "deleted" ? deletedLoading : myLoading;
+    const isLoadingPrimary = myTab === "deleted" ? deletedLoading : myLoading;
+    const isLoading = isLoadingPrimary || isEnrichingEvents;
     const error = myTab === "deleted" ? deletedError : myError;
     const events =
       myTab === "deleted" ? processedDeletedEvents : processedMyEvents;
     const viewMode = myTab === "deleted" ? deletedViewMode : myViewMode;
-    const currentTab = myTab;
+    const currentTabType = myTab;
+
     const noResultMessage =
       (myTab !== "deleted" && (mySearchTerm || myTimeFilterOption !== "all")) ||
       (myTab === "deleted" &&
         (deletedSearchTerm || deletedTimeFilterOption !== "all"))
         ? "Không tìm thấy sự kiện nào khớp."
-        : currentTab === "approved"
+        : currentTabType === "approved"
         ? "Không có sự kiện nào đã được duyệt."
-        : currentTab === "pending"
+        : currentTabType === "pending"
         ? "Không có sự kiện nào đang chờ duyệt."
-        : currentTab === "rejected"
+        : currentTabType === "rejected"
         ? "Không có sự kiện nào bị từ chối."
         : "Không có sự kiện nào đã bị xóa.";
 
     if (isLoading)
       return (
-        <p className="text-gray-500 italic text-center py-4">Đang tải...</p>
+        <p className="text-gray-500 italic text-center py-4">
+          Đang tải và xử lý danh sách sự kiện...
+        </p>
       );
     if (error)
       return (
@@ -387,6 +462,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
             const isRestoringThis = restoringEventId === event.id;
             const isDeletingThis = deletingEventId === event.id;
             const isProcessing = isRestoringThis || isDeletingThis;
+            const eventName = event.name || event.title;
             return (
               <div
                 key={event.id}
@@ -396,14 +472,16 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                     ? "opacity-50 cursor-wait"
                     : "hover:shadow-md cursor-pointer"
                 } ${
-                  currentTab === "deleted" ? "border-l-4 border-gray-300" : ""
+                  currentTabType === "deleted"
+                    ? "border-l-4 border-gray-300"
+                    : ""
                 }`}
               >
                 {event.avatarUrl ? (
                   <div className="w-full h-36 bg-gray-200 relative">
                     <Image
                       src={event.avatarUrl}
-                      alt={`Avatar for ${event.name}`}
+                      alt={`Avatar for ${eventName}`}
                       layout="fill"
                       objectFit="cover"
                       className="transition-opacity duration-300 ease-in-out opacity-0"
@@ -420,70 +498,67 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   </div>
                 ) : (
                   <div className="w-full h-36 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
-                    {event.name?.charAt(0).toUpperCase() || "?"}
+                    {eventName?.charAt(0).toUpperCase() || "?"}
                   </div>
                 )}
                 <div className="p-3 flex flex-col flex-grow justify-between">
                   <div>
                     <h3 className="font-semibold text-sm md:text-base text-gray-800 line-clamp-2 mb-1">
-                      {" "}
-                      {event.name}{" "}
+                      {eventName}
                     </h3>
-                    {(event.time || event.createdAt) && !event.deletedAt && (
-                      <p className="text-xs text-gray-500 mb-0.5 flex items-center gap-1">
-                        {" "}
-                        <CalendarIcon className="w-3 h-3 opacity-70" />{" "}
-                        {event.time
-                          ? new Date(event.time).toLocaleString("vi-VN", {
-                              dateStyle: "short",
-                              timeStyle: "short",
-                            })
-                          : `(Tạo) ${new Date(event.createdAt!).toLocaleString(
-                              "vi-VN",
-                              { dateStyle: "short", timeStyle: "short" }
-                            )}`}{" "}
-                      </p>
-                    )}
+                    {(event.time || event.createdAt || event.date) &&
+                      !event.deletedAt && (
+                        <p className="text-xs text-gray-500 mb-0.5 flex items-center gap-1">
+                          <CalendarIcon className="w-3 h-3 opacity-70" />
+                          {event.time
+                            ? new Date(event.time).toLocaleString("vi-VN", {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })
+                            : `(Tạo) ${new Date(
+                                event.createdAt || event.date!
+                              ).toLocaleString("vi-VN", {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })}`}
+                        </p>
+                      )}
                     {event.deletedAt && (
                       <p className="text-xs text-gray-500 mb-0.5 flex items-center gap-1">
-                        {" "}
                         <TrashIcon className="w-3 h-3 opacity-70" /> Xóa lúc:{" "}
                         {new Date(event.deletedAt).toLocaleString("vi-VN", {
                           dateStyle: "short",
                           timeStyle: "short",
-                        })}{" "}
+                        })}
                       </p>
                     )}
                     {event.location && (
                       <p className="text-xs text-gray-500 flex items-center gap-1">
-                        {" "}
-                        <span className="opacity-70">📍</span> {event.location}{" "}
+                        <span className="opacity-70">📍</span> {event.location}
                       </p>
                     )}
                   </div>
-                  {currentTab === "rejected" && event.rejectionReason && (
+                  {currentTabType === "rejected" && event.rejectionReason && (
                     <p className="text-xs text-red-500 mt-2 pt-1 border-t border-dashed border-red-100 truncate">
-                      {" "}
                       <span className="font-medium">Lý do:</span>{" "}
-                      {event.rejectionReason}{" "}
+                      {event.rejectionReason}
                     </p>
                   )}
-                  {currentTab === "deleted" && event.deletedBy && (
+                  {currentTabType === "deleted" && event.deletedBy && (
                     <div className="text-xs text-gray-500 mt-2 pt-1 border-t border-dashed border-gray-200 flex items-center gap-1.5">
-                      {" "}
-                      <span className="font-medium">Bởi:</span>{" "}
+                      <span className="font-medium">Bởi:</span>
                       {event.deletedBy.avatar && (
                         <img
                           src={event.deletedBy.avatar}
                           alt="Avatar"
                           className="w-4 h-4 rounded-full"
                         />
-                      )}{" "}
-                      <span>{event.deletedBy.username}</span>{" "}
+                      )}
+                      <span>{event.deletedBy.username}</span>
                     </div>
                   )}
                   <div className="mt-3 pt-2 border-t border-gray-100 flex gap-2 justify-end items-center">
-                    {currentTab !== "deleted" && (
+                    {currentTabType !== "deleted" && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -497,11 +572,10 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                             : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
                         }`}
                       >
-                        {" "}
-                        <Pencil1Icon className="w-3 h-3" />{" "}
+                        <Pencil1Icon className="w-3 h-3" />
                       </button>
                     )}
-                    {currentTab !== "deleted" && (
+                    {currentTabType !== "deleted" && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -515,15 +589,14 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                             : "bg-red-100 text-red-700 hover:bg-red-200"
                         }`}
                       >
-                        {" "}
                         {isDeletingThis ? (
                           <ReloadIcon className="w-3 h-3 animate-spin" />
                         ) : (
                           <TrashIcon className="w-3 h-3" />
-                        )}{" "}
+                        )}
                       </button>
                     )}
-                    {currentTab === "deleted" && (
+                    {currentTabType === "deleted" && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -537,16 +610,14 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                             : "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
                         }`}
                       >
-                        {" "}
                         {isRestoringThis ? (
                           <ReloadIcon className="w-3 h-3 animate-spin" />
                         ) : (
                           <ArchiveIcon className="w-3 h-3" />
-                        )}{" "}
+                        )}
                         <span className="hidden sm:inline">
-                          {" "}
-                          {isRestoringThis ? "..." : "Khôi phục"}{" "}
-                        </span>{" "}
+                          {isRestoringThis ? "..." : "Khôi phục"}
+                        </span>
                       </button>
                     )}
                   </div>
@@ -556,108 +627,103 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
           })}
         </div>
       ) : (
-        <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
-          <ul className="divide-y divide-gray-200">
-            {events.map((event) => {
-              const isRestoringThis = restoringEventId === event.id;
-              const isDeletingThis = deletingEventId === event.id;
-              const isProcessing = isRestoringThis || isDeletingThis;
-              return (
-                <li
-                  key={event.id}
-                  onClick={() => !isProcessing && setViewingEventDetails(event)}
-                  className={`px-3 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors duration-150 ease-in-out ${
-                    isProcessing
-                      ? "opacity-50 cursor-wait bg-gray-50"
-                      : "hover:bg-gray-50 cursor-pointer"
-                  } ${
-                    currentTab === "deleted"
-                      ? "border-l-4 border-gray-300 hover:bg-gray-100"
-                      : ""
-                  }`}
-                >
-                  <div className="flex items-center flex-1 min-w-0 mb-2 sm:mb-0 sm:pr-4">
-                    {event.avatarUrl ? (
-                      <Image
-                        src={event.avatarUrl}
-                        alt={`Avatar`}
-                        width={40}
-                        height={40}
-                        className="w-10 h-10 rounded-md object-cover mr-3 flex-shrink-0 border bg-gray-100"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-md bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 font-semibold mr-3 flex-shrink-0 border">
-                        {" "}
-                        {event.name?.charAt(0).toUpperCase() || "?"}{" "}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1">
-                        {" "}
-                        {event.name}{" "}
-                      </p>
-                      <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                        {!event.deletedAt &&
-                          (event.time || event.createdAt) && (
-                            <span className="inline-flex items-center gap-1">
-                              {" "}
-                              <CalendarIcon className="h-3.5 w-3.5 text-gray-400" />{" "}
-                              {event.time
-                                ? new Date(event.time).toLocaleString("vi-VN", {
-                                    dateStyle: "short",
-                                    timeStyle: "short",
-                                  })
-                                : `(Tạo) ${new Date(
-                                    event.createdAt!
-                                  ).toLocaleString("vi-VN", {
-                                    dateStyle: "short",
-                                    timeStyle: "short",
-                                  })}`}{" "}
-                            </span>
+        <ul className="space-y-3">
+          {events.map((event) => {
+            const isRestoringThis = restoringEventId === event.id;
+            const isDeletingThis = deletingEventId === event.id;
+            const isProcessing = isRestoringThis || isDeletingThis;
+            const eventName = event.name || event.title;
+            return (
+              <li
+                key={event.id}
+                className={`bg-white shadow-lg rounded-xl overflow-hidden transition transform hover:scale-[1.01] hover:shadow-xl flex flex-col md:flex-row border border-gray-200 ${
+                  isProcessing
+                    ? "opacity-50 cursor-wait"
+                    : "hover:border-blue-400 cursor-pointer"
+                } ${
+                  currentTabType === "deleted"
+                    ? "border-l-[5px] border-gray-400" 
+                    : ""
+                }`}
+                onClick={() => !isProcessing && setViewingEventDetails(event)}
+              >
+                <div className="relative w-full md:w-48 xl:w-56 flex-shrink-0 h-48 md:h-auto">
+                  {event.avatarUrl ? (
+                    <Image
+                      src={event.avatarUrl}
+                      alt={`${eventName}`}
+                      layout="fill"
+                      objectFit="cover"
+                      className="bg-gray-100"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-3xl font-semibold">
+                      {eventName?.charAt(0).toUpperCase() || "?"}
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 flex flex-col justify-between flex-grow md:pl-4">
+                  <div className="cursor-pointer" onClick={(e) => { e.stopPropagation(); !isProcessing && setViewingEventDetails(event)}}>
+                    <h3 className="font-semibold text-base text-gray-800 mb-1 line-clamp-1 hover:text-blue-600">
+                      {eventName}
+                    </h3>
+                    <div className="text-xs text-gray-500 space-y-0.5">
+                      {(event.time || event.createdAt || event.date) &&
+                        !event.deletedAt && (
+                          <p className="flex items-center gap-1">
+                            <CalendarIcon className="w-3 h-3 opacity-70" />
+                            {event.time
+                              ? new Date(event.time).toLocaleString("vi-VN", {
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                })
+                              : `(Tạo) ${new Date(
+                                  event.createdAt || event.date!
+                                ).toLocaleString("vi-VN", {
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                })}`}
+                          </p>
+                        )}
+                      {event.deletedAt && (
+                        <p className="flex items-center gap-1">
+                          <TrashIcon className="w-3 h-3 opacity-70" /> Xóa lúc:{" "}
+                          {new Date(event.deletedAt).toLocaleString("vi-VN", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })}
+                        </p>
+                      )}
+                       {event.location && (
+                        <p className="flex items-center gap-1">
+                          <span className="opacity-70">📍</span>
+                          {event.location}
+                        </p>
+                      )}
+                       {currentTabType === "rejected" && event.rejectionReason && (
+                        <p className="text-red-500 truncate">
+                          <span className="font-medium">Lý do từ chối:</span> {event.rejectionReason}
+                        </p>
+                      )}
+                       {currentTabType === "deleted" && event.deletedBy && (
+                        <p className="flex items-center gap-1.5">
+                          <span className="font-medium">Bởi:</span>
+                          {event.deletedBy.avatar && (
+                            <Image
+                              src={event.deletedBy.avatar}
+                              alt={event.deletedBy.username}
+                              width={16}
+                              height={16}
+                              className="w-4 h-4 rounded-full"
+                            />
                           )}
-                        {event.deletedAt && (
-                          <span className="inline-flex items-center gap-1 text-gray-500">
-                            {" "}
-                            <TrashIcon className="h-3.5 w-3.5" /> Xóa lúc:{" "}
-                            {new Date(event.deletedAt).toLocaleString("vi-VN", {
-                              dateStyle: "short",
-                              timeStyle: "short",
-                            })}{" "}
-                          </span>
-                        )}
-                        {event.location && (
-                          <span className="inline-flex items-center gap-1">
-                            {" "}
-                            <span className="opacity-70">📍</span>{" "}
-                            {event.location}{" "}
-                          </span>
-                        )}
-                        {currentTab === "deleted" && event.deletedBy && (
-                          <span className="inline-flex items-center gap-1">
-                            {" "}
-                            <span className="font-medium">Bởi:</span>{" "}
-                            {event.deletedBy.avatar && (
-                              <img
-                                src={event.deletedBy.avatar}
-                                alt="Avatar"
-                                className="w-3.5 h-3.5 rounded-full"
-                              />
-                            )}{" "}
-                            <span>{event.deletedBy.username}</span>{" "}
-                          </span>
-                        )}
-                      </div>
-                      {currentTab === "rejected" && event.rejectionReason && (
-                        <p className="text-xs text-red-500 mt-1.5">
-                          {" "}
-                          <span className="font-medium">Lý do:</span>{" "}
-                          {event.rejectionReason}{" "}
+                          <span>{event.deletedBy.username}</span>
                         </p>
                       )}
                     </div>
                   </div>
-                  <div className="flex-shrink-0 flex gap-2 items-center self-end sm:self-center">
-                    {currentTab !== "deleted" && (
+                  <div className="mt-2 pt-2 border-t border-gray-100 flex justify-end gap-2">
+                  {currentTabType !== "deleted" && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -665,17 +731,17 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                         }}
                         disabled={isProcessing}
                         title="Chỉnh sửa"
-                        className={`p-1.5 rounded text-xs cursor-pointer font-medium flex items-center justify-center gap-1 transition ${
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 ${
                           isProcessing
-                            ? "bg-gray-200 text-gray-400 cursor-wait"
+                            ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                             : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
                         }`}
                       >
-                        {" "}
-                        <Pencil1Icon className="w-3 h-3" />{" "}
+                        <Pencil1Icon className="w-3 h-3" />
+                        <span className="hidden sm:inline">Sửa</span>
                       </button>
                     )}
-                    {currentTab !== "deleted" && (
+                    {currentTabType !== "deleted" && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -683,21 +749,23 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                         }}
                         disabled={isProcessing}
                         title="Xóa"
-                        className={`p-1.5 rounded cursor-pointer text-xs cursor-pointer font-medium flex items-center justify-center gap-1 transition ${
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 ${
                           isProcessing
-                            ? "bg-gray-200 text-gray-400 cursor-wait"
+                            ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                             : "bg-red-100 text-red-700 hover:bg-red-200"
                         }`}
                       >
-                        {" "}
                         {isDeletingThis ? (
                           <ReloadIcon className="w-3 h-3 animate-spin" />
                         ) : (
                           <TrashIcon className="w-3 h-3" />
-                        )}{" "}
+                        )}
+                         <span className="hidden sm:inline">
+                           {isDeletingThis ? "Đang xóa..." : "Xóa"}
+                         </span>
                       </button>
                     )}
-                    {currentTab === "deleted" && (
+                    {currentTabType === "deleted" && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -705,33 +773,33 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                         }}
                         disabled={isProcessing}
                         title="Khôi phục"
-                        className={`px-2.5 py-1 cursor-pointer rounded text-xs font-medium flex items-center justify-center gap-1 transition ${
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 ${
                           isProcessing
-                            ? "bg-yellow-200 text-yellow-700 cursor-wait"
+                            ? "bg-gray-200 text-gray-400 cursor-not-allowed"
                             : "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
                         }`}
                       >
-                        {" "}
                         {isRestoringThis ? (
                           <ReloadIcon className="w-3 h-3 animate-spin" />
                         ) : (
                           <ArchiveIcon className="w-3 h-3" />
-                        )}{" "}
-                        {isRestoringThis ? "..." : "Khôi phục"}{" "}
+                        )}
+                         <span className="hidden sm:inline">
+                          {isRestoringThis ? "Đang..." : "Khôi phục"}
+                         </span>
                       </button>
                     )}
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )
     ) : (
       <p className="text-gray-500 italic text-center py-6">{noResultMessage}</p>
     );
   };
-
 
   return (
     <>
@@ -747,12 +815,13 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
             deletedLoading ||
             !!restoringEventId ||
             !!deletingEventId ||
-            isExporting
+            isExporting ||
+            isEnrichingEvents
           }
           className="p-1.5 sm:p-2 cursor-pointer border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
           title="Làm mới danh sách"
         >
-          {isRefreshing ? (
+          {isRefreshing || isEnrichingEvents ? (
             <ReloadIcon className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-blue-600" />
           ) : (
             <ReloadIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
@@ -768,13 +837,13 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
               : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"
           }`}
         >
-          {" "}
           <CheckIcon /> Đã duyệt (
           {
-            myEvents.filter((e) => e.status?.toUpperCase() === "APPROVED")
-              .length
+            initialMyEvents.filter(
+              (e) => e.status?.toUpperCase() === "APPROVED"
+            ).length
           }
-          ){" "}
+          )
         </button>
         <button
           onClick={() => setMyTab("pending")}
@@ -784,13 +853,12 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
               : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"
           }`}
         >
-          {" "}
           <ReloadIcon /> Chờ duyệt (
           {
-            myEvents.filter((e) => e.status?.toUpperCase() === "PENDING")
+            initialMyEvents.filter((e) => e.status?.toUpperCase() === "PENDING")
               .length
           }
-          ){" "}
+          )
         </button>
         <button
           onClick={() => setMyTab("rejected")}
@@ -800,13 +868,13 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
               : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"
           }`}
         >
-          {" "}
           <Cross2Icon /> Từ chối (
           {
-            myEvents.filter((e) => e.status?.toUpperCase() === "REJECTED")
-              .length
+            initialMyEvents.filter(
+              (e) => e.status?.toUpperCase() === "REJECTED"
+            ).length
           }
-          ){" "}
+          )
         </button>
         <button
           onClick={() => setMyTab("deleted")}
@@ -816,26 +884,22 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
               : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"
           }`}
         >
-          {" "}
-          <TrashIcon /> Đã xóa ({deletedEvents.length}){" "}
+          <TrashIcon /> Đã xóa ({initialDeletedEvents.length})
         </button>
       </div>
       {myTab !== "deleted" && (
         <div className="mb-5 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
             <div className="relative lg:col-span-1 xl:col-span-1">
-              {" "}
               <label
                 htmlFor="searchMyEvents"
                 className="block text-xs font-medium text-gray-600 mb-1"
               >
-                {" "}
-                Tìm kiếm{" "}
-              </label>{" "}
+                Tìm kiếm
+              </label>
               <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                {" "}
-                <MagnifyingGlassIcon />{" "}
-              </span>{" "}
+                <MagnifyingGlassIcon />
+              </span>
               <input
                 type="text"
                 id="searchMyEvents"
@@ -843,23 +907,19 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                 value={mySearchTerm}
                 onChange={(e) => setMySearchTerm(e.target.value)}
                 className="w-full p-2 pl-10 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-              />{" "}
+              />
             </div>
             <div>
-              {" "}
               <label
                 htmlFor="sortMyEvents"
                 className="block text-xs font-medium text-gray-600 mb-1"
               >
-                {" "}
-                Sắp xếp{" "}
-              </label>{" "}
+                Sắp xếp
+              </label>
               <select
                 id="sortMyEvents"
                 value={mySortOrder}
-                onChange={(e) =>
-                  setMySortOrder(e.target.value as "az" | "za")
-                }
+                onChange={(e) => setMySortOrder(e.target.value as "az" | "za")}
                 className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
                 style={{
                   backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
@@ -868,26 +928,21 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   backgroundSize: "1.5em 1.5em",
                 }}
               >
-                {" "}
-                <option value="az"> A - Z</option>{" "}
-                <option value="za"> Z - A</option>{" "}
-              </select>{" "}
+                <option value="az"> A - Z</option>
+                <option value="za"> Z - A</option>
+              </select>
             </div>
             <div>
-              {" "}
               <label
                 htmlFor="timeFilterMyEvents"
                 className="block text-xs font-medium text-gray-600 mb-1"
               >
-                {" "}
-                Lọc thời gian{" "}
-              </label>{" "}
+                Lọc thời gian
+              </label>
               <select
                 id="timeFilterMyEvents"
                 value={myTimeFilterOption}
-                onChange={(e) =>
-                  setMyTimeFilterOption(e.target.value as any)
-                }
+                onChange={(e) => setMyTimeFilterOption(e.target.value as any)}
                 className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
                 style={{
                   backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
@@ -896,18 +951,15 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   backgroundSize: "1.5em 1.5em",
                 }}
               >
-                {" "}
-                <option value="all">Tất cả</option>{" "}
-                <option value="today">Hôm nay</option>{" "}
-                <option value="thisWeek">Tuần này</option>{" "}
-                <option value="thisMonth">Tháng này</option>{" "}
-                <option value="dateRange">Khoảng ngày</option>{" "}
-              </select>{" "}
+                <option value="all">Tất cả</option>
+                <option value="today">Hôm nay</option>
+                <option value="thisWeek">Tuần này</option>
+                <option value="thisMonth">Tháng này</option>
+                <option value="dateRange">Khoảng ngày</option>
+              </select>
             </div>
             <div className="flex items-end justify-start md:justify-end gap-2 lg:col-start-auto xl:col-start-4">
-              {" "}
               <div className="flex w-full md:w-auto">
-                {" "}
                 <button
                   onClick={() => setMyViewMode("card")}
                   title="Chế độ thẻ"
@@ -917,9 +969,8 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                       : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                   }`}
                 >
-                  {" "}
-                  <Component1Icon className="h-5 w-5" />{" "}
-                </button>{" "}
+                  <Component1Icon className="h-5 w-5" />
+                </button>
                 <button
                   onClick={() => setMyViewMode("list")}
                   title="Chế độ danh sách"
@@ -929,23 +980,20 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                       : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                   }`}
                 >
-                  {" "}
-                  <ListBulletIcon className="h-5 w-5" />{" "}
-                </button>{" "}
-              </div>{" "}
+                  <ListBulletIcon className="h-5 w-5" />
+                </button>
+              </div>
             </div>
           </div>
           {myTimeFilterOption === "dateRange" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
               <div>
-                {" "}
                 <label
                   htmlFor="startDateFilterMyEvents"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
-                  <span className="inline-block mr-1">🗓️</span> Từ ngày{" "}
-                </label>{" "}
+                  <span className="inline-block mr-1">🗓️</span> Từ ngày
+                </label>
                 <input
                   type="date"
                   id="startDateFilterMyEvents"
@@ -954,17 +1002,15 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   max={myEndDateFilter || undefined}
                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm bg-white"
                   aria-label="Ngày bắt đầu lọc"
-                />{" "}
+                />
               </div>
               <div>
-                {" "}
                 <label
                   htmlFor="endDateFilterMyEvents"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
-                  <span className="inline-block mr-1">🗓️</span> Đến ngày{" "}
-                </label>{" "}
+                  <span className="inline-block mr-1">🗓️</span> Đến ngày
+                </label>
                 <input
                   type="date"
                   id="endDateFilterMyEvents"
@@ -973,7 +1019,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   min={myStartDateFilter || undefined}
                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm bg-white"
                   aria-label="Ngày kết thúc lọc"
-                />{" "}
+                />
               </div>
             </div>
           )}
@@ -983,18 +1029,15 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
         <div className="mb-5 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
             <div className="relative lg:col-span-1 xl:col-span-1">
-              {" "}
               <label
                 htmlFor="searchDeletedEvents"
                 className="block text-xs font-medium text-gray-600 mb-1"
               >
-                {" "}
-                Tìm kiếm (Đã xóa){" "}
-              </label>{" "}
+                Tìm kiếm (Đã xóa)
+              </label>
               <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                {" "}
-                <MagnifyingGlassIcon />{" "}
-              </span>{" "}
+                <MagnifyingGlassIcon />
+              </span>
               <input
                 type="text"
                 id="searchDeletedEvents"
@@ -1002,17 +1045,15 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                 value={deletedSearchTerm}
                 onChange={(e) => setDeletedSearchTerm(e.target.value)}
                 className="w-full p-2 pl-10 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-gray-500 focus:border-gray-500 shadow-sm"
-              />{" "}
+              />
             </div>
             <div>
-              {" "}
               <label
                 htmlFor="sortDeletedEvents"
                 className="block text-xs font-medium text-gray-600 mb-1"
               >
-                {" "}
-                Sắp xếp{" "}
-              </label>{" "}
+                Sắp xếp
+              </label>
               <select
                 id="sortDeletedEvents"
                 value={deletedSortOrder}
@@ -1027,20 +1068,17 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   backgroundSize: "1.5em 1.5em",
                 }}
               >
-                {" "}
-                <option value="az"> A - Z</option>{" "}
-                <option value="za"> Z - A</option>{" "}
-              </select>{" "}
+                <option value="az"> A - Z</option>
+                <option value="za"> Z - A</option>
+              </select>
             </div>
             <div>
-              {" "}
               <label
                 htmlFor="timeFilterDeletedEvents"
                 className="block text-xs font-medium text-gray-600 mb-1"
               >
-                {" "}
-                Lọc thời gian xóa{" "}
-              </label>{" "}
+                Lọc thời gian xóa
+              </label>
               <select
                 id="timeFilterDeletedEvents"
                 value={deletedTimeFilterOption}
@@ -1055,18 +1093,15 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   backgroundSize: "1.5em 1.5em",
                 }}
               >
-                {" "}
-                <option value="all">Tất cả</option>{" "}
-                <option value="today">Hôm nay</option>{" "}
-                <option value="thisWeek">Tuần này</option>{" "}
-                <option value="thisMonth">Tháng này</option>{" "}
-                <option value="dateRange">Khoảng ngày</option>{" "}
-              </select>{" "}
+                <option value="all">Tất cả</option>
+                <option value="today">Hôm nay</option>
+                <option value="thisWeek">Tuần này</option>
+                <option value="thisMonth">Tháng này</option>
+                <option value="dateRange">Khoảng ngày</option>
+              </select>
             </div>
             <div className="flex items-end justify-start md:justify-end gap-2 lg:col-start-auto xl:col-start-4">
-              {" "}
               <div className="flex w-full md:w-auto">
-                {" "}
                 <button
                   onClick={() => setDeletedViewMode("card")}
                   title="Chế độ thẻ"
@@ -1076,9 +1111,8 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                       : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                   }`}
                 >
-                  {" "}
-                  <Component1Icon className="h-5 w-5" />{" "}
-                </button>{" "}
+                  <Component1Icon className="h-5 w-5" />
+                </button>
                 <button
                   onClick={() => setDeletedViewMode("list")}
                   title="Chế độ danh sách"
@@ -1088,24 +1122,20 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                       : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                   }`}
                 >
-                  {" "}
-                  <ListBulletIcon className="h-5 w-5" />{" "}
-                </button>{" "}
-              </div>{" "}
+                  <ListBulletIcon className="h-5 w-5" />
+                </button>
+              </div>
             </div>
           </div>
           {deletedTimeFilterOption === "dateRange" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 p-3 bg-gray-100 rounded-lg border border-gray-200 shadow-sm">
               <div>
-                {" "}
                 <label
                   htmlFor="startDateFilterDeleted"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
-                  <span className="inline-block mr-1">🗓️</span> Từ ngày
-                  xóa{" "}
-                </label>{" "}
+                  <span className="inline-block mr-1">🗓️</span> Từ ngày xóa
+                </label>
                 <input
                   type="date"
                   id="startDateFilterDeleted"
@@ -1114,18 +1144,15 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   max={deletedEndDateFilter || undefined}
                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-gray-500 focus:border-gray-500 shadow-sm bg-white"
                   aria-label="Ngày bắt đầu lọc xóa"
-                />{" "}
+                />
               </div>
               <div>
-                {" "}
                 <label
                   htmlFor="endDateFilterDeleted"
                   className="block text-sm font-medium text-gray-700 mb-1"
                 >
-                  {" "}
-                  <span className="inline-block mr-1">🗓️</span> Đến ngày
-                  xóa{" "}
-                </label>{" "}
+                  <span className="inline-block mr-1">🗓️</span> Đến ngày xóa
+                </label>
                 <input
                   type="date"
                   id="endDateFilterDeleted"
@@ -1134,7 +1161,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   min={deletedStartDateFilter || undefined}
                   className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-gray-500 focus:border-gray-500 shadow-sm bg-white"
                   aria-label="Ngày kết thúc lọc xóa"
-                />{" "}
+                />
               </div>
             </div>
           )}

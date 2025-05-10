@@ -11,12 +11,10 @@ import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { useRouter } from "next/navigation";
 import { CiCamera } from "react-icons/ci";
 import { toast, Toaster } from "react-hot-toast";
-import { useRefreshToken } from "../../hooks/useRefreshToken"; // Đảm bảo đường dẫn này chính xác
+import { useRefreshToken } from "../../hooks/useRefreshToken";
 
-// Interfaces (Role, User, UserUpdateFormData, PasswordChangeData, ProfileErrors)
-// Giữ nguyên các interface bạn đã định nghĩa:
 interface Role {
-  name: string;
+  name?: string;
   description?: string;
   permissions?: any[];
 }
@@ -31,10 +29,9 @@ interface User {
   avatar?: string;
   email?: string;
   gender?: boolean;
-  role?: string;
   position?: {
     name?: string;
-  }
+  };
 }
 
 interface UserUpdateFormData {
@@ -47,7 +44,7 @@ interface UserUpdateFormData {
 
 interface PasswordChangeData {
   passwordOld: string;
-  passwordNew?: string; // Sửa 'password' thành 'passwordNew' để rõ ràng hơn nếu API backend cũng dùng tên này
+  passwordNew?: string;
 }
 
 type ProfileErrors = {
@@ -65,23 +62,16 @@ const capitalizeEachWord = (str: string = ""): string => {
     .join(" ");
 };
 
-
 interface UserMenuProps {
   user: User | null;
-  onLogout: () => void; 
+  onLogout: () => void;
 }
 
-
 export default function UserMenu({ user, onLogout }: UserMenuProps) {
-  const [isOpen, setIsOpen] = useState(false); 
+  const [isOpen, setIsOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  
-  // `user` giờ là prop, không cần state nội bộ `user` và `setUser` nữa
-  // const [user, setUser] = useState<User | null>(null); // XÓA DÒNG NÀY
-
-  const [updatedUser, setUpdatedUser] = useState<User | null>(null); 
-
+  const [updatedUser, setUpdatedUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -102,17 +92,9 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { refreshToken } = useRefreshToken();
 
-  // XÓA: fetchUserInfo và useEffect liên quan vì `user` giờ là prop
-  // const fetchUserInfo = useCallback(async (showToast = false) => { ... }, []);
-  // useEffect(() => { fetchUserInfo(); }, [fetchUserInfo]);
-
-  // XÓA: handleLogout nội bộ, vì `onLogout` giờ là prop
-  // const handleLogout = useCallback(async () => { ... }, [router]);
-
-  // Cập nhật `updatedUser` khi modal profile được mở hoặc khi prop `user` thay đổi
   useEffect(() => {
     if (showProfile && user) {
-      setUpdatedUser(user); 
+      setUpdatedUser(user);
     }
   }, [showProfile, user]);
 
@@ -173,7 +155,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
       return;
     }
     setIsSavingProfile(true);
-    let token = localStorage.getItem("authToken"); 
+    let token = localStorage.getItem("authToken");
 
     const bodyToSend: UserUpdateFormData = {
       firstName: updatedUser.firstName,
@@ -182,20 +164,19 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
       gender: updatedUser.gender,
       email: updatedUser.email,
     };
-    // Loại bỏ các trường undefined/null
     Object.keys(bodyToSend).forEach(
       (key) =>
         (bodyToSend[key as keyof UserUpdateFormData] === undefined ||
           bodyToSend[key as keyof UserUpdateFormData] === null) &&
         delete bodyToSend[key as keyof UserUpdateFormData]
     );
-    
+
     try {
       let headers: HeadersInit = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       let response = await fetch(
-        `http://localhost:8080/identity/users/byuser/${user.id}`, // Sử dụng user.id từ prop
+        `http://localhost:8080/identity/users/byuser/${user.id}`,
         { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
       );
 
@@ -217,20 +198,15 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
       const data = await response.json();
       if (response.ok && data.code === 1000) {
         toast.success("Cập nhật thông tin thành công!");
-        // UserHome sẽ chịu trách nhiệm cập nhật state user chính.
-        // Nếu cần, UserHome có thể fetch lại user info hoặc nhận data.result từ một callback.
-        localStorage.setItem("user", JSON.stringify(data.result)); // Cập nhật localStorage
-        setUpdatedUser(data.result); // Cập nhật state cho modal
+        localStorage.setItem("user", JSON.stringify(data.result));
+        setUpdatedUser(data.result);
         setIsEditing(false);
-    
       } else {
         throw new Error(data.message || "Cập nhật thất bại");
       }
     } catch (error: any) {
       console.error("Lỗi cập nhật profile:", error);
       toast.error(`Lỗi: ${error.message}`);
-      // Cân nhắc reset updatedUser về lại user từ prop nếu có lỗi
-      // setUpdatedUser(user); 
     } finally {
       setIsSavingProfile(false);
     }
@@ -247,7 +223,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
   };
 
   const handlePasswordChangeSubmit = async () => {
-    if (!user?.id) return; // Sử dụng user.id từ prop
+    if (!user?.id) return;
     setChangePasswordError("");
     if (passwordFormData.newPassword !== passwordFormData.confirmPassword) {
       setChangePasswordError("Mật khẩu mới không khớp.");
@@ -262,15 +238,15 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
 
     const bodyToSend: PasswordChangeData = {
       passwordOld: passwordFormData.currentPassword,
-      passwordNew: passwordFormData.newPassword, // Đổi tên field để rõ ràng hơn
+      passwordNew: passwordFormData.newPassword,
     };
-    
+
     try {
       let headers: HeadersInit = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       let response = await fetch(
-        `http://localhost:8080/identity/users/byuser/${user.id}`, // Sử dụng user.id từ prop
+        `http://localhost:8080/identity/users/byuser/${user.id}`,
         { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
       );
 
@@ -288,7 +264,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
           throw new Error("Phiên làm mới token thất bại.");
         }
       }
-      
+
       const data = await response.json();
       if (response.ok && data.code === 1000) {
         toast.success("Đổi mật khẩu thành công!");
@@ -311,7 +287,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
   };
 
   const uploadAvatar = async (file: File) => {
-    if (!user?.id) return; // Sử dụng user.id từ prop
+    if (!user?.id) return;
     setIsUploadingAvatar(true);
     const uploadToastId = toast.loading("Đang tải lên ảnh đại diện...");
     let token = localStorage.getItem("authToken");
@@ -324,7 +300,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       let response = await fetch(
-        `http://localhost:8080/identity/users/${user.id}/avatar`, // Sử dụng user.id từ prop
+        `http://localhost:8080/identity/users/${user.id}/avatar`,
         { method: "PATCH", headers, body: formData }
       );
 
@@ -349,12 +325,8 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
         const newAvatarUrl = data.result?.avatar;
         if (newAvatarUrl) {
           const updatedUserDataFromUpload = { ...(user || {}), avatar: newAvatarUrl } as User;
-        
-          setUpdatedUser(updatedUserDataFromUpload); 
-          localStorage.setItem("user", JSON.stringify(updatedUserDataFromUpload)); 
-           
-        } else {
-          
+          setUpdatedUser(updatedUserDataFromUpload);
+          localStorage.setItem("user", JSON.stringify(updatedUserDataFromUpload));
         }
       } else {
         throw new Error(data.message || "Upload ảnh đại diện thất bại");
@@ -369,7 +341,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && user?.id) { // Kiểm tra user.id từ prop
+    if (file && user?.id) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setUpdatedUser((prev) => ({
@@ -390,23 +362,33 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
   const logoutItemClassName =
     "block w-full text-left px-4 py-2 text-sm cursor-pointer text-red-600 ui-active:bg-red-500 ui-active:text-white ui-not-active:bg-white hover:bg-red-50";
 
+  const profileFields = [
+    { label: "Họ", name: "lastName", type: "text" },
+    { label: "Tên", name: "firstName", type: "text" },
+    { label: "Email", name: "email", type: "text" },
+    { label: "Giới tính", name: "gender", type: "select" },
+    { label: "Mã số", name: "username", type: "text", readOnly: true },
+    { label: "Ngày sinh", name: "dob", type: "date" },
+    { label: "Vị trí", name: "position.name", type: "text", readOnly: true },
+    { label: "Vai trò", name: "roles.description", type: "text", readOnly: true },
+  ];
+
   return (
     <>
       <Toaster position="top-center" reverseOrder={false} />
-      {/* Đảm bảo z-index này đủ cao (ví dụ z-[60]) để nổi lên trên các phần tử khác như thanh tab (z-50) */}
       <Menu as="div" className="relative inline-block text-left z-[60]">
         <MenuButton
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-2 px-4 py-2 hover:bg-blue-700 text-white rounded cursor-pointer"
         >
           <img
-            src={user?.avatar || "/default-avatar.png"} // Sử dụng prop user
+            src={user?.avatar || "/default-avatar.png"}
             alt="Avatar"
             className="w-6 h-6 rounded-full object-cover border border-blue-200"
             onError={(e) => (e.currentTarget.src = "/default-avatar.png")}
           />
           <span className="font-medium text-sm">
-            {user ? `${user.lastName || ""} ${user.firstName || ""}`.trim() || user.username : "Tài khoản"} {/* Sử dụng prop user */}
+            {user ? `${user.lastName || ""} ${user.firstName || ""}`.trim() || user.username : "Tài khoản"}
           </span>
         </MenuButton>
         <MenuItems className="absolute right-0 mt-2 w-52 border rounded-lg bg-white shadow-lg z-[60] overflow-hidden focus:outline-none">
@@ -416,7 +398,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
               setShowProfile(true);
               setIsEditing(false);
               setIsOpen(false);
-              setUpdatedUser(user); // Khởi tạo updatedUser từ prop user
+              setUpdatedUser(user);
               setProfileErrors({});
             }}
             className={menuItemClassName}
@@ -437,7 +419,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
           </MenuItem>
           <MenuItem
             as="button"
-            onClick={onLogout} // Sử dụng prop onLogout
+            onClick={onLogout}
             className={logoutItemClassName}
           >
             Đăng xuất
@@ -445,10 +427,9 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
         </MenuItems>
       </Menu>
 
-      {/* Modal Thông tin cá nhân */}
       {showProfile && updatedUser && (
         <div
-          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-[70]" // z-index cao hơn dropdown
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-[70]"
           onClick={() => { if (!isEditing && !isUploadingAvatar) { setShowProfile(false); setProfileErrors({}); }}}
         >
           <div
@@ -487,40 +468,46 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {[
-                { label: "Họ", name: "lastName" }, { label: "Tên", name: "firstName" },
-                { label: "Email", name: "email" },{ label: "Giới tính", name: "gender", type: "select" },
-                 { label: "Mã số", name: "username", readOnly: true }, { label: "Ngày sinh", name: "dob", type: "date" },
-                { label: "Vị trí", name: "position.name",readOnly: true },{ label: "Vai trò", name: "roles.description",readOnly: true },
-              ].map((field) => (
-                <div key={field.name} className="flex flex-col">
-                  <label className="text-sm font-medium text-gray-600 mb-1">
-                    {field.label}
-                    {isEditing && !field.readOnly && field.name !== "gender" && field.name !== "username" && (<span className="text-red-500 ml-1">*</span>)}
-                  </label>
-                  {field.type === "select" ? (
-                    <select
-                      name={field.name}
-                      value={updatedUser.gender === true ? "Nam" : updatedUser.gender === false ? "Nữ" : ""}
-                      onChange={handleProfileChange}
-                      disabled={!isEditing || isUploadingAvatar}
-                      className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${isEditing ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900" : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"}`}
-                    >
-                      <option value="">-- Chọn --</option> <option value="Nam">Nam</option> <option value="Nữ">Nữ</option>
-                    </select>
-                  ) : (
-                    <input
-                      type={field.type || "text"} name={field.name}
-                      value={(updatedUser as any)[field.name] || ""}
-                      onChange={handleProfileChange} readOnly={!isEditing || field.readOnly} disabled={isUploadingAvatar}
-                      className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${isEditing && !field.readOnly ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900" : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"}`}
-                    />
-                  )}
-                  {profileErrors[field.name as keyof ProfileErrors] && isEditing && (
-                    <p className="text-red-500 text-xs mt-1">{profileErrors[field.name as keyof ProfileErrors]}</p>
-                  )}
-                </div>
-              ))}
+              {profileFields.map((field) => {
+                let displayValue;
+                if (field.name === "position.name") {
+                  displayValue = updatedUser.position?.name || "";
+                } else if (field.name === "roles.description") {
+                  displayValue = updatedUser.roles?.[0]?.description || updatedUser.roles?.[0]?.name || "";
+                } else {
+                  displayValue = (updatedUser as any)[field.name];
+                }
+
+                return (
+                  <div key={field.name} className="flex flex-col">
+                    <label className="text-sm font-medium text-gray-600 mb-1">
+                      {field.label}
+                      {isEditing && !field.readOnly && field.name !== "gender" && field.name !== "username" && (<span className="text-red-500 ml-1">*</span>)}
+                    </label>
+                    {field.type === "select" ? (
+                      <select
+                        name={field.name}
+                        value={updatedUser.gender === true ? "Nam" : updatedUser.gender === false ? "Nữ" : ""}
+                        onChange={handleProfileChange}
+                        disabled={!isEditing || isUploadingAvatar}
+                        className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${isEditing ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900" : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"}`}
+                      >
+                        <option value="">-- Chọn --</option> <option value="Nam">Nam</option> <option value="Nữ">Nữ</option>
+                      </select>
+                    ) : (
+                      <input
+                        type={field.type || "text"} name={field.name}
+                        value={displayValue || ""}
+                        onChange={handleProfileChange} readOnly={!isEditing || field.readOnly} disabled={isUploadingAvatar}
+                        className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${isEditing && !field.readOnly ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900" : "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"}`}
+                      />
+                    )}
+                    {profileErrors[field.name as keyof ProfileErrors] && isEditing && (
+                      <p className="text-red-500 text-xs mt-1">{profileErrors[field.name as keyof ProfileErrors]}</p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             <div className="flex justify-end gap-4">
               {isEditing ? (
@@ -541,10 +528,9 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
         </div>
       )}
 
-      {/* Modal Đổi mật khẩu */}
       {showChangePassword && (
         <div
-          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-[70]" // z-index cao hơn dropdown
+          className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-[70]"
           onClick={() => setShowChangePassword(false)}
         >
           <div

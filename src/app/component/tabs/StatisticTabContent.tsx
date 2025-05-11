@@ -26,16 +26,8 @@ import {
   PieChart,
   Pie,
 } from "recharts";
+import { User } from "../types/appTypes";
 
-export interface User {
-  id: string;
-  username?: string;
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-  avatar?: string;
-  roles?: { id: string; name: string }[];
-}
 
 export interface ApiUserDetail extends User {
   userCode?: string;
@@ -148,6 +140,34 @@ const StatCard: React.FC<StatCardProps> = ({
   );
 };
 
+const MonthSelector: React.FC<{
+  value: number;
+  onChange: (value: number) => void;
+}> = ({ value, onChange }) => {
+  const options = [3, 6, 9, 12]; // Các tùy chọn số tháng
+
+  return (
+    <div className="flex items-center space-x-2">
+      <span className="text-sm font-medium text-gray-700">Hiển thị:</span>
+      <div className="flex space-x-1">
+        {options.map((option) => (
+          <button
+            key={option}
+            onClick={() => onChange(option)}
+            className={`px-3 py-1 text-sm rounded-md ${
+              value === option
+                ? "bg-indigo-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            {option} tháng
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const SummaryComboChart: React.FC<{
   data: SummaryChartData[];
   isLoading?: boolean;
@@ -162,9 +182,6 @@ const SummaryComboChart: React.FC<{
 
   return (
     <div className="bg-white shadow-lg rounded-xl p-6 h-80">
-      <h3 className="text-xl font-semibold text-gray-800 mb-4">
-        Thống kê tổng hợp
-      </h3>
       <ResponsiveContainer width="100%" height="90%">
         <ComposedChart
           data={data}
@@ -282,6 +299,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   const [eventStats, setEventStats] = useState<EventStats | null>(null);
   const [newsStats, setNewsStats] = useState<NewsStats | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryChartData[]>([]);
+  const [selectedMonthCount, setSelectedMonthCount] = useState<number>(6);
 
   const [isLoadingUserStats, setIsLoadingUserStats] = useState(true);
   const [isLoadingEventStats, setIsLoadingEventStats] = useState(true);
@@ -339,20 +357,26 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   const generateSummaryData = useCallback(() => {
     if (!userStats || !eventStats || !newsStats) return [];
 
-    const months = [
-      "Tháng 1",
-      "Tháng 2",
-      "Tháng 3",
-      "Tháng 4",
-      "Tháng 5",
-      "Tháng 6",
+    const monthNames = [
+      "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", 
+      "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8",
+      "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"
     ];
+
+    // Lấy số tháng hiện tại (0-11)
+    const currentMonth = new Date().getMonth();
+    
+    // Tạo mảng tháng theo số lượng được chọn
+    const months = Array.from({ length: selectedMonthCount }, (_, i) => {
+      const monthIndex = (currentMonth - selectedMonthCount + 1 + i + 12) % 12;
+      return monthNames[monthIndex];
+    });
 
     return months.map((month, index) => {
       const monthFactor = 0.5 + Math.random() * 0.5; // Random factor 0.5-1.0
       const approvalRate =
         ((eventStats.approvedEvents / eventStats.totalEvents || 0) * 50 +
-          (newsStats.approvedNews / newsStats.totalNews || 0) * 50) *
+        (newsStats.approvedNews / newsStats.totalNews || 0) * 50) *
         (0.7 + Math.random() * 0.3);
 
       return {
@@ -363,7 +387,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
         approvalRate: Math.round(approvalRate),
       };
     });
-  }, [userStats, eventStats, newsStats]);
+  }, [userStats, eventStats, newsStats, selectedMonthCount]);
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -566,10 +590,16 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
     <div className="space-y-8 py-4">
       {/* Summary Section */}
       <section>
-        <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 flex items-center">
-          <UpdateIcon className="w-7 h-7 mr-3 text-indigo-600" />
-          Tổng quan hệ thống
-        </h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center">
+            <UpdateIcon className="w-7 h-7 mr-3 text-indigo-600" />
+            Tổng quan hệ thống
+          </h2>
+          <MonthSelector 
+            value={selectedMonthCount} 
+            onChange={setSelectedMonthCount} 
+          />
+        </div>
         <SummaryComboChart data={summaryData} isLoading={isLoadingSummary} />
       </section>
 
@@ -602,11 +632,11 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
             color="bg-red-500"
           />
         </div>
-        <CustomPieChart
-          title="Phân bổ trạng thái người dùng"
+        {/* <CustomPieChart
+          title="Trạng thái người dùng"
           data={userStatusData}
           isLoading={isLoadingUserStats}
-        />
+        /> */}
       </section>
 
       {/* Events Section */}

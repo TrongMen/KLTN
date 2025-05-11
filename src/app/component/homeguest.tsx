@@ -21,7 +21,7 @@ import NewsTabContent from "./tabs/NewsTabContent";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
-import { BellIcon } from "@radix-ui/react-icons";
+import { BellIcon , ChevronRightIcon , ChevronLeftIcon } from "@radix-ui/react-icons";
 import { User, EventDisplayInfo, NewsItem } from "./types/appTypes";
 import {
   ChatMessageNotificationPayload,
@@ -35,7 +35,8 @@ import {
 import ConfirmationDialog from "../../utils/ConfirmationDialog";
 
 type ActiveTab = "home" | "news" | "registeredEvents" | "members" | "chatList";
-
+const OTHER_TABS_PER_PAGE_MOBILE = 3;
+const OTHER_TABS_PER_PAGE_DESKTOP = 6;
 export default function HomeGuest() {
   console.log("HomeGuest function body started");
   const [search, setSearch] = useState("");
@@ -131,6 +132,21 @@ export default function HomeGuest() {
   const [downloadingChatFileId, setDownloadingChatFileId] = useState<
     string | null
   >(null);
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [currentTabSetPage, setCurrentTabSetPage] = useState(0);
+
+  useEffect(() => {
+    const checkMobileView = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+    checkMobileView();
+    window.addEventListener("resize", checkMobileView);
+    return () => window.removeEventListener("resize", checkMobileView);
+  }, []);
+
+  const TABS_PER_PAGE = isMobileView
+    ? OTHER_TABS_PER_PAGE_MOBILE
+    : OTHER_TABS_PER_PAGE_DESKTOP;
 
   const fetchChatUserDetailsWithCache = useCallback(
     async (
@@ -258,11 +274,9 @@ export default function HomeGuest() {
       }
 
       if (!listResponse.ok) {
-        const errorData = await listResponse
-          .json()
-          .catch(() => ({
-            message: `Lỗi ${listResponse.status} khi tải danh sách nhóm.`,
-          }));
+        const errorData = await listResponse.json().catch(() => ({
+          message: `Lỗi ${listResponse.status} khi tải danh sách nhóm.`,
+        }));
         throw new Error(
           errorData.message ||
             `Lỗi ${listResponse.status} khi tải danh sách nhóm.`
@@ -2386,6 +2400,44 @@ export default function HomeGuest() {
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
     { id: "chatList", label: "💬 Danh sách chat", requiresAuth: true },
   ];
+  const totalOtherTabPages = Math.ceil(tabs.length / TABS_PER_PAGE);
+
+  const currentVisibleOtherTabs = useMemo(() => {
+    const adjustedCurrentPage = Math.min(
+      currentTabSetPage,
+      Math.max(0, totalOtherTabPages - 1)
+    );
+    if (currentTabSetPage !== adjustedCurrentPage) {
+      setCurrentTabSetPage(adjustedCurrentPage);
+    }
+
+    const startIndex = adjustedCurrentPage * TABS_PER_PAGE;
+    const endIndex = startIndex + TABS_PER_PAGE;
+    return tabs.slice(startIndex, endIndex);
+  }, [tabs, currentTabSetPage, TABS_PER_PAGE, totalOtherTabPages]);
+
+  useEffect(() => {
+    const newTotalPages = Math.ceil(tabs.length / TABS_PER_PAGE);
+    if (currentTabSetPage >= newTotalPages && newTotalPages > 0) {
+      setCurrentTabSetPage(newTotalPages - 1);
+    } else if (newTotalPages === 0 && currentTabSetPage !== 0) {
+      setCurrentTabSetPage(0);
+    }
+  }, [TABS_PER_PAGE, tabs.length, currentTabSetPage]);
+
+  const handleNextTabs = () => {
+    setCurrentTabSetPage((prevPage) =>
+      Math.min(prevPage + 1, totalOtherTabPages - 1)
+    );
+  };
+
+  const handlePrevTabs = () => {
+    setCurrentTabSetPage((prevPage) => Math.max(prevPage - 1, 0));
+  };
+
+  const showPrevButton = currentTabSetPage > 0 && tabs.length > TABS_PER_PAGE;
+  const showNextButton =
+    currentTabSetPage < totalOtherTabPages - 1 && tabs.length > TABS_PER_PAGE;
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
@@ -2425,47 +2477,74 @@ export default function HomeGuest() {
 
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30">
         <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
-          {tabs.map((tab) => {
-            const showTabButton =
-              !tab.requiresAuth ||
-              (tab.requiresAuth && initializedRef.current && user);
-
-            if (
-              !showTabButton &&
-              tab.requiresAuth &&
-              !user &&
-              isLoadingUser &&
-              !initializedRef.current
-            )
-              return null;
-
-            return (
-              <div key={tab.id} className="relative flex flex-col items-center">
+          {tabs.length > 0 && (
+            <div className="flex items-center grow justify-center min-w-0">
+              {showPrevButton && (
                 <button
-                  onClick={() => setActiveTab(tab.id as ActiveTab)}
-                  className={getTabButtonClasses(tab.id as ActiveTab)}
+                  onClick={handlePrevTabs}
+                  className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0"
+                  aria-label="Các tab trước"
                 >
-                  {tab.label}
+                  <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
                 </button>
-                {activeTab === tab.id && (
+              )}
+              {!showPrevButton && tabs.length > TABS_PER_PAGE && (
+                <div className="w-[36px] h-[36px] shrink-0"></div> // Placeholder để giữ layout
+              )}
+
+              <div
+                className={`flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible ${
+                  !showPrevButton &&
+                  !showNextButton &&
+                  tabs.length > TABS_PER_PAGE
+                    ? "mx-auto"
+                    : ""
+                } ${
+                  (showPrevButton && !showNextButton) ||
+                  (!showPrevButton && showNextButton)
+                    ? "flex-grow justify-center"
+                    : ""
+                }`}
+              >
+                {currentVisibleOtherTabs.map((tab) => (
                   <div
-                    className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
-                      tab.id as ActiveTab
-                    )} border-r-[6px] border-r-transparent`}
-                    style={{ left: "50%", transform: "translateX(-50%)" }}
-                  ></div>
-                )}
+                    key={tab.id}
+                    className="relative flex flex-col items-center"
+                  >
+                    <button
+                      onClick={() => setActiveTab(tab.id as ActiveTab)}
+                      className={`${getTabButtonClasses(tab.id as ActiveTab)} ${
+                        isMobileView ? "px-2 text-[11px]" : ""
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                    {activeTab === tab.id && (
+                      <div
+                        className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
+                          tab.id as ActiveTab
+                        )} border-r-[6px] border-r-transparent`}
+                        style={{ left: "50%", transform: "translateX(-50%)" }}
+                      ></div>
+                    )}
+                  </div>
+                ))}
               </div>
-            );
-          })}
-          {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
-            !user &&
-            initializedRef.current &&
-            !isLoadingUser && (
-              <span className="text-sm text-gray-500 italic p-2 self-center">
-                Đăng nhập để xem các mục khác
-              </span>
-            )}
+
+              {showNextButton && (
+                <button
+                  onClick={handleNextTabs}
+                  className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0"
+                  aria-label="Các tab kế tiếp"
+                >
+                  <ChevronRightIcon className="h-5 w-5 text-gray-600" />
+                </button>
+              )}
+              {!showNextButton && tabs.length > TABS_PER_PAGE && (
+                <div className="w-[36px] h-[36px] shrink-0"></div> // Placeholder
+              )}
+            </div>
+          )}
         </div>
       </div>
 

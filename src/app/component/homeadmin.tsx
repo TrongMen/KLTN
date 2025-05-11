@@ -1878,7 +1878,7 @@ export default function HomeAdmin() {
 
   const getTabButtonClasses = (tabName: ActiveTab): string => {
     const baseClasses =
-      "cursor-pointer px-3 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition whitespace-nowrap";
+      "cursor-pointer px-4 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition";
     const activeClasses = "text-white";
     const inactiveClasses = "hover:bg-opacity-80";
     let specificBg = "",
@@ -1983,7 +1983,10 @@ export default function HomeAdmin() {
     }
   };
 
-  const homeTabObject = useMemo(() => ({ id: "home", label: "🏠 Trang chủ" }), []);
+  const homeTabObject = useMemo(
+    () => ({ id: "home", label: "🏠 Trang chủ" }),
+    []
+  );
 
   const otherTabsList = useMemo(
     () => [
@@ -2004,13 +2007,12 @@ export default function HomeAdmin() {
   const totalOtherTabPages = Math.ceil(otherTabsList.length / TABS_PER_PAGE);
 
   const currentVisibleOtherTabs = useMemo(() => {
-    // Đảm bảo currentTabSetPage không vượt quá giới hạn sau khi TABS_PER_PAGE thay đổi
     const adjustedCurrentPage = Math.min(
       currentTabSetPage,
       Math.max(0, totalOtherTabPages - 1)
     );
     if (currentTabSetPage !== adjustedCurrentPage) {
-      setCurrentTabSetPage(adjustedCurrentPage); // Cập nhật state nếu cần
+      setCurrentTabSetPage(adjustedCurrentPage);
     }
 
     const startIndex = adjustedCurrentPage * TABS_PER_PAGE;
@@ -2018,7 +2020,6 @@ export default function HomeAdmin() {
     return otherTabsList.slice(startIndex, endIndex);
   }, [otherTabsList, currentTabSetPage, TABS_PER_PAGE, totalOtherTabPages]);
 
-  // Cập nhật lại currentTabSetPage nếu nó trở nên không hợp lệ khi TABS_PER_PAGE thay đổi (ví dụ khi resize)
   useEffect(() => {
     const newTotalPages = Math.ceil(otherTabsList.length / TABS_PER_PAGE);
     if (currentTabSetPage >= newTotalPages && newTotalPages > 0) {
@@ -2046,63 +2047,59 @@ export default function HomeAdmin() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
-      <Toaster position="top-center" toastOptions={{ duration: 3500 }} />
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-[50]">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="text-lg sm:text-xl font-bold">
-            Quản lý Sự kiện & CLB (Admin)
-          </div>
-          <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            <span
-              className="cursor-pointer hover:text-gray-300 transition-colors"
-              onClick={() => setShowAboutModal(true)}
-            >
-              Giới thiệu
-            </span>
-            <span
-              className="cursor-pointer hover:text-gray-300"
-              onClick={() => setShowContactModal(true)}
-            >
-              Liên hệ
-            </span>
-            {initializedRef.current && !isLoadingUser && (
-              <UserMenu user={user} onLogout={handleLogout} />
-            )}
-            {(!initializedRef.current || isLoadingUser) && (
-              <span className="text-gray-400">Đang tải...</span>
-            )}
-            {initializedRef.current && !isLoadingUser && !user && (
-              <Link href="/login">
-                <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
-                  Đăng nhập
+          <Toaster toastOptions={{ duration: 4000 }} position="top-center" />
+          <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
+            <div className="max-w-7xl mx-auto flex justify-between items-center">
+              <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện (Admin)</div>
+              <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
+                <span
+                  className="cursor-pointer hover:text-gray-300 transition-colors"
+                  onClick={() => setShowAboutModal(true)}
+                >
+                  Giới thiệu
                 </span>
-              </Link>
-            )}
-          </div>
-        </div>
-      </nav>
+                <span
+                  className="cursor-pointer hover:text-gray-300"
+                  onClick={() => setShowContactModal(true)}
+                >
+                  Liên hệ
+                </span>
+                {initializedRef.current && !isLoadingUser && (
+                  <UserMenu user={user} onLogout={handleLogout} />
+                )}
+                {(!initializedRef.current || isLoadingUser) && (
+                  <span className="text-gray-400">Đang tải...</span>
+                )}
+                {initializedRef.current && !isLoadingUser && !user && (
+                  <Link href="/login">
+                    <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
+                      Đăng nhập
+                    </span>
+                  </Link>
+                )}
+              </div>
+            </div>
+          </nav>
 
-      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-50 ">
-        <div className="flex items-center justify-start space-x-1 sm:space-x-2 pb-1 ">
-        
-
+       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30 "> 
+        <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3"> 
           {otherTabsList.length > 0 && (
-            <div className="flex items-center grow justify-center min-w-0 pb-3 ">
+            <div className="flex items-center grow justify-center min-w-0">
               {showPrevButton && (
                 <button
                   onClick={handlePrevTabs}
-                  className="p-2 rounded-full  hover:bg-gray-200 transition-colors "
+                  className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0"
                   aria-label="Các tab trước"
                 >
                   <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
                 </button>
               )}
               {!showPrevButton && otherTabsList.length > TABS_PER_PAGE && (
-                <div className="w-[36px] h-[36px] shrink-0"></div> 
+                <div className="w-[36px] h-[36px] shrink-0"></div>
               )}
 
               <div
-                className={`flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible  ${
+                className={`flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible ${
                   !showPrevButton &&
                   !showNextButton &&
                   otherTabsList.length > TABS_PER_PAGE
@@ -2150,7 +2147,7 @@ export default function HomeAdmin() {
                 </button>
               )}
               {!showNextButton && otherTabsList.length > TABS_PER_PAGE && (
-                <div className="w-[36px] h-[36px] shrink-0"></div> // Placeholder
+                <div className="w-[36px] h-[36px] shrink-0"></div>
               )}
             </div>
           )}
@@ -2213,10 +2210,7 @@ export default function HomeAdmin() {
               />
             )}
             {activeTab === "approval" && user && (
-              <ApprovalTabContent
-                user={user}
-                refreshToken={refreshToken}
-              />
+              <ApprovalTabContent user={user} refreshToken={refreshToken} />
             )}
             {activeTab === "myEvents" && user && (
               <MyEventsTabContent
@@ -2311,7 +2305,7 @@ export default function HomeAdmin() {
 
       {initializedRef.current && !isLoadingUser && user && (
         <div
-          className="fixed bottom-6 right-6 z-[65] group"
+          className="fixed bottom-6 right-6 z-50 group"
           ref={notificationContainerRef}
         >
           <button
@@ -2331,7 +2325,7 @@ export default function HomeAdmin() {
             )}
           </button>
           {showNotificationDropdown && (
-            <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96 z-[70]">
+            <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96 ">
               <NotificationDropdown
                 notifications={notifications}
                 isLoading={isLoadingNotifications}

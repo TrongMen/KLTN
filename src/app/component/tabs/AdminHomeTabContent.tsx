@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "react-hot-toast";
-import { EventDisplayInfo } from "../types/appTypes"; // Điều chỉnh đường dẫn nếu cần
+import { EventDisplayInfo } from "../types/appTypes"; 
 import {
   ReloadIcon,
   CheckCircledIcon,
@@ -707,7 +707,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 {selectedEvent.status === "PENDING" && (
                   <button
                     onClick={() =>
-                      toast.info("Chức năng duyệt sự kiện đang được phát triển.")
+                      toast("Chức năng duyệt sự kiện đang được phát triển.")
                     }
                     className="px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition text-sm font-medium"
                   >
@@ -765,11 +765,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                             <span className={`${getStatusBadgeClasses(timeStatus)} shadow-sm`}>
                                 {getStatusIcon(timeStatus)} {getStatusText(timeStatus)}
                             </span>
-                            {event.status && (
+                            {/* {event.status && (
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(event.status)} shadow-sm`}>
                                     <InfoCircledIcon className="w-3 h-3" /> {getApprovalStatusText(event.status)}
                                 </span>
-                            )}
+                            )} */}
                         </div>
                       </div>
                       <div className="p-4 flex flex-col flex-grow">
@@ -810,14 +810,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                             Chi tiết
                           </button>
                           {/* Nút Sửa đã bị loại bỏ */}
-                          {event.status === "PENDING" && (
+                          {/* {event.status === "PENDING" && (
                             <button
-                              onClick={(e) => { e.stopPropagation(); toast.info("Chức năng duyệt đang phát triển"); }}
+                              onClick={(e) => { e.stopPropagation(); toast("Chức năng duyệt đang phát triển"); }}
                               className="px-2.5 py-1 rounded text-xs bg-green-500 text-white hover:bg-green-600"
                             >
                               Duyệt
                             </button>
-                          )}
+                          )} */}
                           <button
                                 onClick={(e) => { e.stopPropagation(); toast.error("Chức năng xoá sự kiện tạm thời không khả dụng.");}}
                                 className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100"
@@ -869,11 +869,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                                         <span className={`${getStatusBadgeClasses(timeStatus)}`}>
                                             {getStatusIcon(timeStatus)} {getStatusText(timeStatus)}
                                         </span>
-                                        {event.status && (
+                                        {/* {event.status && (
                                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1 ${getApprovalStatusBadgeColor(event.status)}`}>
                                             <InfoCircledIcon className="w-3 h-3" /> {getApprovalStatusText(event.status)}
                                             </span>
-                                        )}
+                                        )} */}
                                     </div>
                                 </div>
                                 <div className="text-xs text-gray-500 space-y-1 mb-2">
@@ -923,14 +923,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                                 >
                                     Xoá
                                 </button>
-                                 {event.status === "PENDING" && (
+                                 {/* {event.status === "PENDING" && (
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); toast.info("Chức năng duyệt sự kiện đang được phát triển.");}}
+                                        onClick={(e) => { e.stopPropagation(); toast("Chức năng duyệt sự kiện đang được phát triển.");}}
                                         className="px-3 py-1.5 rounded-md text-xs bg-green-500 text-white hover:bg-green-600 transition font-medium"
                                     >
                                         Duyệt
                                     </button>
-                                )}
+                                )} */}
                             </div>
                         </div>
                         </li>

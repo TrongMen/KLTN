@@ -1607,39 +1607,7 @@ const currentVisibleOtherTabs = useMemo(() => {
       </nav> 
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30 "> 
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3"> 
-          {/* {tabs.map((tab) => { 
-            const showTab = 
-              !tab.requiresAuth || (tab.requiresAuth && initializedRef.current && user); 
-              if (tab.requiresAuth && (!initializedRef.current || isLoadingUser || !user)) { 
-                  return null; 
-              } 
-            return ( 
-              <div key={tab.id} className="relative flex flex-col items-center"> 
-                <button 
-                  onClick={() => setActiveTab(tab.id as ActiveTab)} 
-                  className={getTabButtonClasses(tab.id as ActiveTab)} 
-                > 
-                  {tab.label} 
-                </button> 
-                {activeTab === tab.id && ( 
-                  <div 
-                    className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor( 
-                      tab.id as ActiveTab 
-                    )} border-r-[6px] border-r-transparent`} 
-                    style={{ left: "50%", transform: "translateX(-50%)" }} 
-                  ></div> 
-                )} 
-              </div> 
-            ); 
-          })} 
-          {tabs.find((t) => t.id === activeTab)?.requiresAuth && 
-            !user && 
-            initializedRef.current && 
-            !isLoadingUser && ( 
-              <span className="text-sm text-gray-500 italic p-2 self-center"> 
-                Đăng nhập để xem các mục khác 
-              </span> 
-            )}  */}
+         
             {tabs.length > 0 && (
                         <div className="flex items-center grow justify-center min-w-0">
                           {showPrevButton && (
@@ -1704,7 +1672,7 @@ const currentVisibleOtherTabs = useMemo(() => {
                             </button>
                           )}
                           {!showNextButton && tabs.length > TABS_PER_PAGE && (
-                            <div className="w-[36px] h-[36px] shrink-0"></div> // Placeholder
+                            <div className="w-[36px] h-[36px] shrink-0"></div> 
                           )}
                         </div>
                       )}

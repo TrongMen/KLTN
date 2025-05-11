@@ -145,6 +145,25 @@ export interface Attendee {
   avatar?: string | null;
 }
 
+export interface ApiUser {
+  id: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  dob?: string | null; // Ngày sinh
+  roles?: { id?: string; name: string; description?: string; permissions?: any[] }[];
+  avatar?: string | null;
+  email?: string;
+  gender?: boolean | null;
+  position?: { id: string; name: string } | null;
+  organizerRole?: { id: string; name: string } | null;
+  locked?: boolean;
+  lockedAt?: string | null;
+  lockedBy?: string | null;
+  lockReason?: string | null;
+  qrCodeUrl?: string | null;
+  joinedDate?: string | null;
+}
 
 interface OrganizerInfo {
   userId: string;

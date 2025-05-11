@@ -23,8 +23,8 @@ interface FetchedUserDetail {
 interface AttendeeEntry {
   userId: string;
   studentCode?: string;
-  firstName?: string; // THÊM VÀO HOẶC ĐẢM BẢO ĐÃ CÓ
-  lastName?: string;  // THÊM VÀO HOẶC ĐẢM BẢO ĐÃ CÓ
+  firstName?: string; 
+  lastName?: string;  
   checkedInAt?: string | null;
   fullName?: string;
   attending?: boolean;

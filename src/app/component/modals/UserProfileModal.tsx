@@ -3,8 +3,8 @@
 import React from "react";
 import Image from "next/image";
 import { Cross1Icon, LockClosedIcon, ReloadIcon } from "@radix-ui/react-icons";
-import { ApiUser } from "../app/component/tabs/MembersTabContent";
-import { User as MainUserType } from "../app/component/homeuser";
+import { ApiUser } from "../types/appTypes";
+import { User as MainUserType } from "../types/appTypes";
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -52,13 +52,10 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
       .join(", ");
   };
 
-  // Kiểm tra xem người dùng hiện tại có phải là admin không
-  // Giả định MainUserType có cấu trúc roles tương tự ApiUser
-  const isCurrentUserAdmin = currentUser?.roles?.some((role) =>
-    typeof role === "string"
-      ? role.toUpperCase() === "ADMIN"
-      : role.name?.toUpperCase() === "ADMIN"
-  );
+
+ const isCurrentUserAdmin = currentUser?.roles?.some(
+  (role) => role.name?.toUpperCase() === "ADMIN"
+);
 
   const canLockThisUser =
     isCurrentUserAdmin &&
@@ -125,7 +122,7 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <div>
               <strong className="font-medium text-gray-600">
-                Tên đăng nhập:
+                Mã số:
               </strong>
               <p className="text-gray-800">
                 {userProfile.username || "Chưa cập nhật"}
@@ -203,6 +200,10 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
               </>
             )}
+            <div>
+              <strong className="font-medium text-gray-600">Thời gian tham gia:</strong>
+              <p className="text-gray-800">{formatDate(userProfile.joinedDate)}</p>
+            </div>
           </div>
         </div>
         <div className="px-4 md:px-6 py-3 border-t bg-gray-50 flex justify-end gap-3 items-center sticky bottom-0">

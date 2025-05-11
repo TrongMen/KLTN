@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from "react";
 import Image from "next/image";
-import { User as MainUserType } from "../homeuser";
+import { User as MainUserType } from "../../types/appTypes";
 import {
   CheckIcon,
   Cross2Icon,

@@ -15,7 +15,7 @@ import {
   Component1Icon,
   ListBulletIcon,
 } from "@radix-ui/react-icons";
-import { User as MainUserType } from "../../homeuser";
+import { User as MainUserType } from "../../types/appTypes";
 
 interface EventType {
   id: string;

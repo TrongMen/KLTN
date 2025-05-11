@@ -4,43 +4,54 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import {
   User as MainUserType,
-  NewsItem as MainNewsItem,
-  EventDisplayInfo as MainEventInfo,
-} from "../types/appTypes"; 
+  NewsItem as MainNewsItemFromAppTypes,
+  EventDisplayInfo as MainEventInfoFromAppTypes,
+} from "../types/appTypes";
 import ApprovalItemDetailModal from "./ApprovalItemDetailModal";
 import { ReloadIcon } from "@radix-ui/react-icons";
 
-
-type EventType = MainEventInfo & {
-  status?: string;
+type EventType = MainEventInfoFromAppTypes & {
+  status?: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason?: string | null;
   createdBy?: string;
   content?: string;
   purpose?: string;
   time?: string;
   name?: string;
+  title?: string; 
+  date?: string;  
+  location?: string; 
+  avatarUrl?: string | null;
+  qrCodeUrl?: string | null;
+  maxAttendees?: number;
+  currentAttendeesCount?: number;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | "PENDING_APPROVAL";
+  createdAt?: string;
 };
-type NewsItemType = MainNewsItem & {
-  status?: string;
+
+type NewsItemType = MainNewsItemFromAppTypes & {
+  status?: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason?: string | null;
   createdBy?: {
     id: string;
     firstName?: string;
     lastName?: string;
     avatar?: string;
-  };
+    username?: string;
+  } | string; // Mở rộng để tương thích với modal nếu cần
   content?: string;
   coverImageUrl?: string;
   createdAt?: string;
   publishedAt?: string | null;
   event?: { id: string; name?: string } | null;
+  title?: string; // Đảm bảo có title nếu MainNewsItemFromAppTypes không có
+  date?: string; // Thường là createdAt hoặc publishedAt cho news
 };
 
 interface ApprovalTabContentProps {
   user: MainUserType | null;
   refreshToken?: () => Promise<string | null>;
 }
-
 
 const isToday = (date: Date): boolean => {
   const today = new Date();
@@ -88,12 +99,11 @@ const formatDateForInput = (date: Date | null | undefined): string => {
   return "";
 };
 const stripHtml = (html: string): string => {
-  if (typeof document === "undefined") return html; 
+  if (typeof document === "undefined") return html;
   const tmp = document.createElement("DIV");
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || "";
 };
-
 
 const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
   user,
@@ -117,7 +127,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
   >(null);
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<
     EventType | NewsItemType | null
-  >(null); 
+  >(null);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState<"az" | "za">("az");
@@ -128,7 +138,6 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
 
-  
   const fetchApiData = useCallback(
     async <T extends { id: string }>(endpoint: string): Promise<T[]> => {
       const token = localStorage.getItem("authToken");
@@ -164,63 +173,74 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
         }
       } catch (error: any) {
         console.error(`Error fetching ${endpoint}:`, error);
-        toast.error(`Lỗi tải dữ liệu: ${error.message}`);
+        toast.error(
+          `Lỗi tải dữ liệu từ ${endpoint.split("/").pop()}: ${error.message}`
+        );
         return [];
       }
     },
     [refreshToken]
   );
 
-  const fetchAllData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [
-        pendingEv,
-        approvedEv,
-        rejectedEv,
-        pendingN,
-        approvedN,
-        rejectedN,
-      ] = await Promise.all([
-        fetchApiData<EventType>(
-          `http://localhost:8080/identity/api/events/status?status=PENDING`
-        ),
-        fetchApiData<EventType>(
-          `http://localhost:8080/identity/api/events/status?status=APPROVED`
-        ),
-        fetchApiData<EventType>(
-          `http://localhost:8080/identity/api/events/status?status=REJECTED`
-        ),
-        fetchApiData<NewsItemType>(
-          `http://localhost:8080/identity/api/news/status?status=PENDING`
-        ),
-        fetchApiData<NewsItemType>(
-          `http://localhost:8080/identity/api/news/status?status=APPROVED`
-        ),
-        fetchApiData<NewsItemType>(
-          `http://localhost:8080/identity/api/news/status?status=REJECTED`
-        ),
-      ]);
-      setPendingEvents(pendingEv);
-      setApprovedEvents(approvedEv);
-      setRejectedEvents(rejectedEv);
-      setPendingNews(pendingN);
-      setApprovedNews(approvedN);
-      setRejectedNews(rejectedN);
-      toast.success("Đã làm mới danh sách phê duyệt!");
-    } catch (error) {
-      console.error("Error fetching all data:", error);
-      toast.error("Làm mới danh sách thất bại.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [fetchApiData]);
+  const fetchDataAndUpdateLists = useCallback(
+    async (isManualRefresh: boolean = false) => {
+      setIsLoading(true);
+      try {
+        const [
+          pendingEv,
+          approvedEv,
+          rejectedEv,
+          pendingN,
+          approvedN,
+          rejectedN,
+        ] = await Promise.all([
+          fetchApiData<EventType>(
+            `http://localhost:8080/identity/api/events/status?status=PENDING`
+          ),
+          fetchApiData<EventType>(
+            `http://localhost:8080/identity/api/events/status?status=APPROVED`
+          ),
+          fetchApiData<EventType>(
+            `http://localhost:8080/identity/api/events/status?status=REJECTED`
+          ),
+          fetchApiData<NewsItemType>(
+            `http://localhost:8080/identity/api/news/status?status=PENDING`
+          ),
+          fetchApiData<NewsItemType>(
+            `http://localhost:8080/identity/api/news/status?status=APPROVED`
+          ),
+          fetchApiData<NewsItemType>(
+            `http://localhost:8080/identity/api/news/status?status=REJECTED`
+          ),
+        ]);
+        setPendingEvents(pendingEv);
+        setApprovedEvents(approvedEv);
+        setRejectedEvents(rejectedEv);
+        setPendingNews(pendingN);
+        setApprovedNews(approvedN);
+        setRejectedNews(rejectedN);
+
+        if (isManualRefresh) {
+          toast.success("Đã làm mới danh sách phê duyệt!");
+        }
+      } catch (error: any) {
+        console.error("Error fetching all data:", error);
+        toast.error(
+          `Lỗi tải toàn bộ dữ liệu: ${
+            error.message || "Không thể lấy chi tiết lỗi"
+          }`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [fetchApiData]
+  );
 
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    fetchDataAndUpdateLists(false);
+  }, [fetchDataAndUpdateLists]);
 
-  
   const handleApprove = async (
     item: EventType | NewsItemType,
     itemType: "event" | "news"
@@ -259,7 +279,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
       const data = await res.json();
       if (data.code === 1000) {
         toast.success(`Đã phê duyệt ${typeText}!`, { id: loadingToastId });
-        await fetchAllData();
+        await fetchDataAndUpdateLists(false);
       } else {
         throw new Error(
           data.message || `Phê duyệt ${typeText} thành công nhưng có lỗi.`
@@ -281,7 +301,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
 
   const handleReject = async () => {
     if (!currentItemToReject) return;
-    const itemType = "name" in currentItemToReject ? "event" : "news";
+    const itemType = "name" in currentItemToReject && "time" in currentItemToReject ? "event" : "news";
     const typeText = itemType === "event" ? "sự kiện" : "tin tức";
     const trimmedReason = rejectionReason.trim();
     if (!trimmedReason) {
@@ -328,7 +348,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
         setShowRejectModal(false);
         setCurrentItemToReject(null);
         setRejectReason("");
-        await fetchAllData();
+        await fetchDataAndUpdateLists(false);
       } else {
         throw new Error(
           data.message || `Từ chối ${typeText} thành công nhưng có lỗi.`
@@ -342,7 +362,6 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     }
   };
 
-  
   const displayedItems = useMemo(() => {
     let currentList: Array<EventType | NewsItemType> = [];
     const sourceList =
@@ -363,11 +382,11 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
       const itemDateStr =
         activeSubTab === "events"
           ? (item as EventType).time
-          : (item as NewsItemType).date;
+          : (item as NewsItemType).createdAt ?? (item as NewsItemType).publishedAt;
       if (!itemDateStr) return false;
       try {
         const itemDate = new Date(itemDateStr);
-        if (isNaN(itemDate.getTime())) return false; 
+        if (isNaN(itemDate.getTime())) return false;
         switch (dateFilter) {
           case "today":
             return isToday(itemDate);
@@ -379,8 +398,8 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
             if (
               !startDate ||
               !endDate ||
-              isNaN(startDate.getTime()) || 
-              isNaN(endDate.getTime()) 
+              isNaN(startDate.getTime()) ||
+              isNaN(endDate.getTime())
             )
               return false;
             const startOfDay = new Date(startDate);
@@ -399,13 +418,12 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     let filteredByName = filteredByDate;
     if (searchTerm.trim()) {
       const lowerSearchTerm = searchTerm.trim().toLowerCase();
-      filteredByName = filteredByDate.filter((item) =>
-        (activeSubTab === "events"
-          ? (item as EventType).name
-          : (item as NewsItemType).title
-        )
-          .toLowerCase()
-          .includes(lowerSearchTerm)
+      filteredByName = filteredByDate.filter((item) => {
+         const nameOrTitle = activeSubTab === "events"
+            ? (item as EventType).name
+            : (item as NewsItemType).title;
+         return nameOrTitle ? nameOrTitle.toLowerCase().includes(lowerSearchTerm) : false;
+        }
       );
     }
     let sortedList = [...filteredByName];
@@ -445,7 +463,6 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     endDate,
   ]);
 
-  
   const handleItemClick = (item: EventType | NewsItemType) => {
     setSelectedItemForDetail(item);
   };
@@ -454,16 +471,15 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     setSelectedItemForDetail(null);
   };
 
-  
   const renderList = (
     items: Array<EventType | NewsItemType>,
     itemType: "event" | "news",
     showActions = false
   ) => {
-    const listHeightClass = "max-h-[calc(100vh-100px)]"; 
+    const listHeightClass = "max-h-[calc(100vh-280px)]";
     const currentItems = items as any[];
 
-    if (isLoading)
+    if (isLoading && items.length === 0)
       return (
         <p className="text-center text-gray-500 py-6 italic">Đang tải...</p>
       );
@@ -482,9 +498,10 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
             {currentItems.map((item) => {
               const title = itemType === "event" ? item.name : item.title;
-              const displayDate = itemType === "event" ? item.time : item.date;
+              const displayDateStr = itemType === "event" ? item.time : (item.createdAt ?? item.publishedAt);
               const location = itemType === "event" ? item.location : null;
-              const imageUrl = itemType === "news" ? item.coverImageUrl : null;
+              const imageUrl = itemType === "news" ? item.coverImageUrl : (itemType === "event" ? item.avatarUrl : null);
+              
               return (
                 <div
                   key={item.id}
@@ -494,14 +511,13 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                   {imageUrl ? (
                     <img
                       src={imageUrl}
-                      alt={title}
+                      alt={title || "Hình ảnh"}
                       className="h-24 md:h-28 w-full object-cover"
                     />
                   ) : (
                     <div
                       className={`h-24 md:h-28 flex items-center justify-center bg-gradient-to-r from-gray-100 to-gray-200`}
                     >
-                      {" "}
                       <svg
                         className="w-10 h-10 text-gray-400"
                         fill="none"
@@ -515,15 +531,15 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                           strokeWidth="1"
                           d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
                         ></path>
-                      </svg>{" "}
+                      </svg>
                     </div>
                   )}
                   <div className="p-4 flex flex-col flex-grow">
                     <h3 className="font-semibold text-base text-gray-800 mb-2 line-clamp-2 flex-grow-0">
-                      {title}
+                      {title || "Không có tiêu đề"}
                     </h3>
                     <div className="text-xs text-gray-500 mt-1 mb-3 space-y-1 flex-grow-0">
-                      {displayDate && (
+                      {displayDateStr && (
                         <p className="flex items-center gap-1.5">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -533,14 +549,13 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                             stroke="currentColor"
                             strokeWidth={2}
                           >
-                            {" "}
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />{" "}
+                            />
                           </svg>
-                          {new Date(displayDate).toLocaleString("vi-VN", {
+                          {new Date(displayDateStr).toLocaleString("vi-VN", {
                             dateStyle: "short",
                             timeStyle: "short",
                           })}
@@ -556,17 +571,16 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                             stroke="currentColor"
                             strokeWidth={2}
                           >
-                            {" "}
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                            />{" "}
+                            />
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                            />{" "}
+                            />
                           </svg>
                           {location}
                         </p>
@@ -574,6 +588,11 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                       {itemType === "news" && item.content && (
                         <p className="text-xs text-gray-600 line-clamp-2 mt-1">
                           {stripHtml(item.content)}
+                        </p>
+                      )}
+                       {itemType === "event" && item.purpose && (
+                        <p className="text-xs text-gray-600 line-clamp-2 mt-1">
+                          {stripHtml(item.purpose)}
                         </p>
                       )}
                     </div>
@@ -595,7 +614,6 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                     )}
                     {showActions && (
                       <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-100 flex-grow-0">
-                        {" "}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -603,9 +621,8 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                           }}
                           className="px-3 cursor-pointer py-1 text-xs font-medium bg-red-100 text-red-700 rounded-md hover:bg-red-200"
                         >
-                          {" "}
-                          Từ chối{" "}
-                        </button>{" "}
+                          Từ chối
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -613,9 +630,8 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                           }}
                           className="px-3 cursor-pointer py-1 text-xs font-medium bg-green-100 text-green-700 rounded-md hover:bg-green-200"
                         >
-                          {" "}
-                          Phê duyệt{" "}
-                        </button>{" "}
+                          Phê duyệt
+                        </button>
                       </div>
                     )}
                   </div>
@@ -635,7 +651,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
           <ul className="divide-y divide-gray-200">
             {currentItems.map((item) => {
               const title = itemType === "event" ? item.name : item.title;
-              const displayDate = itemType === "event" ? item.time : item.date;
+              const displayDateStr = itemType === "event" ? item.time : (item.createdAt ?? item.publishedAt);
               const location = itemType === "event" ? item.location : null;
               return (
                 <li
@@ -645,12 +661,11 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                 >
                   <div className="flex-1 mb-2 sm:mb-0 sm:pr-4">
                     <p className="font-semibold text-sm md:text-base text-gray-800">
-                      {title}
+                      {title || "Không có tiêu đề"}
                     </p>
                     <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                      {displayDate && (
+                      {displayDateStr && (
                         <span className="inline-flex items-center gap-1">
-                          {" "}
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             className="h-3.5 w-3.5 text-gray-400"
@@ -659,14 +674,13 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                             stroke="currentColor"
                             strokeWidth={2}
                           >
-                            {" "}
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />{" "}
+                            />
                           </svg>
-                          {new Date(displayDate).toLocaleString("vi-VN", {
+                          {new Date(displayDateStr).toLocaleString("vi-VN", {
                             dateStyle: "short",
                             timeStyle: "short",
                           })}
@@ -674,7 +688,6 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                       )}
                       {location && (
                         <span className="inline-flex items-center gap-1">
-                          {" "}
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             className="h-3.5 w-3.5 text-gray-400"
@@ -683,17 +696,16 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                             stroke="currentColor"
                             strokeWidth={2}
                           >
-                            {" "}
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                            />{" "}
+                            />
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                            />{" "}
+                            />
                           </svg>
                           {location}
                         </span>
@@ -720,8 +732,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                         }}
                         className="px-2.5 cursor-pointer py-1 text-xs font-medium bg-red-100 text-red-700 rounded-md hover:bg-red-200"
                       >
-                        {" "}
-                        Từ chối{" "}
+                        Từ chối
                       </button>
                       <button
                         onClick={(e) => {
@@ -730,8 +741,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                         }}
                         className="px-2.5 cursor-pointer py-1 text-xs font-medium bg-green-100 text-green-700 rounded-md hover:bg-green-200"
                       >
-                        {" "}
-                        Duyệt{" "}
+                        Duyệt
                       </button>
                     </div>
                   )}
@@ -752,7 +762,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
           Phê duyệt
         </h2>
         <button
-          onClick={fetchAllData}
+          onClick={() => fetchDataAndUpdateLists(true)}
           disabled={isLoading}
           className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-auto sm:ml-4"
           title="Làm mới danh sách phê duyệt"
@@ -762,7 +772,6 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
           ) : (
             <ReloadIcon className="w-5 h-5 text-yellow-600" />
           )}
-          {/* <span className="ml-2 hidden sm:inline">Làm mới</span> */}
         </button>
       </div>
       <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-200 pb-2 flex-shrink-0">
@@ -850,7 +859,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
               onChange={(e) => setSortOrder(e.target.value as "az" | "za")}
               className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500 appearance-none"
             >
-              <option value="az">A - Z</option>{" "}
+              <option value="az">A - Z</option>
               <option value="za">Z - A</option>
             </select>
           </div>
@@ -864,13 +873,22 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
             <select
               id="dateFilterApproval"
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as any)}
+              onChange={(e) =>
+                setDateFilter(
+                  e.target.value as
+                    | "all"
+                    | "today"
+                    | "thisWeek"
+                    | "thisMonth"
+                    | "range"
+                )
+              }
               className="w-full pl-3 pr-8 py-2 border border-gray-300 rounded-md shadow-sm text-sm bg-white focus:outline-none focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500 appearance-none"
             >
-              <option value="all">Tất cả</option>{" "}
-              <option value="today">Hôm nay</option>{" "}
-              <option value="thisWeek">Tuần này</option>{" "}
-              <option value="thisMonth">Tháng này</option>{" "}
+              <option value="all">Tất cả</option>
+              <option value="today">Hôm nay</option>
+              <option value="thisWeek">Tuần này</option>
+              <option value="thisMonth">Tháng này</option>
               <option value="range">Khoảng ngày</option>
             </select>
           </div>
@@ -980,12 +998,11 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
               : "bg-white text-gray-700 hover:bg-yellow-50 border"
           }`}
         >
-          {" "}
           Đang chờ (
           {activeSubTab === "events"
             ? pendingEvents.length
             : pendingNews.length}
-          ){" "}
+          )
         </button>
         <button
           onClick={() => setTab("approved")}
@@ -995,12 +1012,11 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
               : "bg-white text-gray-700 hover:bg-green-50 border"
           }`}
         >
-          {" "}
           Đã duyệt (
           {activeSubTab === "events"
             ? approvedEvents.length
             : approvedNews.length}
-          ){" "}
+          )
         </button>
         <button
           onClick={() => setTab("rejected")}
@@ -1010,12 +1026,11 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
               : "bg-white text-gray-700 hover:bg-red-50 border"
           }`}
         >
-          {" "}
           Đã từ chối (
           {activeSubTab === "events"
             ? rejectedEvents.length
             : rejectedNews.length}
-          ){" "}
+          )
         </button>
       </div>
 
@@ -1041,8 +1056,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
               className="absolute cursor-pointer top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors text-2xl"
               aria-label="Đóng"
             >
-              {" "}
-              &times;{" "}
+              &times;
             </button>
             <div className="mb-4">
               <label
@@ -1065,15 +1079,13 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
                 onClick={() => setShowRejectModal(false)}
                 className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm font-medium transition-colors duration-150 ease-in-out"
               >
-                {" "}
-                Hủy{" "}
+                Hủy
               </button>
               <button
                 onClick={handleReject}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
               >
-                {" "}
-                Xác nhận{" "}
+                Xác nhận
               </button>
             </div>
           </div>

@@ -11,6 +11,7 @@ import Image from "next/image";
 import { User as MainUserType } from "../types/appTypes";
 import QRScanner from "../modals/QRScanner"; 
 import ConfirmationDialog from "../../../utils/ConfirmationDialog";
+import { MdQrCodeScanner, MdQrCode } from "react-icons/md";
 
 import {
   CheckIcon,
@@ -40,6 +41,7 @@ interface ApprovedEvent {
   createdAt?: string;
   avatarUrl?: string | null;
   progressStatus?: "UPCOMING" | "ONGOING" | "ENDED" | string;
+  maxAttendees?: number;
 }
 
 interface Attendee {
@@ -191,6 +193,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
               createdAt: e.createdAt,
               avatarUrl: e.avatarUrl,
               progressStatus: e.progressStatus,
+              maxAttendees: e.maxAttendees,
             }));
           setUserApprovedEvents(approved);
           if (showToast) {
@@ -942,7 +945,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   <button
                     onClick={() => setEventViewMode("list")}
                     title="Danh sách"
-                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition ${
+                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition cursor-pointer ${
                       eventViewMode === "list"
                         ? "bg-teal-600 text-white z-10"
                         : "bg-white text-gray-500 hover:bg-gray-50"
@@ -953,7 +956,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   <button
                     onClick={() => setEventViewMode("card")}
                     title="Thẻ"
-                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transition ${
+                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transition cursor-pointer  ${
                       eventViewMode === "card"
                         ? "bg-teal-600 text-white z-10"
                         : "bg-white text-gray-500 hover:bg-gray-50"
@@ -1067,10 +1070,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   })}`}
                             </p>
                           )}
-                          {event.location && (
+                          {event.maxAttendees && (
                             <p className="flex items-center gap-1">
                               <span className="opacity-70">📍</span>{" "}
-                              {event.location}
+                              {event.maxAttendees}
                             </p>
                           )}
                         </div>
@@ -1078,9 +1081,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                       <div className="mt-2 pt-2 border-t border-gray-100 flex justify-end">
                         <button
                           onClick={() => handleSelectEvent(event.id)}
-                          className="px-3 py-1.5 rounded-md bg-teal-500 hover:bg-teal-600 text-white text-xs font-medium transition"
+                          className="px-3 py-1.5 cursor-pointer rounded-md bg-teal-500 hover:bg-teal-600 text-white text-xs font-medium transition"
                         >
-                          Quản lý điểm danh
+                          Điểm danh
                         </button>
                       </div>
                     </div>
@@ -1210,7 +1213,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   <button
                     onClick={() => setAttendeeViewMode("list")}
                     title="Danh sách"
-                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition ${
+                    className={`flex-1 sm:flex-none p-2 cursor-pointer rounded-l-md border border-r-0 transition ${
                       attendeeViewMode === "list"
                         ? "bg-teal-600 text-white z-10"
                         : "bg-white text-gray-500 hover:bg-gray-50"
@@ -1221,7 +1224,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   <button
                     onClick={() => setAttendeeViewMode("card")}
                     title="Thẻ"
-                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transition ${
+                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transitio cursor-pointer ${
                       attendeeViewMode === "card"
                         ? "bg-teal-600 text-white z-10"
                         : "bg-white text-gray-500 hover:bg-gray-50"
@@ -1634,20 +1637,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : ""
                         }
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 4v1m0 4v1m0 4v1m0 4v1m-4-8h1m4 0h1m4 0h1M4 12h1m4 0h1m4 0h1m4 0h1m-4 4h1m-4-4h1m-4 4h1m4-4h1m0 4h1m-4 0h1m-4-4h1"
-                          />
-                        </svg>{" "}
+                        <MdQrCode size={22}  />
                         QR điểm danh
                       </button>
                       <button
@@ -1668,20 +1658,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : ""
                         }
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7m-4 0V5a2 2 0 00-2-2H7a2 2 0 00-2 2v2m14 0H3"
-                          />
-                        </svg>
+                        <MdQrCodeScanner size={22}  />
                         Quét QR
                       </button>
                       

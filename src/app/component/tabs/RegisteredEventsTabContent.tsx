@@ -1,19 +1,19 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { toast } from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
 import Image from "next/image";
 import {
   ChevronLeftIcon,
   CalendarIcon,
   ReloadIcon,
-  ReaderIcon,
-  ExclamationTriangleIcon,
 } from "@radix-ui/react-icons";
-import AttendeeQrScannerModal from "../modals/AttendeeQrScannerModal";
-import { EventDisplayInfo, User as MainUserType } from "../types/appTypes";
+
+import { EventDisplayInfo } from "../types/appTypes";
 import ConfirmationDialog from "@/utils/ConfirmationDialog";
 import EventListManager from "./registerEventGuest/EventListManager";
+import { MdQrCodeScanner, MdQrCode } from "react-icons/md";
+import QRScanner from "../modals/QRScanner"; 
 
 interface BackendOrganizerOrParticipant {
   userId: string;
@@ -24,36 +24,32 @@ interface BackendOrganizerOrParticipant {
   lastName?: string;
   name?: string;
   username?: string;
-  id?: string; 
+  id?: string;
 }
 
-interface PersonDetail  {
-  id: string; 
- userId?: string;
+interface PersonDetail {
+  id: string;
+  userId?: string;
   roleName?: string;
   positionName?: string;
   firstName?: string;
   lastName?: string;
   name?: string;
   username?: string;
-
-   profilePositionName?: string; 
-  profileRoleName?: string;     
- eventSpecificRoleName?: string;
+  profilePositionName?: string;
+  profileRoleName?: string;
+  eventSpecificRoleName?: string;
   eventSpecificPositionName?: string;
-
 }
-
 
 interface FetchedPersonAPIResponse {
   id: string;
   username?: string;
   firstName?: string;
   lastName?: string;
-  position?: { id: string; name: string }; 
-  roles?: { name: string; description?: string }[]; 
+  position?: { id: string; name: string };
+  roles?: { name: string; description?: string }[];
 }
-
 
 const getVietnameseEventStatus = (status?: string): string => {
   if (!status) return "Không xác định";
@@ -74,9 +70,7 @@ const getVietnameseEventStatus = (status?: string): string => {
 
 const formatPersonDetailsForDisplay = (person: PersonDetail | BackendOrganizerOrParticipant | string): string => {
     if (typeof person === 'string') return `ID: ${person}`;
-
     const p = person as PersonDetail;
-
     let displayName = p.name || "";
     if (!displayName && (p.firstName || p.lastName)) {
         displayName = `${p.lastName || ""} ${p.firstName || ""}`.trim();
@@ -84,33 +78,26 @@ const formatPersonDetailsForDisplay = (person: PersonDetail | BackendOrganizerOr
     if (!displayName && p.username) {
         displayName = p.username;
     }
-    if (!displayName || displayName.trim() === "") { // Nếu vẫn không có tên hiển thị hợp lệ
+    if (!displayName || displayName.trim() === "") {
         displayName = `ID: ${p.userId || p.id}`;
     }
-    
     const parts: string[] = [displayName];
-
-    // Ưu tiên hiển thị vị trí và vai trò cụ thể trong sự kiện nếu có
-    const positionToDisplay = p.eventSpecificPositionName || p.profilePositionName; 
+    const positionToDisplay = p.eventSpecificPositionName || p.profilePositionName;
     if (positionToDisplay) {
         parts.push(positionToDisplay);
     }
-
     const roleToDisplay = p.eventSpecificRoleName || p.profileRoleName;
     if (roleToDisplay && roleToDisplay.toUpperCase() !== "GUEST" && roleToDisplay.toUpperCase() !== "USER") {
         parts.push(roleToDisplay);
     }
-    
     const finalParts = parts.filter(part => part && part.trim() !== "" && part.toLowerCase() !== "không rõ" && !part.toLowerCase().startsWith("id: null")  && !part.toLowerCase().startsWith("id: undefined"));
-    
     if (finalParts.length === 0) {
-         if (p.userId || p.id) return `ID: ${p.userId || p.id}`;
-         return "Không rõ";
+        if (p.userId || p.id) return `ID: ${p.userId || p.id}`;
+        return "Không rõ";
     }
-        
     if (finalParts.length > 1 && displayName.startsWith("ID: ") && finalParts.includes(displayName)) {
         const actualNamePart = finalParts.find(part => !part.startsWith("ID: "));
-        if (actualNamePart) { 
+        if (actualNamePart) {
             const idPartIndex = finalParts.indexOf(displayName);
             if (idPartIndex > -1) {
                 finalParts.splice(idPartIndex, 1);
@@ -119,10 +106,8 @@ const formatPersonDetailsForDisplay = (person: PersonDetail | BackendOrganizerOr
     }
     if (finalParts.length === 0 && (p.userId || p.id)) return `ID: ${p.userId || p.id}`;
     if (finalParts.length === 0) return "Không rõ";
-
     return Array.from(new Set(finalParts)).join(" - ");
 };
-
 
 interface RegisteredEventsTabContentProps {
   currentUserId: string | null;
@@ -148,7 +133,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
   >(null);
   const [viewingEventDetails, setViewingEventDetails] =
     useState<EventDisplayInfo | null>(null);
-  
+
   const [enrichedEventForDetailView, setEnrichedEventForDetailView] = useState<EventDisplayInfo | null>(null);
   const [isLoadingEnrichedDetails, setIsLoadingEnrichedDetails] = useState<boolean>(false);
   const fetchedPersonsCacheRef = useRef<Record<string, PersonDetail>>({});
@@ -166,12 +151,28 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
     cancelText?: string;
     onCancel?: () => void;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
-  
+
   const [showQRCode, setShowQRCode] = useState<boolean>(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [isLoadingQRCode, setIsLoadingQRCode] = useState<boolean>(false);
   const [errorQRCode, setErrorQRCode] = useState<string | null>(null);
-  const [isAttendeeScannerOpen, setIsAttendeeScannerOpen] = useState(false);
+
+  const [isCheckInScannerOpen, setIsCheckInScannerOpen] = useState<boolean>(false);
+  const [isCheckingIn, setIsCheckingIn] = useState<boolean>(false);
+
+
+  const resetConfirmationState = () => {
+    setConfirmationState({
+        isOpen: false,
+        title: "",
+        message: "",
+        onConfirm: null,
+        confirmVariant: "primary",
+        confirmText: "Xác nhận",
+        cancelText: "Hủy bỏ",
+        onCancel: undefined,
+    });
+  };
 
   const fetchPersonDetailAPI = useCallback(async (userId: string): Promise<PersonDetail | null> => {
     if (!userId || userId.trim() === "") {
@@ -197,8 +198,8 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
                 lastName: apiUser.lastName,
                 name: `${apiUser.lastName || ""} ${apiUser.firstName || ""}`.trim() || apiUser.username || `ID: ${apiUser.id}`,
                 username: apiUser.username,
-                positionName: apiUser.position?.name, 
-                roleName: apiUser.roles && apiUser.roles.length > 0 ? apiUser.roles[0].name : undefined, 
+                profilePositionName: apiUser.position?.name,
+                profileRoleName: apiUser.roles && apiUser.roles.length > 0 ? apiUser.roles[0].name : undefined,
             };
             fetchedPersonsCacheRef.current[userId] = detail;
             return detail;
@@ -216,82 +217,72 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
   useEffect(() => {
     if (viewingEventDetails) {
       setIsLoadingEnrichedDetails(true);
-      setEnrichedEventForDetailView(null); 
+      setEnrichedEventForDetailView(null);
 
       const enrichPeopleArray = async (
         peopleInput: (BackendOrganizerOrParticipant | string)[] | undefined
       ): Promise<PersonDetail[]> => {
         if (!peopleInput || peopleInput.length === 0) return [];
-        
+
         return Promise.all(
           peopleInput.map(async (personOrId) => {
-            // Đảm bảo userId là string
-            const userId = typeof personOrId === 'string' ? personOrId : (personOrId.userId || personOrId.id || ""); 
-            if (!userId) { 
-              // Xử lý trường hợp không có userId, có thể trả về một PersonDetail mặc định hoặc log lỗi
-              // console.error("Missing userId for person object:", personOrId);
-              // Hoặc trả về một dạng PersonDetail "không xác định"
-              return { id: "unknown", userId: "unknown", name: "Không xác định" } as PersonDetail;
+            const userId = typeof personOrId === 'string' ? personOrId : (personOrId.userId || personOrId.id || "");
+            if (!userId) {
+              return { id: "unknown-" + Math.random().toString(36).substr(2, 9), userId: "unknown", name: "Không xác định" } as PersonDetail;
             }
 
             const initialInfo = typeof personOrId === 'object' ? personOrId : ({ userId } as BackendOrganizerOrParticipant);
-            const fetchedDetails = await fetchPersonDetailAPI(userId); // fetchedDetails là PersonDetail | null
+            const fetchedDetails = await fetchPersonDetailAPI(userId);
 
-            const name = fetchedDetails?.name || 
-                         `${initialInfo.lastName || ""} ${initialInfo.firstName || ""}`.trim() || 
-                         initialInfo.name || // Tên từ BackendOrganizerOrParticipant nếu có
-                         initialInfo.fullName || // Tên đầy đủ từ BackendOrganizerOrParticipant nếu có
-                         `ID: ${userId}`;
+            const name = fetchedDetails?.name ||
+                                     `${initialInfo.lastName || ""} ${initialInfo.firstName || ""}`.trim() ||
+                                     initialInfo.name ||
+                                     initialInfo.fullName ||
+                                     `ID: ${userId}`;
 
             const personDetailResult: PersonDetail = {
-              id: fetchedDetails?.id || userId, 
-              userId: userId,                    
+              id: fetchedDetails?.id || userId,
+              userId: userId,
               name: name,
               firstName: fetchedDetails?.firstName || initialInfo.firstName,
               lastName: fetchedDetails?.lastName || initialInfo.lastName,
               username: fetchedDetails?.username || initialInfo.username,
-              profilePositionName: fetchedDetails?.positionName,
-              profileRoleName: fetchedDetails?.roleName,      
-              eventSpecificRoleName: initialInfo.roleName,     
-              eventSpecificPositionName: initialInfo.positionName, 
+              profilePositionName: fetchedDetails?.profilePositionName,
+              profileRoleName: fetchedDetails?.profileRoleName,
+              eventSpecificRoleName: initialInfo.roleName,
+              eventSpecificPositionName: initialInfo.positionName,
             };
             return personDetailResult;
           })
         );
       };
-      
+
       const enrichEvent = async () => {
-        // Giả định viewingEventDetails.organizers/participants là BackendOrganizerOrParticipant[]
-        // Nếu chúng có thể là string[] ban đầu, bạn cần có logic xử lý phù hợp
         const enrichedOrganizers = await enrichPeopleArray(viewingEventDetails.organizers as BackendOrganizerOrParticipant[]);
         const enrichedParticipants = await enrichPeopleArray(viewingEventDetails.participants as BackendOrganizerOrParticipant[]);
 
         let finalEnrichedCreator: PersonDetail | string | null = null;
-        const creatorSource = viewingEventDetails.createdBy; // Kiểu là string | PersonDetail | null (từ EventDisplayInfo)
+        const creatorSource = viewingEventDetails.createdBy;
 
         if (typeof creatorSource === 'string' && creatorSource.trim() !== "") {
             finalEnrichedCreator = await fetchPersonDetailAPI(creatorSource) || creatorSource;
         } else if (creatorSource && typeof creatorSource === 'object' && creatorSource !== null) {
-            // Nếu đã là object (PersonDetail), có thể bạn không cần fetch lại nếu nó đã đủ thông tin
-            // Hoặc, fetch lại để đảm bảo thông tin mới nhất nếu cần:
             const creatorIdToFetch = (creatorSource as PersonDetail).id || (creatorSource as PersonDetail).userId;
             if (creatorIdToFetch) {
-                 finalEnrichedCreator = await fetchPersonDetailAPI(creatorIdToFetch) || creatorSource;
+                finalEnrichedCreator = await fetchPersonDetailAPI(creatorIdToFetch) || creatorSource;
             } else {
-                 finalEnrichedCreator = creatorSource as PersonDetail | null; 
+                finalEnrichedCreator = creatorSource as PersonDetail | null;
             }
         } else if (creatorSource === null) {
             finalEnrichedCreator = null;
         }
-        
-        // setEnrichedEventForDetailView mong đợi một EventDisplayInfo hoàn chỉnh
-        // với organizers/participants là PersonDetail[] và createdBy là PersonDetail | string | null
-        setEnrichedEventForDetailView({ 
-            ...viewingEventDetails, 
+
+        setEnrichedEventForDetailView({
+            ...viewingEventDetails,
             organizers: enrichedOrganizers,
             participants: enrichedParticipants,
             createdBy: finalEnrichedCreator,
-        } as EventDisplayInfo); // Quan trọng: ép kiểu sang EventDisplayInfo (sau khi đã cập nhật EventDisplayInfo trong appTypes.ts)
+        } as EventDisplayInfo);
         setIsLoadingEnrichedDetails(false);
       };
       enrichEvent();
@@ -299,6 +290,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         setEnrichedEventForDetailView(null);
     }
 }, [viewingEventDetails, fetchPersonDetailAPI]);
+
 
   const fetchAvailableEvents = useCallback(async (showToastOnSuccess = false) => {
     setIsLoadingAvailable(true);
@@ -369,6 +361,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
       if (!token) {
         toast.error("Vui lòng đăng nhập lại.");
         setIsSubmitting(null);
+        resetConfirmationState();
         return;
       }
       try {
@@ -392,19 +385,20 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
             const currentViewing = {...viewingEventDetails};
             if (!currentViewing.participants) currentViewing.participants = [];
             const participantExists = currentViewing.participants.some(p => (p as PersonDetail).userId === currentUserId || (p as PersonDetail).id === currentUserId);
-            if (!participantExists) {
-                 const userDetails = await fetchPersonDetailAPI(currentUserId);
-                 if (userDetails) {
-                     currentViewing.participants = [...currentViewing.participants, userDetails as any]; // Cast to any or ensure type match
-                 }
+            if (!participantExists && currentUserId) {
+                const userDetails = await fetchPersonDetailAPI(currentUserId);
+                if (userDetails) {
+                    currentViewing.participants = [...currentViewing.participants, userDetails as any];
+                }
             }
-            setViewingEventDetails(null); 
+            setViewingEventDetails(null);
             setTimeout(()=> setViewingEventDetails(currentViewing),0);
         }
       } catch (err: any) {
         toast.error(`Đăng ký thất bại: ${err.message}`);
       } finally {
         setIsSubmitting(null);
+        resetConfirmationState();
       }
     },
     [
@@ -444,13 +438,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         onConfirm: () => {
           executeRegistration(eventToRegister);
         },
-        onCancel: () =>
-          setConfirmationState({
-            isOpen: false,
-            title: "",
-            message: "",
-            onConfirm: null,
-          }),
+        onCancel: () => resetConfirmationState(),
         confirmVariant: "primary",
         confirmText: "Đăng ký",
         cancelText: "Hủy",
@@ -474,6 +462,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
       if (!token) {
         toast.error("Vui lòng đăng nhập lại.");
         setIsSubmitting(null);
+        resetConfirmationState();
         return;
       }
       try {
@@ -509,6 +498,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         toast.error(`Hủy đăng ký thất bại: ${err.message}`);
       } finally {
         setIsSubmitting(null);
+        resetConfirmationState();
       }
     },
     [isSubmitting, currentUserId, isLoadingUserId, onRegistrationChange, viewingEventDetails]
@@ -532,13 +522,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         onConfirm: () => {
           executeUnregistration(eventToUnregister);
         },
-        onCancel: () =>
-          setConfirmationState({
-            isOpen: false,
-            title: "",
-            message: "",
-            onConfirm: null,
-          }),
+        onCancel: () => resetConfirmationState(),
         confirmVariant: "danger",
         confirmText: "Xác nhận hủy",
         cancelText: "Không",
@@ -559,7 +543,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
   const handleToggleBatchSelectAll = (select: boolean, allVisibleIds: Set<string>) => {
     setSelectedToUnregister(select ? allVisibleIds : new Set());
   };
-  
+
   type BatchUnregSuccess = { status: "fulfilled"; value: string; id: string };
   type BatchUnregError = { status: "rejected"; reason: string; id: string };
   type BatchUnregMappedResult = BatchUnregSuccess | BatchUnregError;
@@ -572,6 +556,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
       if (!token) {
         toast.error("Vui lòng đăng nhập lại.");
         setIsSubmitting(null);
+        resetConfirmationState();
         return;
       }
       const loadId = toast.loading(`Đang hủy ${ids.length} sự kiện...`);
@@ -613,7 +598,6 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
             okIds.push(mappedResult.value);
           } else {
             const failedId = mappedResult.id;
-            const reason = mappedResult.reason;
             if (failedId) failIds.push(failedId);
           }
         } else {
@@ -639,6 +623,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
           setSelectedToUnregister(new Set());
       }
       setIsSubmitting(null);
+      resetConfirmationState();
     },
     [isSubmitting, currentUserId, isLoadingUserId, onRegistrationChange, setSelectedToUnregister]
   );
@@ -665,13 +650,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
       onConfirm: () => {
         executeBatchUnregistration(ids);
       },
-      onCancel: () =>
-        setConfirmationState({
-          isOpen: false,
-          title: "",
-          message: "",
-          onConfirm: null,
-        }),
+      onCancel: () => resetConfirmationState(),
       confirmVariant: "danger",
       confirmText: `Hủy (${ids.length})`,
       cancelText: "Không",
@@ -685,10 +664,8 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
 
   const fetchQRCode = useCallback(async () => {
     if (!currentUserId || isLoadingUserId || isLoadingQRCode) return;
-    if (qrCodeUrl && !errorQRCode) return;
     setIsLoadingQRCode(true);
     setErrorQRCode(null);
-    setQrCodeUrl(null);
     const token = localStorage.getItem("authToken");
     if (!token) {
       toast.error("Vui lòng đăng nhập để xem QR.");
@@ -722,7 +699,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
     } finally {
       setIsLoadingQRCode(false);
     }
-  }, [currentUserId, isLoadingUserId, isLoadingQRCode, errorQRCode, qrCodeUrl]);
+  }, [currentUserId, isLoadingUserId, isLoadingQRCode, qrCodeUrl]);
 
   useEffect(() => {
     const currentQrCodeUrl = qrCodeUrl;
@@ -740,8 +717,81 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
     fetchQRCode();
   };
 
+  const handleCheckInScanSuccess = async (qrCodeData: string) => {
+    setIsCheckInScannerOpen(false);
+
+    if (!currentUserId) {
+        toast.error("Không tìm thấy ID người dùng hiện tại. Vui lòng thử đăng nhập lại.");
+        return;
+    }
+
+    setIsCheckingIn(true);
+    const toastId = toast.loading("Đang xử lý điểm danh...");
+
+    try {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+            toast.error("Vui lòng đăng nhập để thực hiện điểm danh.", { id: toastId });
+            setIsCheckingIn(false);
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('qrCodeData', qrCodeData);
+
+        const response = await fetch(`http://localhost:8080/identity/api/events/${currentUserId}/check-in-2`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.code === 1000) {
+            const checkInData = result.result;
+            toast.success(
+               `${result.message || "Điểm danh thành công!"}\nSự kiện: ${checkInData.eventName}\n}`,
+               { id: toastId, duration: 5000 }
+            );
+            
+            if (checkInData.eventId) {
+                onRegistrationChange(checkInData.eventId, true); 
+            }
+            fetchAvailableEvents();
+
+
+        } else {
+            throw new Error(result.message || `Lỗi ${response.status}`);
+        }
+    } catch (error: any) {
+        toast.error(`Điểm danh thất bại: ${error.message}`, { id: toastId });
+    } finally {
+        setIsCheckingIn(false);
+    }
+};
+
+const handleCheckInScanError = (errorMessage: string) => {
+    toast.error(`Lỗi quét QR: ${errorMessage}`);
+};
+
+useEffect(() => {
+    if (!isCheckInScannerOpen) return;
+    const handleEsc = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+            setIsCheckInScannerOpen(false);
+        }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+        window.removeEventListener('keydown', handleEsc);
+    };
+}, [isCheckInScannerOpen]);
+
+
   const renderEventDetails = (event: EventDisplayInfo) => {
-    const isCurrentlyEnrichingThisEvent = isLoadingEnrichedDetails && 
+    const isCurrentlyEnrichingThisEvent = isLoadingEnrichedDetails &&
                                         (!enrichedEventForDetailView || enrichedEventForDetailView.id !== event.id);
 
     if (isCurrentlyEnrichingThisEvent && !enrichedEventForDetailView?.organizers && !enrichedEventForDetailView?.participants) {
@@ -752,14 +802,14 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
             </div>
         );
     }
-    
+
     const displayEvent = enrichedEventForDetailView && enrichedEventForDetailView.id === event.id ? enrichedEventForDetailView : event;
 
     const isProcessingSingle = isSubmitting === displayEvent.id;
     const alreadyRegistered = isRegistered(displayEvent.id);
     const isCreated = isCreatedByUser(displayEvent.id);
     const canPerformAction = !!currentUserId && !isLoadingUserId;
-    
+
     const eventName = displayEvent.name || displayEvent.title || "Sự kiện không tên";
     const descriptionContent = displayEvent.description || displayEvent.content || displayEvent.purpose;
     const vietnameseStatus = getVietnameseEventStatus(displayEvent.status);
@@ -771,7 +821,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         else if (upperStatus === "PENDING") statusColorClass = "text-yellow-700 bg-yellow-100 border-yellow-300";
         else if (upperStatus === "REJECTED" || upperStatus === "CANCELLED") statusColorClass = "text-red-700 bg-red-100 border-red-300";
     }
-    
+
     let creatorDisplay = "Không rõ";
     const creatorData = displayEvent.createdBy;
     if (creatorData) {
@@ -786,16 +836,17 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
             }
         }
     }
-     if (creatorDisplay.trim().toLowerCase() === "id:" || creatorDisplay.trim() === "" || creatorDisplay.toLowerCase() === "không rõ id:" || creatorDisplay.toLowerCase() === "id: null" || creatorDisplay.toLowerCase() === "id: undefined") {
+    if (creatorDisplay.trim().toLowerCase() === "id:" || creatorDisplay.trim() === "" || creatorDisplay.toLowerCase() === "không rõ id:" || creatorDisplay.toLowerCase() === "id: null" || creatorDisplay.toLowerCase() === "id: undefined") {
         creatorDisplay = "Không rõ";
     }
 
 
     return (
+
       <div className="p-4 bg-white rounded-lg shadow border">
         <button
           onClick={() => {
-            setViewingEventDetails(null); 
+            setViewingEventDetails(null);
           }}
           className="mb-6 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer group font-medium"
         >
@@ -816,7 +867,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
                 />
               </div>
             ) : (
-             <div className="w-full h-52 lg:h-full bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center text-gray-400 shadow-lg aspect-[4/3] border">
+              <div className="w-full h-52 lg:h-full bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center text-gray-400 shadow-lg aspect-[4/3] border">
                 <CalendarIcon className="w-16 h-16 lg:w-20 lg:h-20 opacity-50" />
               </div>
             )}
@@ -831,7 +882,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
                 </span>
               </div>
             )}
-            
+
             <div className="space-y-4 text-base text-gray-700">
               {displayEvent.time && (
                 <div className="flex items-start">
@@ -856,7 +907,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
               )}
               {displayEvent.maxAttendees !== null && displayEvent.maxAttendees !== undefined && (
                   <div className="flex items-start">
-                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.268-.25-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.268.25-1.857m0 0A5.002 5.002 0 0112 15a5.002 5.002 0 014.745 3.143M12 13a3 3 0 100-6 3 3 0 000 6z" />
                       </svg>
                       <div>
@@ -888,11 +939,11 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
                 )}
             </div>
         )}
-        
+
         {(displayEvent.organizers && displayEvent.organizers.length > 0) ? (
             <div className="mt-8 pt-6 border-t border-gray-200">
                 <h4 className="text-xl font-semibold text-gray-800 mb-3">Ban tổ chức</h4>
-                 {isCurrentlyEnrichingThisEvent && (!enrichedEventForDetailView?.organizers || enrichedEventForDetailView.organizers.some(o => !(o as PersonDetail).name && !(o as PersonDetail).firstName)) && <p className="text-sm text-gray-500 italic">Đang cập nhật thông tin ban tổ chức...</p>}
+                {isCurrentlyEnrichingThisEvent && (!enrichedEventForDetailView?.organizers || enrichedEventForDetailView.organizers.some(o => !(o as PersonDetail).name && !(o as PersonDetail).firstName)) && <p className="text-sm text-gray-500 italic">Đang cập nhật thông tin ban tổ chức...</p>}
                 <ul className="space-y-2 text-sm">
                     {(displayEvent.organizers as PersonDetail[]).map((org, index) => (
                         <li key={org.id || org.userId || `org-${index}`} className="p-3 bg-gray-50 rounded-md border text-gray-700">
@@ -919,15 +970,15 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
 
 
         {(creatorDisplay && creatorDisplay !== "Không rõ") || displayEvent.createdAt ? (
-             <div className="mt-8 pt-6 border-t border-gray-200">
-                <h4 className="text-xl font-semibold text-gray-800 mb-3">Thông tin khác</h4>
-                {creatorDisplay && creatorDisplay !== "Không rõ" && (
-                    <p className="text-sm text-gray-700 mb-1"><strong className="font-medium text-gray-900">Tạo bởi:</strong> {creatorDisplay}</p>
-                )}
-                {displayEvent.createdAt && (
-                    <p className="text-sm text-gray-600"><strong className="font-medium text-gray-900">Ngày tạo sự kiện:</strong> {new Date(displayEvent.createdAt).toLocaleString("vi-VN", { dateStyle: 'long', timeStyle: 'short' })}</p>
-                )}
-            </div>
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                  <h4 className="text-xl font-semibold text-gray-800 mb-3">Thông tin khác</h4>
+                  {creatorDisplay && creatorDisplay !== "Không rõ" && (
+                      <p className="text-sm text-gray-700 mb-1"><strong className="font-medium text-gray-900">Tạo bởi:</strong> {creatorDisplay}</p>
+                  )}
+                  {displayEvent.createdAt && (
+                      <p className="text-sm text-gray-600"><strong className="font-medium text-gray-900">Ngày tạo sự kiện:</strong> {new Date(displayEvent.createdAt).toLocaleString("vi-VN", { dateStyle: 'long', timeStyle: 'short' })}</p>
+                  )}
+              </div>
         ) : null}
 
         <div className="mt-10 pt-6 border-t-2 border-gray-300 flex flex-col sm:flex-row justify-end gap-3">
@@ -978,7 +1029,10 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
 
   return (
     <div className="flex flex-col h-full p-3 md:p-5 bg-gray-100">
+        <Toaster position="top-center" toastOptions={{duration: 3500}} />
+
       <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 flex-wrap gap-2">
+
         <h2 className="text-xl md:text-2xl font-bold text-gray-700">
           {viewingEventDetails ? (enrichedEventForDetailView?.name || enrichedEventForDetailView?.title || viewingEventDetails.name || viewingEventDetails.title) : "Sự kiện"}
         </h2>
@@ -996,13 +1050,24 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
                 <ReloadIcon className="w-5 h-5 text-indigo-600" />
               )}
             </button>
-              <button
-                onClick={() => setIsAttendeeScannerOpen(true)}
-                disabled={isLoadingUserId || !currentUserId}
+             <button
+                onClick={() => {
+                    if (!currentUserId) {
+                        toast.error("Vui lòng đăng nhập để điểm danh.");
+                        return;
+                    }
+                    setIsCheckInScannerOpen(true);
+                }}
+                disabled={isLoadingUserId || !currentUserId || isCheckingIn}
                 className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
                 title="Quét mã QR của sự kiện để check-in"
             >
-                <ReaderIcon className="h-4 w-4" /> Quét QR Sự kiện
+                {isCheckingIn ? (
+                    <ReloadIcon className="w-5 h-5 animate-spin" />
+                ) : (
+                    <MdQrCodeScanner size={22} />
+                )}
+                {isCheckingIn ? "Đang xử lý..." : "Quét QR Điểm Danh"}
             </button>
             <button
                 onClick={handleShowQRCode}
@@ -1010,17 +1075,17 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
                 className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
                 title="Hiển thị mã QR của bạn để người khác quét"
             >
-                <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isLoadingQRCode ? "animate-pulse":""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}> <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6.5 2H11a1 1 0 01-1-1V11a1 1 0 011-1h2a1 1 0 011 1v5.5a1.5 1.5 0 01-1.5 1.5h-1.5zM12 4V3m6 11h1m-6.5 2H11a1 1 0 01-1-1V11a1 1 0 011-1h2a1 1 0 011 1v5.5a1.5 1.5 0 01-1.5 1.5h-1.5zM12 4V3" /> <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2zM4 8h2v2H4zm12 0h2v2h-2zM4 12h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2zM4 16h2v2H4zm4 1h2v1H8zm4 0h2v1h-2zm4 0h2v1h-2zM4 20h2v2H4zm4 0h2v2H8zm4 0h2v2h-2zm4 0h2v2h-2z" /> </svg>
-                {isLoadingQRCode ? "Đang tải..." : "Mã QR của tôi"}
+                <MdQrCode size={22} />
+                Mã QR của tôi
             </button>
           </div>
         )}
       </div>
 
         {(() => {
-            const eventToRender = (enrichedEventForDetailView && viewingEventDetails && enrichedEventForDetailView.id === viewingEventDetails.id) 
-                                  ? enrichedEventForDetailView 
-                                  : viewingEventDetails;
+            const eventToRender = (enrichedEventForDetailView && viewingEventDetails && enrichedEventForDetailView.id === viewingEventDetails.id)
+                                    ? enrichedEventForDetailView
+                                    : viewingEventDetails;
 
             if (eventToRender) {
                 return renderEventDetails(eventToRender);
@@ -1029,30 +1094,30 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
                     <>
                         <div className="flex flex-wrap gap-x-4 gap-y-2 mb-0 px-1 border-b border-gray-200 flex-shrink-0">
                         <button
-                          onClick={() => setTab("available")}
-                          className={`py-2 font-semibold cursor-pointer text-sm md:text-base border-b-2 ${
+                            onClick={() => setTab("available")}
+                            className={`py-2 font-semibold cursor-pointer text-sm md:text-base border-b-2 ${
                             tab === "available"
-                              ? "border-indigo-500 text-indigo-600"
-                              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                          }`}
+                                ? "border-indigo-500 text-indigo-600"
+                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            }`}
                         >
-                          📌 Gợi ý (
-                          {
+                            📌 Gợi ý (
+                            {
                             availableEvents.filter(
-                              (e) => !isRegistered(e.id) && !isCreatedByUser(e.id)
+                                (e) => !isRegistered(e.id) && !isCreatedByUser(e.id)
                             ).length
-                          }
-                          )
+                            }
+                            )
                         </button>
                         <button
-                          onClick={() => setTab("registered")}
-                          className={`py-2 font-semibold cursor-pointer text-sm md:text-base border-b-2 ${
+                            onClick={() => setTab("registered")}
+                            className={`py-2 font-semibold cursor-pointer text-sm md:text-base border-b-2 ${
                             tab === "registered"
-                              ? "border-green-500 text-green-600"
-                              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                          }`}
+                                ? "border-green-500 text-green-600"
+                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            }`}
                         >
-                          ✅ Đã đăng ký ({registeredEventIds?.size ?? 0})
+                            ✅ Đã đăng ký ({registeredEventIds?.size ?? 0})
                         </button>
                         </div>
                         <div className="flex-grow pt-0 min-h-0">
@@ -1089,22 +1154,15 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         confirmText={confirmationState.confirmText}
         cancelText={confirmationState.cancelText}
         onConfirm={confirmationState.onConfirm || (() => {})}
-        onCancel={() =>
-          setConfirmationState({
-            isOpen: false,
-            title: "",
-            message: "",
-            onConfirm: null,
-          })
-        }
+        onCancel={() => resetConfirmationState()}
       />
 
       {showQRCode && (
-            <div 
+            <div
                 className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[80] p-4"
                 onClick={() => setShowQRCode(false)}
             >
-                <div 
+                <div
                     className="bg-white p-6 rounded-lg shadow-xl text-center max-w-xs w-full"
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -1117,12 +1175,12 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
                         </div>
                     )}
                     <div className="mt-2 text-xs text-gray-500">
-                        <p>Dùng mã này để người khác quét khi cần thiết.</p>
+                        <p>Dùng mã này để điểm danh.</p>
                         {errorQRCode && <button onClick={fetchQRCode} className="mt-2 text-blue-600 hover:underline font-medium">Thử lại</button>}
                     </div>
                     <button
                         onClick={() => setShowQRCode(false)}
-                        className="mt-6 w-full bg-indigo-600 text-white py-2.5 px-4 rounded-md hover:bg-indigo-700 transition text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                        className="mt-6 cursor-pointer w-full bg-indigo-600 text-white py-2.5 px-4 rounded-md hover:bg-indigo-700 transition text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                     >
                         Đóng
                     </button>
@@ -1130,15 +1188,33 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
             </div>
         )}
 
-      <AttendeeQrScannerModal
-        isOpen={isAttendeeScannerOpen}
-        onClose={() => setIsAttendeeScannerOpen(false)}
-        attendeeUserId={currentUserId}
-        onCheckInSuccess={(eventName?: string) => {
-          toast.success(`Check-in sự kiện ${eventName ? `"${eventName}" ` : ""}thành công!`);
-          fetchAvailableEvents(); 
-        }}
-      />
+        {isCheckInScannerOpen && (
+            <div
+                className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[90] p-4"
+                onClick={() => setIsCheckInScannerOpen(false)}
+            >
+                <div
+                    className="bg-white p-4 sm:p-6 rounded-lg shadow-xl w-full max-w-md relative"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <h3 className="text-lg font-semibold mb-4 text-gray-800 text-center">Quét mã QR Sự kiện để Điểm danh</h3>
+                    <button
+                        onClick={() => setIsCheckInScannerOpen(false)}
+                        className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                        aria-label="Đóng trình quét QR"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                    <QRScanner
+                        onScanSuccess={handleCheckInScanSuccess}
+                        onScanError={handleCheckInScanError}
+                    />
+                </div>
+            </div>
+        )}
+
     </div>
   );
 };

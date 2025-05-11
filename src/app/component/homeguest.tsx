@@ -22,11 +22,7 @@ import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
 import { BellIcon } from "@radix-ui/react-icons";
-import {
-  User,
-  EventDisplayInfo,
-  NewsItem,
-} from "./types/appTypes";
+import { User, EventDisplayInfo, NewsItem } from "./types/appTypes";
 import {
   ChatMessageNotificationPayload,
   MainConversationType,
@@ -41,6 +37,7 @@ import ConfirmationDialog from "../../utils/ConfirmationDialog";
 type ActiveTab = "home" | "news" | "registeredEvents" | "members" | "chatList";
 
 export default function HomeGuest() {
+  console.log("HomeGuest function body started");
   const [search, setSearch] = useState("");
   const [allEvents, setAllEvents] = useState<EventDisplayInfo[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
@@ -61,7 +58,7 @@ export default function HomeGuest() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState<boolean>(true);
   const [sortOption, setSortOption] = useState("date");
-  const [timeFilterOption, setTimeFilterOption] = useState("upcoming");
+  const [timeFilterOption, setTimeFilterOption] = useState("all");
   const [showContactModal, setShowContactModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
@@ -97,16 +94,29 @@ export default function HomeGuest() {
   const router = useRouter();
   const { refreshToken } = useRefreshToken();
 
-  const [globalChatPayloadForTab, setGlobalChatPayloadForTab] = useState<ChatMessageNotificationPayload | null>(null);
-  const [chatUserCache, setChatUserCache] = useState<Record<string, ApiUserDetail>>({});
-  const [chatConversations, setChatConversations] = useState<MainConversationType[]>([]);
-  const [isLoadingChatConversations, setIsLoadingChatConversations] = useState<boolean>(true);
-  const [errorChatConversations, setErrorChatConversations] = useState<string | null>(null);
-  const [selectedChatConversation, setSelectedChatConversation] = useState<MainConversationType | null>(null);
-  const [isLoadingChatDetails, setIsLoadingChatDetails] = useState<boolean>(false);
+  const [globalChatPayloadForTab, setGlobalChatPayloadForTab] =
+    useState<ChatMessageNotificationPayload | null>(null);
+  const [chatUserCache, setChatUserCache] = useState<
+    Record<string, ApiUserDetail>
+  >({});
+  const [chatConversations, setChatConversations] = useState<
+    MainConversationType[]
+  >([]);
+  const [isLoadingChatConversations, setIsLoadingChatConversations] =
+    useState<boolean>(true);
+  const [errorChatConversations, setErrorChatConversations] = useState<
+    string | null
+  >(null);
+  const [selectedChatConversation, setSelectedChatConversation] =
+    useState<MainConversationType | null>(null);
+  const [isLoadingChatDetails, setIsLoadingChatDetails] =
+    useState<boolean>(false);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [isLoadingChatMessages, setIsLoadingChatMessages] = useState<boolean>(false);
-  const [errorChatMessages, setErrorChatMessages] = useState<string | null>(null);
+  const [isLoadingChatMessages, setIsLoadingChatMessages] =
+    useState<boolean>(false);
+  const [errorChatMessages, setErrorChatMessages] = useState<string | null>(
+    null
+  );
   const [chatMediaMessages, setChatMediaMessages] = useState<Message[]>([]);
   const [chatFileMessages, setChatFileMessages] = useState<Message[]>([]);
   const [chatAudioMessages, setChatAudioMessages] = useState<Message[]>([]);
@@ -116,60 +126,94 @@ export default function HomeGuest() {
   const [errorChatMedia, setErrorChatMedia] = useState<string | null>(null);
   const [errorChatFiles, setErrorChatFiles] = useState<string | null>(null);
   const [errorChatAudio, setErrorChatAudio] = useState<string | null>(null);
-  const [isProcessingChatAction, setIsProcessingChatAction] = useState<boolean>(false);
-  const [downloadingChatFileId, setDownloadingChatFileId] = useState<string | null>(null);
+  const [isProcessingChatAction, setIsProcessingChatAction] =
+    useState<boolean>(false);
+  const [downloadingChatFileId, setDownloadingChatFileId] = useState<
+    string | null
+  >(null);
 
-  const fetchChatUserDetailsWithCache = useCallback(async (userId: string, tokenParam: string | null): Promise<ApiUserDetail | null> => {
-    const effectiveToken = tokenParam || localStorage.getItem("authToken");
-    if (!effectiveToken) {
-      return null;
-    }
-    try {
-      const userUrl = `http://localhost:8080/identity/users/notoken/${userId}`;
-      let userRes = await fetch(userUrl, {
-        headers: { Authorization: `Bearer ${effectiveToken}` }
-      });
+  const fetchChatUserDetailsWithCache = useCallback(
+    async (
+      userId: string,
+      tokenParam: string | null
+    ): Promise<ApiUserDetail | null> => {
+      const effectiveToken = tokenParam || localStorage.getItem("authToken");
+      if (!effectiveToken) {
+        return null;
+      }
+      try {
+        const userUrl = `http://localhost:8080/identity/users/notoken/${userId}`;
+        let userRes = await fetch(userUrl, {
+          headers: { Authorization: `Bearer ${effectiveToken}` },
+        });
 
-      if (userRes.status === 401 || userRes.status === 403) {
-        const newRefreshedToken = await refreshToken();
-        if (newRefreshedToken) {
+        if (userRes.status === 401 || userRes.status === 403) {
+          const newRefreshedToken = await refreshToken();
+          if (newRefreshedToken) {
             userRes = await fetch(userUrl, {
-                headers: { Authorization: `Bearer ${newRefreshedToken}` }
+              headers: { Authorization: `Bearer ${newRefreshedToken}` },
             });
-        } else {
-            console.error("Failed to refresh token for user details (HomeGuest)");
+          } else {
+            console.error(
+              "Failed to refresh token for user details (HomeGuest)"
+            );
             return null;
+          }
         }
-      }
 
-      if (userRes.ok) {
-        const userData = await userRes.json();
-        if (userData.code === 1000 && userData.result) {
-          return userData.result as ApiUserDetail;
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          if (userData.code === 1000 && userData.result) {
+            return userData.result as ApiUserDetail;
+          }
         }
+      } catch (err) {
+        console.error("Error fetching user details for chat (HomeGuest):", err);
       }
-    } catch (err) {
-      console.error("Error fetching user details for chat (HomeGuest):", err);
-    }
-    return null;
-  }, [refreshToken]);
+      return null;
+    },
+    [refreshToken]
+  );
 
-  const getChatDisplayName = useCallback((detail: ApiUserDetail | ChatParticipant | null, fallbackName?: string): string => {
-    if (!detail) return fallbackName || "Người dùng không xác định";
-    if ('firstName' in detail || 'lastName' in detail) {
-      const apiDetail = detail as ApiUserDetail;
-      const fullName = `${apiDetail.lastName || ""} ${apiDetail.firstName || ""}`.trim();
-      return fullName || apiDetail.username || fallbackName || `User (${String(apiDetail.id).substring(0, 4)})`;
-    } else if ('name' in detail && 'id' in detail && typeof detail.id !== 'undefined') {
-      const participantDetail = detail as ChatParticipant;
-      return participantDetail.name || fallbackName || `User (${String(participantDetail.id).substring(0, 4)})`;
-    }
-    return fallbackName || "Người dùng không xác định";
-  }, []);
+  const getChatDisplayName = useCallback(
+    (
+      detail: ApiUserDetail | ChatParticipant | null,
+      fallbackName?: string
+    ): string => {
+      if (!detail) return fallbackName || "Người dùng không xác định";
+      if ("firstName" in detail || "lastName" in detail) {
+        const apiDetail = detail as ApiUserDetail;
+        const fullName = `${apiDetail.lastName || ""} ${
+          apiDetail.firstName || ""
+        }`.trim();
+        return (
+          fullName ||
+          apiDetail.username ||
+          fallbackName ||
+          `User (${String(apiDetail.id).substring(0, 4)})`
+        );
+      } else if (
+        "name" in detail &&
+        "id" in detail &&
+        typeof detail.id !== "undefined"
+      ) {
+        const participantDetail = detail as ChatParticipant;
+        return (
+          participantDetail.name ||
+          fallbackName ||
+          `User (${String(participantDetail.id).substring(0, 4)})`
+        );
+      }
+      return fallbackName || "Người dùng không xác định";
+    },
+    []
+  );
 
   const fetchChatConversationsAPI = useCallback(async () => {
     if (!user?.id) {
-      setErrorChatConversations("Thông tin người dùng không hợp lệ để tải cuộc trò chuyện.");
+      setErrorChatConversations(
+        "Thông tin người dùng không hợp lệ để tải cuộc trò chuyện."
+      );
       setIsLoadingChatConversations(false);
       setChatConversations([]);
       return;
@@ -207,26 +251,47 @@ export default function HomeGuest() {
             cache: "no-store",
           });
         } else {
-          throw new Error("Không thể làm mới token và truy cập danh sách nhóm.");
+          throw new Error(
+            "Không thể làm mới token và truy cập danh sách nhóm."
+          );
         }
       }
 
       if (!listResponse.ok) {
-        const errorData = await listResponse.json().catch(() => ({ message: `Lỗi ${listResponse.status} khi tải danh sách nhóm.` }));
-        throw new Error(errorData.message || `Lỗi ${listResponse.status} khi tải danh sách nhóm.`);
+        const errorData = await listResponse
+          .json()
+          .catch(() => ({
+            message: `Lỗi ${listResponse.status} khi tải danh sách nhóm.`,
+          }));
+        throw new Error(
+          errorData.message ||
+            `Lỗi ${listResponse.status} khi tải danh sách nhóm.`
+        );
       }
 
       const listData = await listResponse.json();
 
       if (listData.code !== 1000 || !Array.isArray(listData.result)) {
-        throw new Error(listData.message || "Dữ liệu danh sách nhóm không hợp lệ.");
+        throw new Error(
+          listData.message || "Dữ liệu danh sách nhóm không hợp lệ."
+        );
       }
 
-      const groupBaseInfo: { id: string; name: string; groupLeaderId: string | null; avatar: string; }[] =
-        listData.result.map((g: ApiGroupChatListItem) => ({
-          id: g.id, name: g.name, groupLeaderId: g.groupLeaderId,
-          avatar: g.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(g.name)}&background=random&font-size=0.4`,
-        }));
+      const groupBaseInfo: {
+        id: string;
+        name: string;
+        groupLeaderId: string | null;
+        avatar: string;
+      }[] = listData.result.map((g: ApiGroupChatListItem) => ({
+        id: g.id,
+        name: g.name,
+        groupLeaderId: g.groupLeaderId,
+        avatar:
+          g.avatarUrl ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            g.name
+          )}&background=random&font-size=0.4`,
+      }));
 
       if (groupBaseInfo.length === 0) {
         setChatConversations([]);
@@ -248,10 +313,17 @@ export default function HomeGuest() {
           });
           if (messagesResponse.ok) {
             const messagesData = await messagesResponse.json();
-            const messagesResult = messagesData.result?.content || messagesData.result;
-            if (messagesData.code === 1000 && Array.isArray(messagesResult) && messagesResult.length > 0) {
+            const messagesResult =
+              messagesData.result?.content || messagesData.result;
+            if (
+              messagesData.code === 1000 &&
+              Array.isArray(messagesResult) &&
+              messagesResult.length > 0
+            ) {
               const lastMessage = messagesResult[0] as Message;
-              lastMessageContent = lastMessage.content ?? `Đã gửi: ${lastMessage.fileName || "File"}`;
+              lastMessageContent =
+                lastMessage.content ??
+                `Đã gửi: ${lastMessage.fileName || "File"}`;
               sentAt = lastMessage.sentAt;
               lastMessageSenderId = lastMessage.senderId;
 
@@ -259,499 +331,1010 @@ export default function HomeGuest() {
                 lastMessageSenderNameDisplay = "Bạn";
               } else {
                 // Check existing global cache first
-                let userDetail = chatUserCache[lastMessage.senderId] || newFetchedUserDetailsGlobally[lastMessage.senderId];
+                let userDetail =
+                  chatUserCache[lastMessage.senderId] ||
+                  newFetchedUserDetailsGlobally[lastMessage.senderId];
                 if (!userDetail) {
-                  const fetchedDetail = await fetchChatUserDetailsWithCache(lastMessage.senderId, token);
+                  const fetchedDetail = await fetchChatUserDetailsWithCache(
+                    lastMessage.senderId,
+                    token
+                  );
                   if (fetchedDetail) {
-                    newFetchedUserDetailsGlobally[lastMessage.senderId] = fetchedDetail; // Store for batch update
+                    newFetchedUserDetailsGlobally[lastMessage.senderId] =
+                      fetchedDetail; // Store for batch update
                     userDetail = fetchedDetail;
                   }
                 }
-                lastMessageSenderNameDisplay = getChatDisplayName(userDetail, lastMessage.senderName || `User (${lastMessage.senderId.substring(0, 4)})`);
+                lastMessageSenderNameDisplay = getChatDisplayName(
+                  userDetail,
+                  lastMessage.senderName ||
+                    `User (${lastMessage.senderId.substring(0, 4)})`
+                );
               }
             }
           } else {
-             console.warn(`Could not fetch last message for group ${groupInfo.id}: ${messagesResponse.status} (HomeGuest)`);
+            console.warn(
+              `Could not fetch last message for group ${groupInfo.id}: ${messagesResponse.status} (HomeGuest)`
+            );
           }
         } catch (err) {
-          console.error(`Error fetching last message for group ${groupInfo.id} (HomeGuest):`, err);
+          console.error(
+            `Error fetching last message for group ${groupInfo.id} (HomeGuest):`,
+            err
+          );
         }
         return {
-          id: groupInfo.id, name: groupInfo.name, isGroup: true, groupLeaderId: groupInfo.groupLeaderId,
-          avatar: groupInfo.avatar, participants: [], message: lastMessageContent, sentAt: sentAt,
-          lastMessageSenderId: lastMessageSenderId, lastMessageSenderName: lastMessageSenderNameDisplay,
+          id: groupInfo.id,
+          name: groupInfo.name,
+          isGroup: true,
+          groupLeaderId: groupInfo.groupLeaderId,
+          avatar: groupInfo.avatar,
+          participants: [],
+          message: lastMessageContent,
+          sentAt: sentAt,
+          lastMessageSenderId: lastMessageSenderId,
+          lastMessageSenderName: lastMessageSenderNameDisplay,
         };
       });
 
       const resolvedConversations = await Promise.all(conversationPromises);
       if (Object.keys(newFetchedUserDetailsGlobally).length > 0) {
-        setChatUserCache(prev => ({ ...prev, ...newFetchedUserDetailsGlobally }));
+        setChatUserCache((prev) => ({
+          ...prev,
+          ...newFetchedUserDetailsGlobally,
+        }));
       }
 
       const sortedChats = resolvedConversations.sort(
         (a, b) =>
-        (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
-        (a.sentAt ? new Date(a.sentAt).getTime() : 0)
+          (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
+          (a.sentAt ? new Date(a.sentAt).getTime() : 0)
       );
       setChatConversations(sortedChats);
     } catch (error: any) {
-      setErrorChatConversations(error.message || "Lỗi tải danh sách cuộc trò chuyện.");
+      setErrorChatConversations(
+        error.message || "Lỗi tải danh sách cuộc trò chuyện."
+      );
       toast.error(error.message || "Lỗi tải danh sách cuộc trò chuyện.");
       setChatConversations([]);
-      if (error.message?.includes("Yêu cầu xác thực") || error.message?.includes("Không thể làm mới token")) {
+      if (
+        error.message?.includes("Yêu cầu xác thực") ||
+        error.message?.includes("Không thể làm mới token")
+      ) {
         router.push("/login?sessionExpired=true");
       }
     } finally {
       setIsLoadingChatConversations(false);
     }
-  }, [user, refreshToken, router, getChatDisplayName, fetchChatUserDetailsWithCache, chatUserCache]);
+  }, [
+    user,
+    refreshToken,
+    router,
+    getChatDisplayName,
+    fetchChatUserDetailsWithCache,
+    chatUserCache,
+  ]);
 
-  const fetchChatMessagesAPI = useCallback(async (groupId: string) => {
-    if (!groupId || !user?.id) return;
-    setIsLoadingChatMessages(true);
-    setErrorChatMessages(null);
-    let token = localStorage.getItem("authToken");
-    const currentUserId = user.id;
-    const newFetchedUserDetailsGlobally: Record<string, ApiUserDetail> = {};
+  const fetchChatMessagesAPI = useCallback(
+    async (groupId: string) => {
+      if (!groupId || !user?.id) return;
+      setIsLoadingChatMessages(true);
+      setErrorChatMessages(null);
+      let token = localStorage.getItem("authToken");
+      const currentUserId = user.id;
+      const newFetchedUserDetailsGlobally: Record<string, ApiUserDetail> = {};
 
-    try {
+      try {
         if (!token) {
-            const refreshedToken = await refreshToken();
-            if (refreshedToken) { token = refreshedToken; localStorage.setItem("authToken", token); }
-            else throw new Error("Yêu cầu xác thực.");
+          const refreshedToken = await refreshToken();
+          if (refreshedToken) {
+            token = refreshedToken;
+            localStorage.setItem("authToken", token);
+          } else throw new Error("Yêu cầu xác thực.");
         }
         const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
-        let response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        let response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
         if (response.status === 401 || response.status === 403) {
-            const refreshedToken = await refreshToken();
-            if (refreshedToken) { token = refreshedToken; localStorage.setItem("authToken", token); response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }); }
-            else throw new Error("Không thể làm mới token và tải tin nhắn.");
+          const refreshedToken = await refreshToken();
+          if (refreshedToken) {
+            token = refreshedToken;
+            localStorage.setItem("authToken", token);
+            response = await fetch(url, {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: "no-store",
+            });
+          } else throw new Error("Không thể làm mới token và tải tin nhắn.");
         }
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: `Lỗi ${response.status}` }));
-            throw new Error(errorData.message || `Lỗi ${response.status}`);
+          const errorData = await response
+            .json()
+            .catch(() => ({ message: `Lỗi ${response.status}` }));
+          throw new Error(errorData.message || `Lỗi ${response.status}`);
         }
         const data = await response.json();
         if (data.code === 1000 && data.result) {
-            let fetchedMessages: Message[] = [];
-            if (Array.isArray(data.result)) fetchedMessages = data.result;
-            else if (data.result.content && Array.isArray(data.result.content)) fetchedMessages = data.result.content;
-            else throw new Error("Định dạng dữ liệu tin nhắn không hợp lệ từ API.");
+          let fetchedMessages: Message[] = [];
+          if (Array.isArray(data.result)) fetchedMessages = data.result;
+          else if (data.result.content && Array.isArray(data.result.content))
+            fetchedMessages = data.result.content;
+          else
+            throw new Error("Định dạng dữ liệu tin nhắn không hợp lệ từ API.");
 
-            const messagesWithSenderNames = await Promise.all(
-                fetchedMessages.map(async (msg) => {
-                    if (msg.senderId === currentUserId) return { ...msg, senderName: "Bạn" };
-                    let senderDetail = chatUserCache[msg.senderId] || newFetchedUserDetailsGlobally[msg.senderId] || selectedChatConversation?.participants?.find(p => p.id === msg.senderId);
-                    if (!senderDetail) {
-                        const fetchedDetail = await fetchChatUserDetailsWithCache(msg.senderId, token);
-                        if (fetchedDetail) { newFetchedUserDetailsGlobally[msg.senderId] = fetchedDetail; senderDetail = fetchedDetail; }
-                    }
-                    const displayName = getChatDisplayName(senderDetail, msg.senderName || `User (${msg.senderId.substring(0,4)})`);
-                    return { ...msg, senderName: displayName };
-                })
-            );
-            if (Object.keys(newFetchedUserDetailsGlobally).length > 0) {
-                setChatUserCache(prev => ({ ...prev, ...newFetchedUserDetailsGlobally }));
-            }
-            const sortedMessages = messagesWithSenderNames.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
-            setChatMessages(sortedMessages);
-        } else if (data.code === 1000 && ((Array.isArray(data.result) && data.result.length === 0) || (data.result.content && Array.isArray(data.result.content) && data.result.content.length === 0))) {
-            setChatMessages([]);
-        } else throw new Error(data.message || "Định dạng dữ liệu tin nhắn không hợp lệ.");
-    } catch (error: any) {
+          const messagesWithSenderNames = await Promise.all(
+            fetchedMessages.map(async (msg) => {
+              if (msg.senderId === currentUserId)
+                return { ...msg, senderName: "Bạn" };
+              let senderDetail =
+                chatUserCache[msg.senderId] ||
+                newFetchedUserDetailsGlobally[msg.senderId] ||
+                selectedChatConversation?.participants?.find(
+                  (p) => p.id === msg.senderId
+                );
+              if (!senderDetail) {
+                const fetchedDetail = await fetchChatUserDetailsWithCache(
+                  msg.senderId,
+                  token
+                );
+                if (fetchedDetail) {
+                  newFetchedUserDetailsGlobally[msg.senderId] = fetchedDetail;
+                  senderDetail = fetchedDetail;
+                }
+              }
+              const displayName = getChatDisplayName(
+                senderDetail,
+                msg.senderName || `User (${msg.senderId.substring(0, 4)})`
+              );
+              return { ...msg, senderName: displayName };
+            })
+          );
+          if (Object.keys(newFetchedUserDetailsGlobally).length > 0) {
+            setChatUserCache((prev) => ({
+              ...prev,
+              ...newFetchedUserDetailsGlobally,
+            }));
+          }
+          const sortedMessages = messagesWithSenderNames.sort(
+            (a, b) =>
+              new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+          );
+          setChatMessages(sortedMessages);
+        } else if (
+          data.code === 1000 &&
+          ((Array.isArray(data.result) && data.result.length === 0) ||
+            (data.result.content &&
+              Array.isArray(data.result.content) &&
+              data.result.content.length === 0))
+        ) {
+          setChatMessages([]);
+        } else
+          throw new Error(
+            data.message || "Định dạng dữ liệu tin nhắn không hợp lệ."
+          );
+      } catch (error: any) {
         setErrorChatMessages(error.message || "Lỗi tải tin nhắn.");
         toast.error(`Lỗi tải tin nhắn: ${error.message}`);
         setChatMessages([]);
-        if (error.message?.includes("Yêu cầu xác thực") || error.message?.includes("Không thể làm mới token")) {
-            router.push("/login?sessionExpired=true");
+        if (
+          error.message?.includes("Yêu cầu xác thực") ||
+          error.message?.includes("Không thể làm mới token")
+        ) {
+          router.push("/login?sessionExpired=true");
         }
-    } finally {
+      } finally {
         setIsLoadingChatMessages(false);
-    }
-  }, [user, refreshToken, router, fetchChatUserDetailsWithCache, getChatDisplayName, selectedChatConversation?.participants, chatUserCache]);
+      }
+    },
+    [
+      user,
+      refreshToken,
+      router,
+      fetchChatUserDetailsWithCache,
+      getChatDisplayName,
+      selectedChatConversation?.participants,
+      chatUserCache,
+    ]
+  );
 
-  const fetchGroupChatDetailsAPI = useCallback(async (groupId: string) => {
-    if (!groupId || !user?.id) return;
-    setIsLoadingChatDetails(true);
-    const currentSummary = chatConversations.find(c => String(c.id) === groupId);
-    setSelectedChatConversation(prev => ({
-        ...(prev || {} as MainConversationType),
+  const fetchGroupChatDetailsAPI = useCallback(
+    async (groupId: string) => {
+      if (!groupId || !user?.id) return;
+      setIsLoadingChatDetails(true);
+      const currentSummary = chatConversations.find(
+        (c) => String(c.id) === groupId
+      );
+      setSelectedChatConversation((prev) => ({
+        ...(prev || ({} as MainConversationType)),
         ...(currentSummary || { id: groupId, name: "Đang tải..." }),
         id: groupId,
         participants: prev?.participants || [],
-    }));
-    let token = localStorage.getItem("authToken");
-    const newFetchedUserDetailsGlobally: Record<string, ApiUserDetail> = {};
-    if (!token) {
+      }));
+      let token = localStorage.getItem("authToken");
+      const newFetchedUserDetailsGlobally: Record<string, ApiUserDetail> = {};
+      if (!token) {
         const nt = await refreshToken();
-        if (nt) token = nt; else { toast.error("Yêu cầu xác thực."); setIsLoadingChatDetails(false); return; }
-    }
-    try {
+        if (nt) token = nt;
+        else {
+          toast.error("Yêu cầu xác thực.");
+          setIsLoadingChatDetails(false);
+          return;
+        }
+      }
+      try {
         const groupUrl = `http://localhost:8080/identity/api/events/group-chats/${groupId}`;
-        let groupResponse = await fetch(groupUrl, { headers: { Authorization: `Bearer ${token}` } });
+        let groupResponse = await fetch(groupUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (groupResponse.status === 401 || groupResponse.status === 403) {
-            const nt = await refreshToken();
-            if (nt) { token = nt; groupResponse = await fetch(groupUrl, { headers: { Authorization: `Bearer ${token}` } });}
-            else throw new Error("Làm mới token thất bại");
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            groupResponse = await fetch(groupUrl, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else throw new Error("Làm mới token thất bại");
         }
         if (!groupResponse.ok) {
-            const errData = await groupResponse.json().catch(() => ({message: `Lỗi ${groupResponse.status}`}));
-            throw new Error(errData.message || `Lỗi ${groupResponse.status}`);
+          const errData = await groupResponse
+            .json()
+            .catch(() => ({ message: `Lỗi ${groupResponse.status}` }));
+          throw new Error(errData.message || `Lỗi ${groupResponse.status}`);
         }
         const groupData = await groupResponse.json();
         if (groupData.code !== 1000 || !groupData.result) {
-            throw new Error(groupData.message || "Không lấy được chi tiết nhóm.");
+          throw new Error(groupData.message || "Không lấy được chi tiết nhóm.");
         }
         const groupDetailsApi = groupData.result as ApiGroupChatDetail;
         const memberIds = new Set<string>(groupDetailsApi.memberIds || []);
-        if (groupDetailsApi.groupLeaderId) memberIds.add(groupDetailsApi.groupLeaderId);
+        if (groupDetailsApi.groupLeaderId)
+          memberIds.add(groupDetailsApi.groupLeaderId);
 
         const participantPromises = Array.from(memberIds).map(async (id) => {
-            let detail = chatUserCache[id] || newFetchedUserDetailsGlobally[id];
-            if (!detail) {
-                const fetched = await fetchChatUserDetailsWithCache(id, token);
-                if (fetched) { newFetchedUserDetailsGlobally[id] = fetched; detail = fetched; }
+          let detail = chatUserCache[id] || newFetchedUserDetailsGlobally[id];
+          if (!detail) {
+            const fetched = await fetchChatUserDetailsWithCache(id, token);
+            if (fetched) {
+              newFetchedUserDetailsGlobally[id] = fetched;
+              detail = fetched;
             }
-            return detail;
+          }
+          return detail;
         });
-        const fetchedUserDetailsArray = (await Promise.all(participantPromises)).filter(Boolean) as ApiUserDetail[];
+        const fetchedUserDetailsArray = (
+          await Promise.all(participantPromises)
+        ).filter(Boolean) as ApiUserDetail[];
         if (Object.keys(newFetchedUserDetailsGlobally).length > 0) {
-            setChatUserCache(prev => ({ ...prev, ...newFetchedUserDetailsGlobally }));
+          setChatUserCache((prev) => ({
+            ...prev,
+            ...newFetchedUserDetailsGlobally,
+          }));
         }
-        const finalParticipantList: ChatParticipant[] = Array.from(memberIds).map((id) => {
-            const userDetail = fetchedUserDetailsArray.find(u => u.id === id) || chatUserCache[id];
-            const name = getChatDisplayName(userDetail, `User (${id.substring(0,4)})`);
-            const avatar = userDetail?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name.charAt(0) || "?")}&background=random&size=32`;
-            return { id, name, avatar };
+        const finalParticipantList: ChatParticipant[] = Array.from(
+          memberIds
+        ).map((id) => {
+          const userDetail =
+            fetchedUserDetailsArray.find((u) => u.id === id) ||
+            chatUserCache[id];
+          const name = getChatDisplayName(
+            userDetail,
+            `User (${id.substring(0, 4)})`
+          );
+          const avatar =
+            userDetail?.avatar ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(
+              name.charAt(0) || "?"
+            )}&background=random&size=32`;
+          return { id, name, avatar };
         });
-        setSelectedChatConversation(prev => ({
-            ...(prev || {} as MainConversationType),
-            id: groupDetailsApi.id, name: groupDetailsApi.name, isGroup: true,
-            groupLeaderId: groupDetailsApi.groupLeaderId, participants: finalParticipantList,
-            avatar: prev?.avatar || currentSummary?.avatar || groupDetailsApi.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(groupDetailsApi.name)}&background=random&font-size=0.4`,
-            message: prev?.message || currentSummary?.message || "...", sentAt: prev?.sentAt || currentSummary?.sentAt,
-            lastMessageSenderId: prev?.lastMessageSenderId || currentSummary?.lastMessageSenderId,
-            lastMessageSenderName: prev?.lastMessageSenderName || currentSummary?.lastMessageSenderName,
+        setSelectedChatConversation((prev) => ({
+          ...(prev || ({} as MainConversationType)),
+          id: groupDetailsApi.id,
+          name: groupDetailsApi.name,
+          isGroup: true,
+          groupLeaderId: groupDetailsApi.groupLeaderId,
+          participants: finalParticipantList,
+          avatar:
+            prev?.avatar ||
+            currentSummary?.avatar ||
+            groupDetailsApi.avatarUrl ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(
+              groupDetailsApi.name
+            )}&background=random&font-size=0.4`,
+          message: prev?.message || currentSummary?.message || "...",
+          sentAt: prev?.sentAt || currentSummary?.sentAt,
+          lastMessageSenderId:
+            prev?.lastMessageSenderId || currentSummary?.lastMessageSenderId,
+          lastMessageSenderName:
+            prev?.lastMessageSenderName ||
+            currentSummary?.lastMessageSenderName,
         }));
-    } catch (error: any) {
+      } catch (error: any) {
         toast.error(`Lỗi tải chi tiết nhóm: ${error.message}`);
-        setSelectedChatConversation(prev => ({ ...(prev || {} as MainConversationType), id: groupId, name: prev?.name || "Lỗi tải tên nhóm", participants: prev?.participants || [], }));
-        if (error.message?.includes("Yêu cầu xác thực") || error.message?.includes("Làm mới token thất bại")) {
-            router.push("/login?sessionExpired=true");
+        setSelectedChatConversation((prev) => ({
+          ...(prev || ({} as MainConversationType)),
+          id: groupId,
+          name: prev?.name || "Lỗi tải tên nhóm",
+          participants: prev?.participants || [],
+        }));
+        if (
+          error.message?.includes("Yêu cầu xác thực") ||
+          error.message?.includes("Làm mới token thất bại")
+        ) {
+          router.push("/login?sessionExpired=true");
         }
-    } finally {
+      } finally {
         setIsLoadingChatDetails(false);
-    }
-  }, [chatConversations, user, refreshToken, router, fetchChatUserDetailsWithCache, getChatDisplayName, chatUserCache]);
+      }
+    },
+    [
+      chatConversations,
+      user,
+      refreshToken,
+      router,
+      fetchChatUserDetailsWithCache,
+      getChatDisplayName,
+      chatUserCache,
+    ]
+  );
 
-  const fetchChatMediaMessagesAPI = useCallback(async (groupId: string) => {
-    if (!groupId || !user?.id) return; setIsLoadingChatMedia(true); setErrorChatMedia(null);
-    let token = localStorage.getItem("authToken");
-    try {
-        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+  const fetchChatMediaMessagesAPI = useCallback(
+    async (groupId: string) => {
+      if (!groupId || !user?.id) return;
+      setIsLoadingChatMedia(true);
+      setErrorChatMedia(null);
+      let token = localStorage.getItem("authToken");
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) token = nt;
+          else throw new Error("Auth required.");
+        }
         const url = `http://localhost:8080/identity/api/events/${groupId}/messages/media`;
-        let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        let res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (res.status === 401 || res.status === 403) {
-             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });}
-             else throw new Error("Refresh token failed");
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            res = await fetch(url, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else throw new Error("Refresh token failed");
         }
-        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || `Lỗi ${res.status}`);
+        }
         const data = await res.json();
-        if (data.code === 1000 && Array.isArray(data.result)) setChatMediaMessages(data.result);
-        else if (data.code === 1000 && data.result.length === 0) setChatMediaMessages([]);
+        if (data.code === 1000 && Array.isArray(data.result))
+          setChatMediaMessages(data.result);
+        else if (data.code === 1000 && data.result.length === 0)
+          setChatMediaMessages([]);
         else throw new Error(data.message || "Cannot load media list.");
-    } catch (error: any) { setErrorChatMedia(error.message || "Error loading media."); setChatMediaMessages([]); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
-    finally { setIsLoadingChatMedia(false); }
-  }, [user?.id, refreshToken, router]);
+      } catch (error: any) {
+        setErrorChatMedia(error.message || "Error loading media.");
+        setChatMediaMessages([]);
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        )
+          router.push("/login?sessionExpired=true");
+      } finally {
+        setIsLoadingChatMedia(false);
+      }
+    },
+    [user?.id, refreshToken, router]
+  );
 
-  const fetchChatFileMessagesAPI = useCallback(async (groupId: string) => {
-    if (!groupId || !user?.id) return; setIsLoadingChatFiles(true); setErrorChatFiles(null);
-    let token = localStorage.getItem("authToken");
-    try {
-        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+  const fetchChatFileMessagesAPI = useCallback(
+    async (groupId: string) => {
+      if (!groupId || !user?.id) return;
+      setIsLoadingChatFiles(true);
+      setErrorChatFiles(null);
+      let token = localStorage.getItem("authToken");
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) token = nt;
+          else throw new Error("Auth required.");
+        }
         const url = `http://localhost:8080/identity/api/events/${groupId}/messages/files`;
-        let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-         if (res.status === 401 || res.status === 403) {
-             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });}
-             else throw new Error("Refresh token failed");
-        }
-        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
-        const data = await res.json();
-        if (data.code === 1000 && Array.isArray(data.result)) setChatFileMessages(data.result);
-        else if (data.code === 1000 && data.result.length === 0) setChatFileMessages([]);
-        else throw new Error(data.message || "Cannot load file list.");
-    } catch (error: any) { setErrorChatFiles(error.message || "Error loading files."); setChatFileMessages([]); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
-    finally { setIsLoadingChatFiles(false); }
-  }, [user?.id, refreshToken, router]);
-
-  const fetchChatAudioMessagesAPI = useCallback(async (groupId: string) => {
-    if (!groupId || !user?.id) return; setIsLoadingChatAudio(true); setErrorChatAudio(null);
-    let token = localStorage.getItem("authToken");
-    try {
-        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
-        const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audios`;
-        let res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-         if (res.status === 401 || res.status === 403) {
-             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });}
-             else throw new Error("Refresh token failed");
-        }
-        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
-        const data = await res.json();
-        if (data.code === 1000 && Array.isArray(data.result)) setChatAudioMessages(data.result);
-        else if (data.code === 1000 && data.result.length === 0) setChatAudioMessages([]);
-        else throw new Error(data.message || "Cannot load audio list.");
-    } catch (error: any) { setErrorChatAudio(error.message || "Error loading audio."); setChatAudioMessages([]); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
-    finally { setIsLoadingChatAudio(false); }
-  }, [user?.id, refreshToken, router]);
-
-  const handleRemoveMemberChatAPI = useCallback(async (groupId: string | number, memberId: string, leaderId: string) => {
-    if (!groupId || !memberId || !leaderId || !user?.id) { toast.error("Thông tin không đầy đủ hoặc người dùng không hợp lệ."); return; }
-    setIsProcessingChatAction(true); const tId = toast.loading("Đang xóa thành viên...");
-    let token = localStorage.getItem("authToken");
-    try {
-        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
-        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
-        let res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+        let res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (res.status === 401 || res.status === 403) {
-             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });}
-             else throw new Error("Refresh token failed");
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            res = await fetch(url, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else throw new Error("Refresh token failed");
         }
-        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || `Lỗi ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result))
+          setChatFileMessages(data.result);
+        else if (data.code === 1000 && data.result.length === 0)
+          setChatFileMessages([]);
+        else throw new Error(data.message || "Cannot load file list.");
+      } catch (error: any) {
+        setErrorChatFiles(error.message || "Error loading files.");
+        setChatFileMessages([]);
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        )
+          router.push("/login?sessionExpired=true");
+      } finally {
+        setIsLoadingChatFiles(false);
+      }
+    },
+    [user?.id, refreshToken, router]
+  );
+
+  const fetchChatAudioMessagesAPI = useCallback(
+    async (groupId: string) => {
+      if (!groupId || !user?.id) return;
+      setIsLoadingChatAudio(true);
+      setErrorChatAudio(null);
+      let token = localStorage.getItem("authToken");
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) token = nt;
+          else throw new Error("Auth required.");
+        }
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audios`;
+        let res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401 || res.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            res = await fetch(url, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || `Lỗi ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result))
+          setChatAudioMessages(data.result);
+        else if (data.code === 1000 && data.result.length === 0)
+          setChatAudioMessages([]);
+        else throw new Error(data.message || "Cannot load audio list.");
+      } catch (error: any) {
+        setErrorChatAudio(error.message || "Error loading audio.");
+        setChatAudioMessages([]);
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        )
+          router.push("/login?sessionExpired=true");
+      } finally {
+        setIsLoadingChatAudio(false);
+      }
+    },
+    [user?.id, refreshToken, router]
+  );
+
+  const handleRemoveMemberChatAPI = useCallback(
+    async (groupId: string | number, memberId: string, leaderId: string) => {
+      if (!groupId || !memberId || !leaderId || !user?.id) {
+        toast.error("Thông tin không đầy đủ hoặc người dùng không hợp lệ.");
+        return;
+      }
+      setIsProcessingChatAction(true);
+      const tId = toast.loading("Đang xóa thành viên...");
+      let token = localStorage.getItem("authToken");
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) token = nt;
+          else throw new Error("Auth required.");
+        }
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
+        let res = await fetch(url, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401 || res.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            res = await fetch(url, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || `Lỗi ${res.status}`);
+        }
         toast.success("Đã xóa thành viên!", { id: tId });
         fetchGroupChatDetailsAPI(String(groupId));
-    } catch (error: any) { toast.error(`Thất bại: ${error.message}`, { id: tId }); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
-    finally { setIsProcessingChatAction(false); }
-  }, [user?.id, refreshToken, router, fetchGroupChatDetailsAPI]);
+      } catch (error: any) {
+        toast.error(`Thất bại: ${error.message}`, { id: tId });
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        )
+          router.push("/login?sessionExpired=true");
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    [user?.id, refreshToken, router, fetchGroupChatDetailsAPI]
+  );
 
-  const handleLeaveGroupChatAPI = useCallback(async (groupId: string | number, memberId: string) => {
-    if (!groupId || !memberId || !user?.id) { toast.error("Thông tin không đầy đủ hoặc người dùng không hợp lệ."); return; }
-    setIsProcessingChatAction(true); const tId = toast.loading("Đang rời nhóm...");
-    let token = localStorage.getItem("authToken");
-    try {
-        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
-        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
-        let res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-         if (res.status === 401 || res.status === 403) {
-             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` } });}
-             else throw new Error("Refresh token failed");
+  const handleLeaveGroupChatAPI = useCallback(
+    async (groupId: string | number, memberId: string) => {
+      if (!groupId || !memberId || !user?.id) {
+        toast.error("Thông tin không đầy đủ hoặc người dùng không hợp lệ.");
+        return;
+      }
+      setIsProcessingChatAction(true);
+      const tId = toast.loading("Đang rời nhóm...");
+      let token = localStorage.getItem("authToken");
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) token = nt;
+          else throw new Error("Auth required.");
         }
-        if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.message || `Lỗi ${res.status}`); }
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
+        let res = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401 || res.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            res = await fetch(url, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else throw new Error("Refresh token failed");
+        }
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || `Lỗi ${res.status}`);
+        }
         toast.success("Đã rời nhóm!", { id: tId });
-        setChatConversations(prev => prev.filter(c => String(c.id) !== String(groupId)));
+        setChatConversations((prev) =>
+          prev.filter((c) => String(c.id) !== String(groupId))
+        );
         setSelectedChatConversation(null);
-    } catch (error: any) { toast.error(`Thất bại: ${error.message}`, { id: tId }); if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");}
-    finally { setIsProcessingChatAction(false); }
-  }, [user?.id, refreshToken, router]);
+      } catch (error: any) {
+        toast.error(`Thất bại: ${error.message}`, { id: tId });
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        )
+          router.push("/login?sessionExpired=true");
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    [user?.id, refreshToken, router]
+  );
 
-  const handleSendMessageChatAPI = useCallback(async (groupId: string, senderId: string, messageText: string, tempMessageId: string): Promise<Message | null> => {
-    if(!user?.id) { toast.error("Người dùng không hợp lệ."); return null; }
-    setIsProcessingChatAction(true);
-    let token = localStorage.getItem("authToken");
-    try {
-        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+  const handleSendMessageChatAPI = useCallback(
+    async (
+      groupId: string,
+      senderId: string,
+      messageText: string,
+      tempMessageId: string
+    ): Promise<Message | null> => {
+      if (!user?.id) {
+        toast.error("Người dùng không hợp lệ.");
+        return null;
+      }
+      setIsProcessingChatAction(true);
+      let token = localStorage.getItem("authToken");
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) token = nt;
+          else throw new Error("Auth required.");
+        }
         if (!groupId) throw new Error("Group ID không tồn tại.");
         const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
-        const form = new FormData(); form.append("senderId", senderId); form.append("content", messageText);
-        let res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
-         if (res.status === 401 || res.status === 403) {
-             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });}
-             else throw new Error("Refresh token failed");
+        const form = new FormData();
+        form.append("senderId", senderId);
+        form.append("content", messageText);
+        let res = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+        if (res.status === 401 || res.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            res = await fetch(url, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              body: form,
+            });
+          } else throw new Error("Refresh token failed");
         }
         const data = await res.json();
         if (!res.ok || !(data.code === 1000 && data.result && data.result.id)) {
-             throw new Error(data.message || `Lỗi ${res.status || 'gửi tin nhắn'}`);
+          throw new Error(
+            data.message || `Lỗi ${res.status || "gửi tin nhắn"}`
+          );
         }
-        const actualMessageFromServer = { ...data.result, senderName: "Bạn" } as Message;
-        
-        setChatMessages(prevMessages => {
-            const filteredMessages = prevMessages.filter(
-                msg => msg.id !== tempMessageId && msg.id !== actualMessageFromServer.id
-            );
-            return [...filteredMessages, actualMessageFromServer].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
+        const actualMessageFromServer = {
+          ...data.result,
+          senderName: "Bạn",
+        } as Message;
+
+        setChatMessages((prevMessages) => {
+          const filteredMessages = prevMessages.filter(
+            (msg) =>
+              msg.id !== tempMessageId && msg.id !== actualMessageFromServer.id
+          );
+          return [...filteredMessages, actualMessageFromServer].sort(
+            (a, b) =>
+              new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+          );
         });
 
         setChatConversations((prevList) => {
-            const idx = prevList.findIndex((c) => String(c.id) === String(groupId));
-            if (idx === -1) return prevList;
-            const updatedConvo = {
-                ...prevList[idx],
-                message: actualMessageFromServer.content ?? `Đã gửi: ${actualMessageFromServer.fileName || "File"}`,
-                sentAt: actualMessageFromServer.sentAt,
-                lastMessageSenderId: actualMessageFromServer.senderId,
-                lastMessageSenderName: "Bạn",
-            };
-            const newList = prevList.filter(c => String(c.id) !== String(groupId));
-            newList.unshift(updatedConvo);
-            return newList.sort((a, b) => (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime()));
-        });
-        return actualMessageFromServer;
-    } catch (error: any) {
-        toast.error(`Gửi thất bại: ${error.message}`);
-        if (tempMessageId) {
-             setChatMessages(prev => prev.filter(m => m.id !== tempMessageId));
-        }
-        if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");
-        return null;
-    } finally {
-        setIsProcessingChatAction(false);
-    }
-  }, [user?.id, refreshToken, router]);
-
-  const handleSendFileChatAPI = useCallback(async (
-    groupId: string,
-    senderId: string,
-    file: File
-  ): Promise<Message | null> => {
-    if (!user?.id) {
-      toast.error("Người dùng không hợp lệ.");
-      return null;
-    }
-    setIsProcessingChatAction(true);
-    const tId = toast.loading(`Đang tải lên ${file.name}...`);
-    let token = localStorage.getItem("authToken");
-
-    try {
-      if (!token) {
-        const nt = await refreshToken();
-        if (nt) { token = nt; localStorage.setItem("authToken", token); }
-        else { throw new Error("Auth required."); }
-      }
-      const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
-      const form = new FormData();
-      form.append("senderId", senderId);
-      form.append("file", file);
-      let res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, });
-      if (res.status === 401 || res.status === 403) {
-        const nt = await refreshToken();
-        if (nt) { token = nt; localStorage.setItem("authToken", token); res = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, }); }
-        else { throw new Error("Refresh token failed"); }
-      }
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.message || `Lỗi ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.code === 1000 && data.result) {
-        toast.success(`Đã gửi ${file.name}!`, { id: tId });
-        const sentMessage = { ...data.result, senderName: "Bạn" } as Message;
-        setChatMessages(prevMessages => {
-            const filteredMessages = prevMessages.filter(msg => msg.id !== sentMessage.id);
-            return [...filteredMessages, sentMessage].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
-        });
-        setChatConversations((prevList) => {
-          const idx = prevList.findIndex((c) => String(c.id) === String(groupId));
+          const idx = prevList.findIndex(
+            (c) => String(c.id) === String(groupId)
+          );
           if (idx === -1) return prevList;
           const updatedConvo = {
             ...prevList[idx],
-            message: `Đã gửi: ${sentMessage.fileName || "File"}`,
-            sentAt: sentMessage.sentAt,
-            lastMessageSenderId: sentMessage.senderId,
+            message:
+              actualMessageFromServer.content ??
+              `Đã gửi: ${actualMessageFromServer.fileName || "File"}`,
+            sentAt: actualMessageFromServer.sentAt,
+            lastMessageSenderId: actualMessageFromServer.senderId,
             lastMessageSenderName: "Bạn",
           };
-          const newList = prevList.filter(c => String(c.id) !== String(groupId));
+          const newList = prevList.filter(
+            (c) => String(c.id) !== String(groupId)
+          );
           newList.unshift(updatedConvo);
-          return newList.sort((a, b) => (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime()));
+          return newList.sort(
+            (a, b) =>
+              new Date(b.sentAt || 0).getTime() -
+              new Date(a.sentAt || 0).getTime()
+          );
         });
-        return sentMessage;
-      } else {
-        throw new Error(data.message || `Gửi thất bại ${file.name}.`);
+        return actualMessageFromServer;
+      } catch (error: any) {
+        toast.error(`Gửi thất bại: ${error.message}`);
+        if (tempMessageId) {
+          setChatMessages((prev) => prev.filter((m) => m.id !== tempMessageId));
+        }
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        )
+          router.push("/login?sessionExpired=true");
+        return null;
+      } finally {
+        setIsProcessingChatAction(false);
       }
-    } catch (error: any) {
-      toast.error(`Gửi thất bại: ${error.message}`, { id: tId });
-      if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) {
-        router.push("/login?sessionExpired=true");
-      }
-      return null;
-    } finally {
-      setIsProcessingChatAction(false);
-    }
-  }, [user?.id, refreshToken, router]);
+    },
+    [user?.id, refreshToken, router]
+  );
 
-  const handleDeleteMessageChatAPI = useCallback(async (messageId: string, userIdParam: string, currentGroupId: string | number): Promise<boolean> => {
-    if(!user?.id || userIdParam !== user.id) { toast.error("Không có quyền xóa hoặc người dùng không hợp lệ."); return false;}
-    setIsProcessingChatAction(true); const toastId = toast.loading("Đang xóa tin nhắn...");
-    let token = localStorage.getItem("authToken");
-    try {
-        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+  const handleSendFileChatAPI = useCallback(
+    async (
+      groupId: string,
+      senderId: string,
+      file: File
+    ): Promise<Message | null> => {
+      if (!user?.id) {
+        toast.error("Người dùng không hợp lệ.");
+        return null;
+      }
+      setIsProcessingChatAction(true);
+      const tId = toast.loading(`Đang tải lên ${file.name}...`);
+      let token = localStorage.getItem("authToken");
+
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            localStorage.setItem("authToken", token);
+          } else {
+            throw new Error("Auth required.");
+          }
+        }
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
+        const form = new FormData();
+        form.append("senderId", senderId);
+        form.append("file", file);
+        let res = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+        if (res.status === 401 || res.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            localStorage.setItem("authToken", token);
+            res = await fetch(url, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+              body: form,
+            });
+          } else {
+            throw new Error("Refresh token failed");
+          }
+        }
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || `Lỗi ${res.status}`);
+        }
+        const data = await res.json();
+        if (data.code === 1000 && data.result) {
+          toast.success(`Đã gửi ${file.name}!`, { id: tId });
+          const sentMessage = { ...data.result, senderName: "Bạn" } as Message;
+          setChatMessages((prevMessages) => {
+            const filteredMessages = prevMessages.filter(
+              (msg) => msg.id !== sentMessage.id
+            );
+            return [...filteredMessages, sentMessage].sort(
+              (a, b) =>
+                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+            );
+          });
+          setChatConversations((prevList) => {
+            const idx = prevList.findIndex(
+              (c) => String(c.id) === String(groupId)
+            );
+            if (idx === -1) return prevList;
+            const updatedConvo = {
+              ...prevList[idx],
+              message: `Đã gửi: ${sentMessage.fileName || "File"}`,
+              sentAt: sentMessage.sentAt,
+              lastMessageSenderId: sentMessage.senderId,
+              lastMessageSenderName: "Bạn",
+            };
+            const newList = prevList.filter(
+              (c) => String(c.id) !== String(groupId)
+            );
+            newList.unshift(updatedConvo);
+            return newList.sort(
+              (a, b) =>
+                new Date(b.sentAt || 0).getTime() -
+                new Date(a.sentAt || 0).getTime()
+            );
+          });
+          return sentMessage;
+        } else {
+          throw new Error(data.message || `Gửi thất bại ${file.name}.`);
+        }
+      } catch (error: any) {
+        toast.error(`Gửi thất bại: ${error.message}`, { id: tId });
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        ) {
+          router.push("/login?sessionExpired=true");
+        }
+        return null;
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    [user?.id, refreshToken, router]
+  );
+
+  const handleDeleteMessageChatAPI = useCallback(
+    async (
+      messageId: string,
+      userIdParam: string,
+      currentGroupId: string | number
+    ): Promise<boolean> => {
+      if (!user?.id || userIdParam !== user.id) {
+        toast.error("Không có quyền xóa hoặc người dùng không hợp lệ.");
+        return false;
+      }
+      setIsProcessingChatAction(true);
+      const toastId = toast.loading("Đang xóa tin nhắn...");
+      let token = localStorage.getItem("authToken");
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) token = nt;
+          else throw new Error("Auth required.");
+        }
         const url = `http://localhost:8080/identity/api/events/messages/${messageId}?userId=${userIdParam}`;
-        let response = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
-         if (response.status === 401 || response.status === 403) {
-             const nt = await refreshToken(); if (nt) {token = nt; response = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });}
-             else throw new Error("Refresh token failed");
+        let response = await fetch(url, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.status === 401 || response.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            response = await fetch(url, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else throw new Error("Refresh token failed");
         }
         const responseText = await response.text();
         let responseData;
-        try { responseData = responseText ? JSON.parse(responseText) : { code: response.ok ? 1000 : 0 }; }
-        catch (e) { if (response.ok && !responseText) responseData = { code: 1000 }; else throw new Error("Phản hồi xóa không hợp lệ."); }
-        if (!response.ok && responseData.code !== 1000) throw new Error(responseData.message || `Lỗi ${response.status}`);
+        try {
+          responseData = responseText
+            ? JSON.parse(responseText)
+            : { code: response.ok ? 1000 : 0 };
+        } catch (e) {
+          if (response.ok && !responseText) responseData = { code: 1000 };
+          else throw new Error("Phản hồi xóa không hợp lệ.");
+        }
+        if (!response.ok && responseData.code !== 1000)
+          throw new Error(responseData.message || `Lỗi ${response.status}`);
         toast.success("Đã xóa tin nhắn!", { id: toastId });
 
         let newLastMessage: Message | null = null;
         setChatMessages((prevMessages) => {
-            const remaining = prevMessages.filter((msg) => msg.id !== messageId);
-            if (remaining.length > 0) newLastMessage = remaining[remaining.length - 1];
-            return remaining;
+          const remaining = prevMessages.filter((msg) => msg.id !== messageId);
+          if (remaining.length > 0)
+            newLastMessage = remaining[remaining.length - 1];
+          return remaining;
         });
         setChatConversations((prevList) => {
-            const idx = prevList.findIndex((c) => String(c.id) === String(currentGroupId));
-            if (idx === -1) return prevList;
-            const senderDetails = selectedChatConversation?.participants?.find(p => p.id === newLastMessage?.senderId) || (newLastMessage ? chatUserCache[newLastMessage.senderId] : null);
-            const senderName = newLastMessage ? (newLastMessage.senderId === user?.id ? "Bạn" : getChatDisplayName(senderDetails, newLastMessage.senderName)) : undefined;
-            const updatedConvo = {
-                ...prevList[idx],
-                message: newLastMessage ? (newLastMessage.content ?? `Đã gửi: ${newLastMessage.fileName || "File"}`) : "Chưa có tin nhắn",
-                sentAt: newLastMessage?.sentAt, lastMessageSenderId: newLastMessage?.senderId, lastMessageSenderName: senderName,
-            };
-            const newList = prevList.filter(c => String(c.id) !== String(currentGroupId));
-            newList.unshift(updatedConvo); return newList.sort((a, b) => (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime()));
+          const idx = prevList.findIndex(
+            (c) => String(c.id) === String(currentGroupId)
+          );
+          if (idx === -1) return prevList;
+          const senderDetails =
+            selectedChatConversation?.participants?.find(
+              (p) => p.id === newLastMessage?.senderId
+            ) ||
+            (newLastMessage ? chatUserCache[newLastMessage.senderId] : null);
+          const senderName = newLastMessage
+            ? newLastMessage.senderId === user?.id
+              ? "Bạn"
+              : getChatDisplayName(senderDetails, newLastMessage.senderName)
+            : undefined;
+          const updatedConvo = {
+            ...prevList[idx],
+            message: newLastMessage
+              ? newLastMessage.content ??
+                `Đã gửi: ${newLastMessage.fileName || "File"}`
+              : "Chưa có tin nhắn",
+            sentAt: newLastMessage?.sentAt,
+            lastMessageSenderId: newLastMessage?.senderId,
+            lastMessageSenderName: senderName,
+          };
+          const newList = prevList.filter(
+            (c) => String(c.id) !== String(currentGroupId)
+          );
+          newList.unshift(updatedConvo);
+          return newList.sort(
+            (a, b) =>
+              new Date(b.sentAt || 0).getTime() -
+              new Date(a.sentAt || 0).getTime()
+          );
         });
         return true;
-    } catch (error: any) {
+      } catch (error: any) {
         toast.error(`Xóa thất bại: ${error.message}`, { id: toastId });
-        if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        )
+          router.push("/login?sessionExpired=true");
         return false;
-    } finally {
+      } finally {
         setIsProcessingChatAction(false);
-    }
-  }, [user?.id, refreshToken, router, selectedChatConversation?.participants, chatUserCache, getChatDisplayName]);
+      }
+    },
+    [
+      user?.id,
+      refreshToken,
+      router,
+      selectedChatConversation?.participants,
+      chatUserCache,
+      getChatDisplayName,
+    ]
+  );
 
-  const handleDownloadFileChatAPI = useCallback(async (messageId: string, fileName?: string | null) => {
-    if (!messageId || !user?.id) { toast.error("Thông tin không hợp lệ."); return; }
-    setDownloadingChatFileId(messageId);
-    const tId = toast.loading(`Đang tải ${fileName || "tệp"}...`);
-    let token = localStorage.getItem("authToken");
-    try {
-        if (!token) { const nt = await refreshToken(); if (nt) token = nt; else throw new Error("Auth required.");}
+  const handleDownloadFileChatAPI = useCallback(
+    async (messageId: string, fileName?: string | null) => {
+      if (!messageId || !user?.id) {
+        toast.error("Thông tin không hợp lệ.");
+        return;
+      }
+      setDownloadingChatFileId(messageId);
+      const tId = toast.loading(`Đang tải ${fileName || "tệp"}...`);
+      let token = localStorage.getItem("authToken");
+      try {
+        if (!token) {
+          const nt = await refreshToken();
+          if (nt) token = nt;
+          else throw new Error("Auth required.");
+        }
         const url = `http://localhost:8080/identity/api/events/messages/${messageId}/download`;
-        let res = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
-         if (res.status === 401 || res.status === 403) {
-             const nt = await refreshToken(); if (nt) {token = nt; res = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}` } });}
-             else throw new Error("Refresh token failed");
+        let res = await fetch(url, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401 || res.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            res = await fetch(url, {
+              method: "GET",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else throw new Error("Refresh token failed");
         }
         if (!res.ok) {
-            const e = await res.json().catch(()=>({message: `Lỗi tải xuống: ${res.status}`}));
-            throw new Error(e.message || `Lỗi tải xuống: ${res.status}`);
+          const e = await res
+            .json()
+            .catch(() => ({ message: `Lỗi tải xuống: ${res.status}` }));
+          throw new Error(e.message || `Lỗi tải xuống: ${res.status}`);
         }
-        const disposition = res.headers.get("content-disposition"); let finalFName = fileName || "downloaded_file";
+        const disposition = res.headers.get("content-disposition");
+        let finalFName = fileName || "downloaded_file";
         if (disposition) {
-            const m = disposition.match(/filename\*?=['"]?([^'";]+)['"]?/i);
-            if (m && m[1]) {
-                const encoded = m[1];
-                if (encoded.toLowerCase().startsWith("utf-8''")) finalFName = decodeURIComponent(encoded.substring(7));
-                else { try { finalFName = decodeURIComponent(escape(encoded)); } catch (e) { finalFName = encoded; } }
+          const m = disposition.match(/filename\*?=['"]?([^'";]+)['"]?/i);
+          if (m && m[1]) {
+            const encoded = m[1];
+            if (encoded.toLowerCase().startsWith("utf-8''"))
+              finalFName = decodeURIComponent(encoded.substring(7));
+            else {
+              try {
+                finalFName = decodeURIComponent(escape(encoded));
+              } catch (e) {
+                finalFName = encoded;
+              }
             }
+          }
         }
-        const blob = await res.blob(); const dlUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.style.display = "none"; a.href = dlUrl; a.download = finalFName;
-        document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(dlUrl); a.remove();
+        const blob = await res.blob();
+        const dlUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = dlUrl;
+        a.download = finalFName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(dlUrl);
+        a.remove();
         toast.success(`Đã tải ${finalFName}!`, { id: tId });
-    } catch (error: any) {
-        toast.error(`Tải thất bại: ${error.message || "Lỗi không xác định"}`, { id: tId });
-        if (error.message?.includes("Auth required") || error.message?.includes("Refresh token failed")) router.push("/login?sessionExpired=true");
-    } finally {
+      } catch (error: any) {
+        toast.error(`Tải thất bại: ${error.message || "Lỗi không xác định"}`, {
+          id: tId,
+        });
+        if (
+          error.message?.includes("Auth required") ||
+          error.message?.includes("Refresh token failed")
+        )
+          router.push("/login?sessionExpired=true");
+      } finally {
         setDownloadingChatFileId(null);
-    }
-  }, [user?.id, refreshToken, router]);
+      }
+    },
+    [user?.id, refreshToken, router]
+  );
 
   const fetchNews = useCallback(async () => {
     setIsLoadingNews(true);
@@ -809,7 +1392,7 @@ export default function HomeGuest() {
           rejectionReason: item.rejectionReason,
         }));
         setNewsItems(fmt);
-        if(activeTab === 'news') toast.success("Đã làm mới bảng tin!");
+        if (activeTab === "news") toast.success("Đã làm mới bảng tin!");
       } else {
         throw new Error(d.message || "Lỗi định dạng dữ liệu tin tức");
       }
@@ -817,7 +1400,10 @@ export default function HomeGuest() {
       console.error("Lỗi fetchNews (HomeGuest):", e);
       setErrorNews(e.message || "Lỗi tải tin tức.");
       setNewsItems([]);
-      if(activeTab === 'news') toast.error(`Làm mới bảng tin thất bại: ${e.message || 'Lỗi không xác định'}`);
+      if (activeTab === "news")
+        toast.error(
+          `Làm mới bảng tin thất bại: ${e.message || "Lỗi không xác định"}`
+        );
     } finally {
       setIsLoadingNews(false);
     }
@@ -879,14 +1465,20 @@ export default function HomeGuest() {
             attendees: e.attendees || [],
           }));
         setAllEvents(fmt);
-         if(activeTab === 'home') toast.success("Đã làm mới danh sách sự kiện!");
+        if (activeTab === "home")
+          console.log("HomeGuest mounted. Attempting a test toast.");
+
+        toast.success("Đã làm mới danh sách sự kiện!");
       } else {
         throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
       }
     } catch (e: any) {
       console.error("Lỗi fetchAllEvents (HomeGuest):", e);
       setErrorEvents(e.message || "Lỗi tải sự kiện.");
-      if(activeTab === 'home') toast.error(`Làm mới sự kiện thất bại: ${e.message || 'Lỗi không xác định'}`);
+      if (activeTab === "home")
+        toast.error(
+          `Làm mới sự kiện thất bại: ${e.message || "Lỗi không xác định"}`
+        );
     } finally {
       setIsLoadingEvents(false);
     }
@@ -981,7 +1573,7 @@ export default function HomeGuest() {
           err.message?.includes("Unauthorized") ||
           err.message?.includes("Refresh Failed")
         ) {
-         router.push("/login?sessionExpired=true");
+          router.push("/login?sessionExpired=true");
         }
       } finally {
         setIsLoadingCreatedEventIds(false);
@@ -1098,14 +1690,19 @@ export default function HomeGuest() {
                 cache: "no-store",
               });
             } else {
-              throw new Error("Unauthorized or Refresh Failed during user fetch");
+              throw new Error(
+                "Unauthorized or Refresh Failed during user fetch"
+              );
             }
           }
 
           if (!userRes.ok) {
-              const errorText = await userRes.text();
-              const errorJson = errorText ? JSON.parse(errorText) : {};
-              throw new Error(errorJson.message || `Workspace user info failed: ${userRes.status}`);
+            const errorText = await userRes.text();
+            const errorJson = errorText ? JSON.parse(errorText) : {};
+            throw new Error(
+              errorJson.message ||
+                `Workspace user info failed: ${userRes.status}`
+            );
           }
 
           const userData = await userRes.json();
@@ -1124,7 +1721,10 @@ export default function HomeGuest() {
         setUser(null);
         userIdForFetches = null;
         tokenForSubFetches = null;
-        if (error.message?.includes("Unauthorized or Refresh Failed") || error.message?.includes("Workspace user info failed")) {
+        if (
+          error.message?.includes("Unauthorized or Refresh Failed") ||
+          error.message?.includes("Workspace user info failed")
+        ) {
           localStorage.removeItem("authToken");
           localStorage.removeItem("refreshToken");
           router.push("/login?sessionExpired=true");
@@ -1188,14 +1788,18 @@ export default function HomeGuest() {
 
       socket.on("disconnect", (reason) => {
         console.log("SOCKET (HomeGuest): Đã ngắt kết nối - Lý do:", reason);
-         if (reason === "io server disconnect") {
-           toast.error("Mất kết nối máy chủ thông báo.", {id: "socket-disconnect"});
+        if (reason === "io server disconnect") {
+          toast.error("Mất kết nối máy chủ thông báo.", {
+            id: "socket-disconnect",
+          });
         }
       });
 
       socket.on("connect_error", (error) => {
         console.error("SOCKET (HomeGuest): Lỗi kết nối:", error);
-        toast.error("Không thể kết nối máy chủ thông báo.", {id: "socket-error"});
+        toast.error("Không thể kết nối máy chủ thông báo.", {
+          id: "socket-error",
+        });
       });
 
       socket.on("notification", (data: any) => {
@@ -1224,69 +1828,129 @@ export default function HomeGuest() {
         }
       });
 
-      socket.on("global_chat_notification", (payload: ChatMessageNotificationPayload) => {
-        if (!user) return;
-        setGlobalChatPayloadForTab(payload);
+      socket.on(
+        "global_chat_notification",
+        (payload: ChatMessageNotificationPayload) => {
+          if (!user) return;
+          setGlobalChatPayloadForTab(payload);
 
-        if (payload.senderId !== user.id) {
-            let notificationDisplayContent = payload.actualMessageContent || payload.messageContentPreview || "Có tin nhắn mới";
+          if (payload.senderId !== user.id) {
+            let notificationDisplayContent =
+              payload.actualMessageContent ||
+              payload.messageContentPreview ||
+              "Có tin nhắn mới";
             if (payload.messageType === "FILE" && payload.fileName) {
-                notificationDisplayContent = `Đã gửi một tệp: ${payload.fileName}`;
+              notificationDisplayContent = `Đã gửi một tệp: ${payload.fileName}`;
             } else if (payload.messageType === "IMAGE") {
-                notificationDisplayContent = "Đã gửi một hình ảnh.";
+              notificationDisplayContent = "Đã gửi một hình ảnh.";
             } else if (payload.messageType === "VIDEO") {
-                notificationDisplayContent = "Đã gửi một video.";
+              notificationDisplayContent = "Đã gửi một video.";
             } else if (payload.messageType === "AUDIO") {
-                notificationDisplayContent = "Đã gửi một đoạn âm thanh.";
+              notificationDisplayContent = "Đã gửi một đoạn âm thanh.";
             }
-            toast(`💬 ${payload.senderName}: ${notificationDisplayContent.substring(0, 50)}${notificationDisplayContent.length > 50 ? "..." : ""}`, { duration: 4000 });
+            toast(
+              `💬 ${payload.senderName}: ${notificationDisplayContent.substring(
+                0,
+                50
+              )}${notificationDisplayContent.length > 50 ? "..." : ""}`,
+              { duration: 4000 }
+            );
             const chatNotification: NotificationItem = {
-                id: `chat-${payload.messageId}-${Date.now()}`,
-                title: `Tin nhắn mới từ ${payload.senderName} (Nhóm: ${payload.groupName})`,
-                content: notificationDisplayContent.substring(0, 150) + (notificationDisplayContent.length > 150 ? "..." : ""),
-                type: "NEW_CHAT_MESSAGE", read: false, createdAt: payload.sentAt || new Date().toISOString(),
-                relatedId: payload.groupId, userId: user.id,
+              id: `chat-${payload.messageId}-${Date.now()}`,
+              title: `Tin nhắn mới từ ${payload.senderName} (Nhóm: ${payload.groupName})`,
+              content:
+                notificationDisplayContent.substring(0, 150) +
+                (notificationDisplayContent.length > 150 ? "..." : ""),
+              type: "NEW_CHAT_MESSAGE",
+              read: false,
+              createdAt: payload.sentAt || new Date().toISOString(),
+              relatedId: payload.groupId,
+              userId: user.id,
             };
-            setNotifications((prevNotifications) => [chatNotification, ...prevNotifications].slice(0, 15));
-        }
+            setNotifications((prevNotifications) =>
+              [chatNotification, ...prevNotifications].slice(0, 15)
+            );
+          }
 
-        if (selectedChatConversation && String(selectedChatConversation.id) === String(payload.groupId)) {
+          if (
+            selectedChatConversation &&
+            String(selectedChatConversation.id) === String(payload.groupId)
+          ) {
             const newMessageFromServer: Message = {
-                id: payload.messageId, content: payload.actualMessageContent, senderId: payload.senderId,
-                senderName: payload.senderName, sentAt: payload.sentAt, groupId: payload.groupId,
-                fileName: payload.fileName, fileUrl: payload.fileUrl, fileSize: payload.fileSize,
-                type: payload.messageType || "TEXT",
+              id: payload.messageId,
+              content: payload.actualMessageContent,
+              senderId: payload.senderId,
+              senderName: payload.senderName,
+              sentAt: payload.sentAt,
+              groupId: payload.groupId,
+              fileName: payload.fileName,
+              fileUrl: payload.fileUrl,
+              fileSize: payload.fileSize,
+              type: payload.messageType || "TEXT",
             };
-            setChatMessages(prevMessages => {
-                const existingMessageIndex = prevMessages.findIndex(msg => msg.id === newMessageFromServer.id);
-                if (existingMessageIndex > -1) {
-                    const updatedMessages = [...prevMessages];
-                    updatedMessages[existingMessageIndex] = { ...updatedMessages[existingMessageIndex], ...newMessageFromServer };
-                    return updatedMessages.sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
-                } else {
-                    return [...prevMessages, newMessageFromServer].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
-                }
+            setChatMessages((prevMessages) => {
+              const existingMessageIndex = prevMessages.findIndex(
+                (msg) => msg.id === newMessageFromServer.id
+              );
+              if (existingMessageIndex > -1) {
+                const updatedMessages = [...prevMessages];
+                updatedMessages[existingMessageIndex] = {
+                  ...updatedMessages[existingMessageIndex],
+                  ...newMessageFromServer,
+                };
+                return updatedMessages.sort(
+                  (a, b) =>
+                    new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+                );
+              } else {
+                return [...prevMessages, newMessageFromServer].sort(
+                  (a, b) =>
+                    new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+                );
+              }
             });
-        }
-        setChatConversations(prevList => {
-            const idx = prevList.findIndex(c => String(c.id) === String(payload.groupId));
-            if (idx === -1) { fetchChatConversationsAPI(); return prevList; }
+          }
+          setChatConversations((prevList) => {
+            const idx = prevList.findIndex(
+              (c) => String(c.id) === String(payload.groupId)
+            );
+            if (idx === -1) {
+              fetchChatConversationsAPI();
+              return prevList;
+            }
 
-            let lastMessageDisplay = payload.actualMessageContent || payload.messageContentPreview || "Có tin nhắn mới";
-            if (payload.messageType === "FILE" && payload.fileName) lastMessageDisplay = `Đã gửi tệp: ${payload.fileName}`;
-            else if (payload.messageType === "IMAGE") lastMessageDisplay = "Đã gửi hình ảnh.";
-            else if (payload.messageType === "VIDEO") lastMessageDisplay = "Đã gửi video.";
-            else if (payload.messageType === "AUDIO") lastMessageDisplay = "Đã gửi đoạn âm thanh.";
+            let lastMessageDisplay =
+              payload.actualMessageContent ||
+              payload.messageContentPreview ||
+              "Có tin nhắn mới";
+            if (payload.messageType === "FILE" && payload.fileName)
+              lastMessageDisplay = `Đã gửi tệp: ${payload.fileName}`;
+            else if (payload.messageType === "IMAGE")
+              lastMessageDisplay = "Đã gửi hình ảnh.";
+            else if (payload.messageType === "VIDEO")
+              lastMessageDisplay = "Đã gửi video.";
+            else if (payload.messageType === "AUDIO")
+              lastMessageDisplay = "Đã gửi đoạn âm thanh.";
 
             const updatedConvo = {
-                ...prevList[idx], message: lastMessageDisplay, sentAt: payload.sentAt,
-                lastMessageSenderId: payload.senderId, lastMessageSenderName: payload.senderName,
+              ...prevList[idx],
+              message: lastMessageDisplay,
+              sentAt: payload.sentAt,
+              lastMessageSenderId: payload.senderId,
+              lastMessageSenderName: payload.senderName,
             };
-            const newList = prevList.filter(c => String(c.id) !== String(payload.groupId));
+            const newList = prevList.filter(
+              (c) => String(c.id) !== String(payload.groupId)
+            );
             newList.unshift(updatedConvo);
-            return newList.sort((a, b) => (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime()));
-        });
-      });
+            return newList.sort(
+              (a, b) =>
+                new Date(b.sentAt || 0).getTime() -
+                new Date(a.sentAt || 0).getTime()
+            );
+          });
+        }
+      );
     }
 
     return () => {
@@ -1300,7 +1964,16 @@ export default function HomeGuest() {
         socketRef.current = null;
       }
     };
-  }, [user, toast, selectedChatConversation, fetchChatConversationsAPI, setGlobalChatPayloadForTab, setNotifications, getChatDisplayName, chatUserCache]); // Added getChatDisplayName and chatUserCache if used by senderName logic
+  }, [
+    user,
+    toast,
+    selectedChatConversation,
+    fetchChatConversationsAPI,
+    setGlobalChatPayloadForTab,
+    setNotifications,
+    getChatDisplayName,
+    chatUserCache,
+  ]); // Added getChatDisplayName and chatUserCache if used by senderName logic
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1348,7 +2021,7 @@ export default function HomeGuest() {
       setChatMessages([]);
       setChatUserCache({});
       setActiveTab("home");
-      window.location.reload();
+      router.push("/login");
     }
   };
 
@@ -1500,7 +2173,7 @@ export default function HomeGuest() {
 
   const handleEventClick = (event: EventDisplayInfo) => setSelectedEvent(event);
   const handleBackToList = () => setSelectedEvent(null);
-  
+
   const refreshNewsList = useCallback(() => {
     fetchNews();
   }, [fetchNews]);
@@ -1554,82 +2227,88 @@ export default function HomeGuest() {
     }
   };
   const handleOpenCreateNewsModalForGuest = () => {
-  if (!user) {
-    toast.error("Vui lòng đăng nhập để tạo tin tức.");
-    router.push("/login");
-    return;
-  }
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để tạo tin tức.");
+      router.push("/login");
+      return;
+    }
 
-  toast.custom((t) => (
-    <div
-      className={`${
-        t.visible ? 'animate-enter' : 'animate-leave'
-      } max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
-    >
-      <div className="flex-1 w-0 p-4">
-        <div className="flex items-start">
-          <div className="ml-3 flex-1">
-            <p className="text-sm font-medium text-gray-900">
-              Thông báo
-            </p>
-            <p className="mt-1 text-sm text-gray-500">
-              Chức năng tạo tin tức không có sẵn ở giao diện này. Vui lòng sử dụng trang quản lý (nếu có quyền).
-            </p>
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? "animate-enter" : "animate-leave"
+          } max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+        >
+          <div className="flex-1 w-0 p-4">
+            <div className="flex items-start">
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-medium text-gray-900">Thông báo</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Chức năng tạo tin tức không có sẵn ở giao diện này. Vui lòng
+                  sử dụng trang quản lý (nếu có quyền).
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex border-l border-gray-200">
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              Đóng
+            </button>
           </div>
         </div>
-      </div>
-      <div className="flex border-l border-gray-200">
-        <button
-          onClick={() => toast.dismiss(t.id)}
-          className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          Đóng
-        </button>
-      </div>
-    </div>
-  ), { duration: 6000});
-};
+      ),
+      { duration: 6000 }
+    );
+  };
 
-const handleOpenEditNewsModalForGuest = (newsItem: NewsItem) => {
-  if (!user) {
-    toast.error("Vui lòng đăng nhập để chỉnh sửa tin tức.");
-    router.push("/login");
-    return;
-  }
-  toast.custom((t) => (
-     <div
-      className={`${
-        t.visible ? 'animate-enter' : 'animate-leave'
-      } max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
-    >
-      <div className="flex-1 w-0 p-4">
-        <div className="flex items-start">
-          <div className="ml-3 flex-1">
-            <p className="text-sm font-medium text-gray-900">
-              Thông báo
-            </p>
-            <p className="mt-1 text-sm text-gray-500">
-              Chức năng chỉnh sửa tin tức "{newsItem.title}" không có sẵn ở giao diện này. Vui lòng sử dụng trang quản lý (nếu có quyền).
-            </p>
+  const handleOpenEditNewsModalForGuest = (newsItem: NewsItem) => {
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để chỉnh sửa tin tức.");
+      router.push("/login");
+      return;
+    }
+    toast.custom(
+      (t) => (
+        <div
+          className={`${
+            t.visible ? "animate-enter" : "animate-leave"
+          } max-w-md w-full bg-white shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+        >
+          <div className="flex-1 w-0 p-4">
+            <div className="flex items-start">
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-medium text-gray-900">Thông báo</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Chức năng chỉnh sửa tin tức "{newsItem.title}" không có sẵn ở
+                  giao diện này. Vui lòng sử dụng trang quản lý (nếu có quyền).
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex border-l border-gray-200">
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              Đóng
+            </button>
           </div>
         </div>
-      </div>
-      <div className="flex border-l border-gray-200">
-        <button
-          onClick={() => toast.dismiss(t.id)}
-          className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-indigo-600 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          Đóng
-        </button>
-      </div>
-    </div>
-  ), { duration: 8000});
-};
+      ),
+      { duration: 8000 }
+    );
+  };
 
   const unreadNotificationCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications]
   );
+
+  const isPageLoading = !initializedRef.current || isLoadingUser;
 
   const getTabButtonClasses = (tabName: ActiveTab): string => {
     const base =
@@ -1722,24 +2401,23 @@ const handleOpenEditNewsModalForGuest = (newsItem: NewsItem) => {
               Giới thiệu
             </span>
             <span
-              className="cursor-pointer hover:text-gray-300 transition-colors"
+              className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
             >
               Liên hệ
             </span>
-            {initializedRef.current &&
-              !isLoadingUser &&
-              (user ? (
-                <UserMenu user={user} onLogout={handleLogout} />
-              ) : (
-                <Link href="/login">
-                  <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer transition-colors">
-                    Đăng nhập
-                  </span>
-                </Link>
-              ))}
+            {initializedRef.current && !isLoadingUser && (
+              <UserMenu user={user} onLogout={handleLogout} />
+            )}
             {(!initializedRef.current || isLoadingUser) && (
               <span className="text-gray-400">Đang tải...</span>
+            )}
+            {initializedRef.current && !isLoadingUser && !user && (
+              <Link href="/login">
+                <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
+                  Đăng nhập
+                </span>
+              </Link>
             )}
           </div>
         </div>
@@ -1748,24 +2426,23 @@ const handleOpenEditNewsModalForGuest = (newsItem: NewsItem) => {
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30">
         <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
           {tabs.map((tab) => {
-             const showTabButton =
-             !tab.requiresAuth ||
-             (tab.requiresAuth && initializedRef.current && user);
-           
-           if (!showTabButton && tab.requiresAuth && !user && isLoadingUser && !initializedRef.current) return null;
+            const showTabButton =
+              !tab.requiresAuth ||
+              (tab.requiresAuth && initializedRef.current && user);
+
+            if (
+              !showTabButton &&
+              tab.requiresAuth &&
+              !user &&
+              isLoadingUser &&
+              !initializedRef.current
+            )
+              return null;
 
             return (
               <div key={tab.id} className="relative flex flex-col items-center">
                 <button
-                  onClick={() => {
-                    if (tab.requiresAuth && !user) {
-                      toast.error("Vui lòng đăng nhập để xem mục này.");
-                      router.push("/login");
-                    } else {
-                      setActiveTab(tab.id as ActiveTab);
-                    }
-                  }}
-                  disabled={tab.requiresAuth && !user && isLoadingUser}
+                  onClick={() => setActiveTab(tab.id as ActiveTab)}
                   className={getTabButtonClasses(tab.id as ActiveTab)}
                 >
                   {tab.label}
@@ -1776,155 +2453,169 @@ const handleOpenEditNewsModalForGuest = (newsItem: NewsItem) => {
                       tab.id as ActiveTab
                     )} border-r-[6px] border-r-transparent`}
                     style={{ left: "50%", transform: "translateX(-50%)" }}
-                  >
-                  </div>
+                  ></div>
                 )}
               </div>
             );
           })}
-          {initializedRef.current &&
+          {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
             !user &&
-            !isLoadingUser &&
-            tabs.some((t) => t.requiresAuth) && (
+            initializedRef.current &&
+            !isLoadingUser && (
               <span className="text-sm text-gray-500 italic p-2 self-center">
-                (Đăng nhập để xem các mục khác)
+                Đăng nhập để xem các mục khác
               </span>
             )}
         </div>
       </div>
-      
+
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
-        {isLoadingUser && (activeTab === "registeredEvents" || activeTab === "members" || activeTab === "chatList") && (
-          <p className="text-center text-gray-500 italic py-6">Đang tải thông tin người dùng...</p>
-        )}
-
-        <div style={{ display: activeTab === "home" ? "block" : "none" }}>
-          <HomeTabContent
-            allEvents={allEvents}
-            isLoadingEvents={isLoadingEvents}
-            errorEvents={errorEvents}
-            registeredEventIds={registeredEventIds}
-            createdEventIds={createdEventIds}
-            user={user}
-            isLoadingRegisteredIds={isLoadingRegisteredIds}
-            isLoadingCreatedEventIds={isLoadingCreatedEventIds}
-            isRegistering={isRegistering}
-            onRegister={handleRegister}
-            onEventClick={handleEventClick}
-            selectedEvent={selectedEvent}
-            onBackToList={handleBackToList}
-            search={search}
-            setSearch={setSearch}
-            sortOption={sortOption}
-            setSortOption={setSortOption}
-            timeFilterOption={timeFilterOption}
-            setTimeFilterOption={setTimeFilterOption}
-            refreshToken={refreshToken}
-            onRefreshEvents={fetchAllEvents}
-            newsItems={newsItems}
-            isLoadingNews={isLoadingNews}
-            errorNews={errorNews}
-            refreshNewsList={refreshNewsList}
-          />
-        </div>
-
-        <div style={{ display: activeTab === "news" ? "block" : "none" }}>
-          <NewsTabContent
-            newsItems={newsItems}
-            isLoading={isLoadingNews}
-            error={errorNews}
-            user={user}
-            onNewsDeleted={refreshNewsList}
-            onRefreshNews={fetchNews}
-            onOpenCreateModal={handleOpenCreateNewsModalForGuest}
-            onOpenEditModal={handleOpenEditNewsModalForGuest} 
-          />
-        </div>
-        
-        {!isLoadingUser && user && (
+        {isLoadingUser &&
+        (activeTab === "registeredEvents" ||
+          activeTab === "members" ||
+          activeTab === "chatList") ? (
+          <p className="text-center text-gray-500 italic py-6">
+            Đang tải thông tin người dùng...
+          </p>
+        ) : (
           <>
-            <div style={{ display: activeTab === "registeredEvents" ? "block" : "none" }}>
+            {activeTab === "home" && (
+              <HomeTabContent
+                allEvents={allEvents}
+                isLoadingEvents={isLoadingEvents}
+                errorEvents={errorEvents}
+                registeredEventIds={registeredEventIds}
+                createdEventIds={createdEventIds}
+                user={user}
+                isLoadingRegisteredIds={isLoadingRegisteredIds}
+                isLoadingCreatedEventIds={isLoadingCreatedEventIds}
+                isRegistering={isRegistering}
+                onRegister={handleRegister}
+                onEventClick={handleEventClick}
+                selectedEvent={selectedEvent}
+                onBackToList={handleBackToList}
+                search={search}
+                setSearch={setSearch}
+                sortOption={sortOption}
+                setSortOption={setSortOption}
+                timeFilterOption={timeFilterOption}
+                setTimeFilterOption={setTimeFilterOption}
+                refreshToken={refreshToken}
+                onRefreshEvents={fetchAllEvents}
+                newsItems={newsItems}
+                isLoadingNews={isLoadingNews}
+                errorNews={errorNews}
+                refreshNewsList={refreshNewsList}
+              />
+            )}
+
+            {activeTab === "news" && (
+              <NewsTabContent
+                newsItems={newsItems}
+                isLoading={isLoadingNews}
+                error={errorNews}
+                user={user}
+                onNewsDeleted={refreshNewsList}
+                onRefreshNews={fetchNews}
+                onOpenCreateModal={handleOpenCreateNewsModalForGuest}
+                onOpenEditModal={handleOpenEditNewsModalForGuest}
+              />
+            )}
+
+            {user && activeTab === "registeredEvents" && (
               <RegisteredEventsTabContent
                 currentUserId={user.id}
-                isLoadingUserId={false} 
+                isLoadingUserId={false}
                 registeredEventIds={registeredEventIds}
                 createdEventIds={createdEventIds}
                 onRegistrationChange={handleRegistrationChange}
               />
-            </div>
+            )}
 
-            <div style={{ display: activeTab === "members" ? "block" : "none" }}>
+            {user && activeTab === "members" && (
               <MembersTabContent
                 user={user}
                 userRole={user.roles?.[0]?.name?.toUpperCase() || "GUEST"}
                 currentUserEmail={user.email || null}
-                onSessionExpired={() => router.push("/login?sessionExpired=true")}
+                onSessionExpired={() =>
+                  router.push("/login?sessionExpired=true")
+                }
                 refreshToken={refreshToken}
               />
-            </div>
+            )}
 
-            <div style={{ display: activeTab === "chatList" ? "block" : "none" }}>
-              {(isLoadingChatConversations && chatConversations.length === 0 && !errorChatConversations) && (
-                 <p className="text-center text-gray-500 italic py-6">Đang tải danh sách trò chuyện...</p>
-              )}
-              {errorChatConversations && chatConversations.length === 0 && (
-                 <p className="text-center text-red-500 italic py-6">{errorChatConversations}</p>
-              )}
-              {(!isLoadingChatConversations || chatConversations.length > 0 || errorChatConversations) && (
-                <ChatTabContent
-                  currentUser={user}
-                  globalChatMessagePayload={globalChatPayloadForTab}
-                  conversations={chatConversations}
-                  isLoadingConversations={isLoadingChatConversations}
-                  errorConversations={errorChatConversations}
-                  fetchConversations={fetchChatConversationsAPI}
-                  setConversations={setChatConversations}
-                  selectedConversation={selectedChatConversation}
-                  setSelectedConversation={setSelectedChatConversation}
-                  isLoadingDetails={isLoadingChatDetails}
-                  fetchGroupChatDetails={fetchGroupChatDetailsAPI}
-                  messages={chatMessages}
-                  isLoadingMessages={isLoadingChatMessages}
-                  errorMessages={errorChatMessages}
-                  fetchMessages={fetchChatMessagesAPI}
-                  setMessages={setChatMessages}
-                  mediaMessages={chatMediaMessages}
-                  fileMessages={chatFileMessages}
-                  audioMessages={chatAudioMessages}
-                  isLoadingMedia={isLoadingChatMedia}
-                  isLoadingFiles={isLoadingChatFiles}
-                  isLoadingAudio={isLoadingChatAudio}
-                  errorMedia={errorChatMedia}
-                  errorFiles={errorChatFiles}
-                  errorAudio={errorChatAudio}
-                  fetchMediaMessages={fetchChatMediaMessagesAPI}
-                  fetchFileMessages={fetchChatFileMessagesAPI}
-                  fetchAudioMessages={fetchChatAudioMessagesAPI}
-                  setMediaMessages={setChatMediaMessages}
-                  setFileMessages={setChatFileMessages}
-                  setAudioMessages={setChatAudioMessages}
-                  userCache={chatUserCache}
-                  fetchUserDetailsWithCache={fetchChatUserDetailsWithCache}
-                  getDisplayName={getChatDisplayName}
-                  handleRemoveMember={handleRemoveMemberChatAPI}
-                  handleLeaveGroup={handleLeaveGroupChatAPI}
-                  handleSendMessageAPI={handleSendMessageChatAPI}
-                  handleSendFileAPI={handleSendFileChatAPI}
-                  handleDeleteMessageAPI={handleDeleteMessageChatAPI}
-                  handleDownloadFileAPI={handleDownloadFileChatAPI}
-                  isProcessingChatAction={isProcessingChatAction}
-                  downloadingFileId={downloadingChatFileId}
-                  setDownloadingFileId={setDownloadingChatFileId}
-                />
-              )}
-            </div>
+            {user && activeTab === "chatList" && (
+              <>
+                {isLoadingChatConversations &&
+                  chatConversations.length === 0 &&
+                  !errorChatConversations && (
+                    <p className="text-center text-gray-500 italic py-6">
+                      Đang tải danh sách trò chuyện...
+                    </p>
+                  )}
+                {errorChatConversations && chatConversations.length === 0 && (
+                  <p className="text-center text-red-500 italic py-6">
+                    {errorChatConversations}
+                  </p>
+                )}
+                {(!isLoadingChatConversations ||
+                  chatConversations.length > 0 ||
+                  errorChatConversations) && (
+                  <ChatTabContent
+                    currentUser={user}
+                    globalChatMessagePayload={globalChatPayloadForTab}
+                    conversations={chatConversations}
+                    isLoadingConversations={isLoadingChatConversations}
+                    errorConversations={errorChatConversations}
+                    fetchConversations={fetchChatConversationsAPI}
+                    setConversations={setChatConversations}
+                    selectedConversation={selectedChatConversation}
+                    setSelectedConversation={setSelectedChatConversation}
+                    isLoadingDetails={isLoadingChatDetails}
+                    fetchGroupChatDetails={fetchGroupChatDetailsAPI}
+                    messages={chatMessages}
+                    isLoadingMessages={isLoadingChatMessages}
+                    errorMessages={errorChatMessages}
+                    fetchMessages={fetchChatMessagesAPI}
+                    setMessages={setChatMessages}
+                    mediaMessages={chatMediaMessages}
+                    fileMessages={chatFileMessages}
+                    audioMessages={chatAudioMessages}
+                    isLoadingMedia={isLoadingChatMedia}
+                    isLoadingFiles={isLoadingChatFiles}
+                    isLoadingAudio={isLoadingChatAudio}
+                    errorMedia={errorChatMedia}
+                    errorFiles={errorChatFiles}
+                    errorAudio={errorChatAudio}
+                    fetchMediaMessages={fetchChatMediaMessagesAPI}
+                    fetchFileMessages={fetchChatFileMessagesAPI}
+                    fetchAudioMessages={fetchChatAudioMessagesAPI}
+                    setMediaMessages={setChatMediaMessages}
+                    setFileMessages={setChatFileMessages}
+                    setAudioMessages={setChatAudioMessages}
+                    userCache={chatUserCache}
+                    fetchUserDetailsWithCache={fetchChatUserDetailsWithCache}
+                    getDisplayName={getChatDisplayName}
+                    handleRemoveMember={handleRemoveMemberChatAPI}
+                    handleLeaveGroup={handleLeaveGroupChatAPI}
+                    handleSendMessageAPI={handleSendMessageChatAPI}
+                    handleSendFileAPI={handleSendFileChatAPI}
+                    handleDeleteMessageAPI={handleDeleteMessageChatAPI}
+                    handleDownloadFileAPI={handleDownloadFileChatAPI}
+                    isProcessingChatAction={isProcessingChatAction}
+                    downloadingFileId={downloadingChatFileId}
+                    setDownloadingFileId={setDownloadingChatFileId}
+                  />
+                )}
+              </>
+            )}
+
+            {tabs.find((t) => t.id === activeTab)?.requiresAuth && !user && (
+              <p className="text-center text-red-500 py-6">
+                Vui lòng đăng nhập để truy cập mục này.
+              </p>
+            )}
           </>
-        )}
-
-        {!isLoadingUser && !user && tabs.find((t) => t.id === activeTab)?.requiresAuth && (
-          <p className="text-center text-red-500 py-6">
-            Vui lòng đăng nhập để truy cập mục này.
-          </p>
         )}
       </div>
 
@@ -1945,9 +2636,7 @@ const handleOpenEditNewsModalForGuest = (newsItem: NewsItem) => {
             <BellIcon className="h-6 w-6" aria-hidden="true" />
             {unreadNotificationCount > 0 && (
               <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white transform translate-x-1/4 -translate-y-1/4 ring-2 ring-white pointer-events-none">
-                {unreadNotificationCount > 9
-                  ? "9+"
-                  : unreadNotificationCount}
+                {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
               </span>
             )}
           </button>
@@ -1977,8 +2666,8 @@ const handleOpenEditNewsModalForGuest = (newsItem: NewsItem) => {
           setConfirmationState((prev) => ({ ...prev, isOpen: false }));
         }}
         onCancel={() => {
-            if(confirmationState.onCancel) confirmationState.onCancel();
-            else setConfirmationState((prev) => ({ ...prev, isOpen: false }));
+          if (confirmationState.onCancel) confirmationState.onCancel();
+          else setConfirmationState((prev) => ({ ...prev, isOpen: false }));
         }}
       />
       {showContactModal && (

@@ -26,7 +26,7 @@ import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
 import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
-import { BellIcon } from "@radix-ui/react-icons";
+import { BellIcon ,ChevronLeftIcon,ChevronRightIcon} from "@radix-ui/react-icons";
 
 import {
   Role,
@@ -36,7 +36,7 @@ import {
 } from "./types/appTypes";
 
 import {
-  ChatMessageNotificationPayload, // Đã được cập nhật ở file ChatTabContentTypes.ts
+  ChatMessageNotificationPayload, 
   MainConversationType,
   Message,
   ApiUserDetail,
@@ -56,8 +56,11 @@ type ActiveTab =
   | "registeredEvents"
   | "members"
   | "chatList";
-
+const OTHER_TABS_PER_PAGE_MOBILE = 3;
+const OTHER_TABS_PER_PAGE_DESKTOP = 5;
 export default function UserHome() {
+    const [currentTabSetPage, setCurrentTabSetPage] = useState(0);
+  
   const [search, setSearch] = useState("");
   const [allEvents, setAllEvents] = useState<EventDisplayInfo[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
@@ -137,9 +140,21 @@ export default function UserHome() {
   const [errorChatAudio, setErrorChatAudio] = useState<string | null>(null);
   const [isProcessingChatAction, setIsProcessingChatAction] = useState<boolean>(false);
   const [downloadingChatFileId, setDownloadingChatFileId] = useState<string | null>(null);
+  const [isMobileView, setIsMobileView] = useState(false);
 
-  // ... (GIỮ NGUYÊN CÁC HÀM fetchChatUserDetailsWithCache, getChatDisplayName, và các hàm fetch API khác)
-  // ... (fetchChatConversationsAPI, fetchChatMessagesAPI, etc.)
+  useEffect(() => {
+      const checkMobileView = () => {
+        setIsMobileView(window.innerWidth < 768);
+      };
+      checkMobileView();
+      window.addEventListener("resize", checkMobileView);
+      return () => window.removeEventListener("resize", checkMobileView);
+    }, []);
+  
+    const TABS_PER_PAGE = isMobileView
+      ? OTHER_TABS_PER_PAGE_MOBILE
+      : OTHER_TABS_PER_PAGE_DESKTOP;
+  
   const fetchChatUserDetailsWithCache = useCallback(async (userId: string, token: string | null): Promise<ApiUserDetail | null> => { 
     if (chatUserCache[userId]) { 
       return chatUserCache[userId]; 
@@ -1513,8 +1528,48 @@ export default function UserHome() {
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true }, 
     { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true }, 
   ]; 
+ 
+  const totalOtherTabPages = Math.ceil(tabs.length / TABS_PER_PAGE);
+const currentVisibleOtherTabs = useMemo(() => {
+    // Đảm bảo currentTabSetPage không vượt quá giới hạn sau khi TABS_PER_PAGE thay đổi
+    const adjustedCurrentPage = Math.min(
+      currentTabSetPage,
+      Math.max(0, totalOtherTabPages - 1)
+    );
+    if (currentTabSetPage !== adjustedCurrentPage) {
+      setCurrentTabSetPage(adjustedCurrentPage); // Cập nhật state nếu cần
+    }
 
+    const startIndex = adjustedCurrentPage * TABS_PER_PAGE;
+    const endIndex = startIndex + TABS_PER_PAGE;
+    return tabs.slice(startIndex, endIndex);
+  }, [tabs, currentTabSetPage, TABS_PER_PAGE, totalOtherTabPages]);
 
+  // Cập nhật lại currentTabSetPage nếu nó trở nên không hợp lệ khi TABS_PER_PAGE thay đổi (ví dụ khi resize)
+  useEffect(() => {
+    const newTotalPages = Math.ceil(tabs.length / TABS_PER_PAGE);
+    if (currentTabSetPage >= newTotalPages && newTotalPages > 0) {
+      setCurrentTabSetPage(newTotalPages - 1);
+    } else if (newTotalPages === 0 && currentTabSetPage !== 0) {
+      setCurrentTabSetPage(0);
+    }
+  }, [TABS_PER_PAGE, tabs.length, currentTabSetPage]);
+
+  const handleNextTabs = () => {
+    setCurrentTabSetPage((prevPage) =>
+      Math.min(prevPage + 1, totalOtherTabPages - 1)
+    );
+  };
+
+  const handlePrevTabs = () => {
+    setCurrentTabSetPage((prevPage) => Math.max(prevPage - 1, 0));
+  };
+
+  const showPrevButton =
+    currentTabSetPage > 0 && tabs.length > TABS_PER_PAGE;
+  const showNextButton =
+    currentTabSetPage < totalOtherTabPages - 1 &&
+    tabs.length > TABS_PER_PAGE;
   return ( 
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative"> 
       <Toaster toastOptions={{ duration: 3000 }} position="top-center" /> 
@@ -1552,7 +1607,7 @@ export default function UserHome() {
       </nav> 
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30 "> 
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3"> 
-          {tabs.map((tab) => { 
+          {/* {tabs.map((tab) => { 
             const showTab = 
               !tab.requiresAuth || (tab.requiresAuth && initializedRef.current && user); 
               if (tab.requiresAuth && (!initializedRef.current || isLoadingUser || !user)) { 
@@ -1584,7 +1639,75 @@ export default function UserHome() {
               <span className="text-sm text-gray-500 italic p-2 self-center"> 
                 Đăng nhập để xem các mục khác 
               </span> 
-            )} 
+            )}  */}
+            {tabs.length > 0 && (
+                        <div className="flex items-center grow justify-center min-w-0">
+                          {showPrevButton && (
+                            <button
+                              onClick={handlePrevTabs}
+                              className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0"
+                              aria-label="Các tab trước"
+                            >
+                              <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
+                            </button>
+                          )}
+                          {!showPrevButton && tabs.length > TABS_PER_PAGE && (
+                            <div className="w-[36px] h-[36px] shrink-0"></div> // Placeholder để giữ layout
+                          )}
+            
+                          <div
+                            className={`flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible ${
+                              !showPrevButton &&
+                              !showNextButton &&
+                              tabs.length > TABS_PER_PAGE
+                                ? "mx-auto"
+                                : ""
+                            } ${
+                              (showPrevButton && !showNextButton) ||
+                              (!showPrevButton && showNextButton)
+                                ? "flex-grow justify-center"
+                                : ""
+                            }`}
+                          >
+                            {currentVisibleOtherTabs.map((tab) => (
+                              <div
+                                key={tab.id}
+                                className="relative flex flex-col items-center"
+                              >
+                                <button
+                                  onClick={() => setActiveTab(tab.id as ActiveTab)}
+                                  className={`${getTabButtonClasses(tab.id as ActiveTab)} ${
+                                    isMobileView ? "px-2 text-[11px]" : ""
+                                  }`}
+                                >
+                                  {tab.label}
+                                </button>
+                                {activeTab === tab.id && (
+                                  <div
+                                    className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
+                                      tab.id as ActiveTab
+                                    )} border-r-[6px] border-r-transparent`}
+                                    style={{ left: "50%", transform: "translateX(-50%)" }}
+                                  ></div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+            
+                          {showNextButton && (
+                            <button
+                              onClick={handleNextTabs}
+                              className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0"
+                              aria-label="Các tab kế tiếp"
+                            >
+                              <ChevronRightIcon className="h-5 w-5 text-gray-600" />
+                            </button>
+                          )}
+                          {!showNextButton && tabs.length > TABS_PER_PAGE && (
+                            <div className="w-[36px] h-[36px] shrink-0"></div> // Placeholder
+                          )}
+                        </div>
+                      )}
         </div> 
       </div> 
 

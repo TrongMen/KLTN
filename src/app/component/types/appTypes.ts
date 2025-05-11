@@ -153,6 +153,7 @@ interface OrganizerInfo {
   firstName?: string;
   lastName?: string;
   fullName?: string;
+  resolvedName?: string;
 }
 
 interface ParticipantInfo {
@@ -163,23 +164,19 @@ interface ParticipantInfo {
   fullName?: string;
   lastName?: string;
   firstName?: string;
+  resolvedName?: string;
 }
 
 
 export interface PersonDetail {
-  id: string;           // ID chính của người dùng từ API /users (ví dụ: FetchedPersonAPIResponse.id)
-  userId: string;       // userId gốc từ danh sách organizers/participants, đảm bảo là string
-  name?: string;         // Tên hiển thị đầy đủ (ví dụ: "Hồ Trọng Mến")
+  id: string;           
+  userId: string;       
+  name?: string;         
   username?: string;
   firstName?: string;
   lastName?: string;
-  
-  // Vị trí/vai trò CHUNG của người dùng từ profile của họ (qua fetchPersonDetailAPI)
   profilePositionName?: string; 
   profileRoleName?: string;     
-
-  // Vị trí/vai trò CỤ THỂ của người này TRONG SỰ KIỆN ĐANG XEM
-  // (Lấy từ initialInfo trong enrichPeopleArray, tức là từ BackendOrganizerOrParticipant)
   eventSpecificRoleName?: string;
   eventSpecificPositionName?: string;
 }

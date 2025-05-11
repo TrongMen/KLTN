@@ -28,11 +28,23 @@ import CreateNewsModal, {
 import NotificationDropdown, {
   NotificationItem,
 } from "../component/NotificationDropdown";
-import { BellIcon } from "@radix-ui/react-icons";
+import {
+  BellIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@radix-ui/react-icons";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
-
+import {
+  ChatMessageNotificationPayload,
+  MainConversationType,
+  Message,
+  ApiUserDetail,
+  ApiGroupChatListItem,
+  ApiGroupChatDetail,
+  Participant as ChatParticipant,
+} from "./tabs/chat/ChatTabContentTypes";
 import {
   Role,
   User,
@@ -40,21 +52,25 @@ import {
   NewsItem,
   Conversation,
   Participant,
-} from "./types/appTypes"; 
-
-
-
+} from "./types/appTypes";
+import CreateEventTabContent from "./tabs/CreateEventTabContent";
+import StatisticTabContent from "./tabs/StatisticTabContent";
 
 type ActiveTab =
   | "home"
   | "news"
+  | "myNews"
+  | "createEvent"
   | "approval"
   | "myEvents"
   | "attendees"
   | "members"
   | "roles"
   | "chatList"
-  | "myActivities"; // Thêm tab mới
+  | "statistic";
+
+const OTHER_TABS_PER_PAGE_MOBILE = 3;
+const OTHER_TABS_PER_PAGE_DESKTOP = 5;
 
 export default function HomeAdmin() {
   const [search, setSearch] = useState("");
@@ -64,18 +80,31 @@ export default function HomeAdmin() {
   const [selectedEvent, setSelectedEvent] = useState<EventDisplayInfo | null>(
     null
   );
-  const [registeredEventIds, setRegisteredEventIds] = useState<Set<string>>(
-      new Set()
-    );
-    const [isLoadingCreatedEventIds, setIsLoadingCreatedEventIds] =
-        useState<boolean>(true);
-    
-      const [isLoadingRegisteredIds, setIsLoadingRegisteredIds] =
-        useState<boolean>(true);
+  const [chatUserCache, setChatUserCache] = useState<
+    Record<string, ApiUserDetail>
+  >({});
 
-        const [createdEventIds, setCreatedEventIds] = useState<Set<string>>(
-            new Set()
-          );
+  const [isRegistering, setIsRegistering] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+
+  const [chatConversations, setChatConversations] = useState<
+    MainConversationType[]
+  >([]);
+  const [selectedChatConversation, setSelectedChatConversation] =
+    useState<MainConversationType | null>(null);
+
+  const [registeredEventIds, setRegisteredEventIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [isLoadingCreatedEventIds, setIsLoadingCreatedEventIds] =
+    useState<boolean>(true);
+
+  const [isLoadingRegisteredIds, setIsLoadingRegisteredIds] =
+    useState<boolean>(true);
+
+  const [createdEventIds, setCreatedEventIds] = useState<Set<string>>(
+    new Set()
+  );
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState<boolean>(true);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -112,57 +141,968 @@ export default function HomeAdmin() {
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
   const notificationContainerRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
-  const [sessionStatus, setSessionStatus] = useState<
-    "active" | "expired" | "error"
-  >("active");
+  const [globalChatPayloadForTab, setGlobalChatPayloadForTab] =
+    useState<ChatMessageNotificationPayload | null>(null);
+  const initializedRef = useRef(false);
   const router = useRouter();
+  const { refreshToken } = useRefreshToken();
 
-  const { refreshToken, refreshing } = useRefreshToken();
-  const [appIsInitialized, setAppIsInitialized] = useState(false);
-
+  const [currentTabSetPage, setCurrentTabSetPage] = useState(0);
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [isLoadingChatConversations, setIsLoadingChatConversations] =
+    useState<boolean>(true);
+  const [errorChatConversations, setErrorChatConversations] = useState<
+    string | null
+  >(null);
+  const [isLoadingChatDetails, setIsLoadingChatDetails] =
+    useState<boolean>(false);
+  const [isLoadingChatMessages, setIsLoadingChatMessages] =
+    useState<boolean>(false);
+  const [errorChatMessages, setErrorChatMessages] = useState<string | null>(
+    null
+  );
+  const [chatMediaMessages, setChatMediaMessages] = useState<Message[]>([]);
+  const [chatFileMessages, setChatFileMessages] = useState<Message[]>([]);
+  const [chatAudioMessages, setChatAudioMessages] = useState<Message[]>([]);
+  const [isLoadingChatMedia, setIsLoadingChatMedia] = useState<boolean>(false);
+  const [isLoadingChatFiles, setIsLoadingChatFiles] = useState<boolean>(false);
+  const [isLoadingChatAudio, setIsLoadingChatAudio] = useState<boolean>(false);
+  const [errorChatMedia, setErrorChatMedia] = useState<string | null>(null);
+  const [errorChatFiles, setErrorChatFiles] = useState<string | null>(null);
+  const [errorChatAudio, setErrorChatAudio] = useState<string | null>(null);
+  const [isProcessingChatAction, setIsProcessingChatAction] =
+    useState<boolean>(false);
+  const [downloadingChatFileId, setDownloadingChatFileId] = useState<
+    string | null
+  >(null);
   useEffect(() => {
-    if (sessionStatus === "expired") {
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem("authenticatedUser");
-      setUser(null);
-      setAllEvents([]);
-      setNewsItems([]);
-      setNotifications([]);
-      setActiveTab("home");
-      if (router) {
-        router.push("/login?sessionExpired=true&role=admin");
-      }
-    } else if (sessionStatus === "error") {
-      toast.error(
-        "Đã có lỗi trong phiên làm việc hoặc xác thực, vui lòng đăng nhập lại."
-      );
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem("authenticatedUser");
-      setUser(null);
-      if (router) {
-        router.push("/login?sessionError=true&role=admin");
-      }
-    }
-  }, [sessionStatus, router]);
-
-  const createAuthFailureHandler = (
-    stopLoading?: () => void,
-    setErrorState?: (msg: string | null) => void
-  ) => {
-    return (errorType: "expired" | "error" = "expired") => {
-      if (isMountedRef.current) {
-        setSessionStatus(errorType);
-      }
-      if (stopLoading) stopLoading();
-      if (setErrorState && isMountedRef.current)
-        setErrorState(
-          errorType === "expired" ? "Phiên đăng nhập hết hạn." : "Lỗi xác thực."
-        );
+    const checkMobileView = () => {
+      setIsMobileView(window.innerWidth < 768);
     };
-  };
+    checkMobileView();
+    window.addEventListener("resize", checkMobileView);
+    return () => window.removeEventListener("resize", checkMobileView);
+  }, []);
 
+  const TABS_PER_PAGE = isMobileView
+    ? OTHER_TABS_PER_PAGE_MOBILE
+    : OTHER_TABS_PER_PAGE_DESKTOP;
+
+  const fetchChatUserDetailsWithCache = useCallback(
+    async (
+      userId: string,
+      token: string | null
+    ): Promise<ApiUserDetail | null> => {
+      if (chatUserCache[userId]) {
+        return chatUserCache[userId];
+      }
+      if (!token && !user?.id) {
+        return null;
+      }
+      const effectiveToken = token || localStorage.getItem("authToken");
+      if (!effectiveToken) {
+        return null;
+      }
+      try {
+        const userUrl = `http://localhost:8080/identity/users/notoken/${userId}`;
+        const userRes = await fetch(userUrl, {
+          headers: { Authorization: `Bearer ${effectiveToken}` },
+        });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          if (userData.code === 1000 && userData.result) {
+            const userDetail = userData.result as ApiUserDetail;
+            setChatUserCache((prev) => ({ ...prev, [userId]: userDetail }));
+            return userDetail;
+          }
+        }
+      } catch (err) {}
+      return null;
+    },
+    [chatUserCache, user?.id]
+  );
+
+  const getChatDisplayName = useCallback(
+    (
+      detail: ApiUserDetail | ChatParticipant | null,
+      fallbackName?: string
+    ): string => {
+      if (!detail) return fallbackName || "Người dùng không xác định";
+      if ("firstName" in detail || "lastName" in detail) {
+        const apiDetail = detail as ApiUserDetail;
+        const fullName = `${apiDetail.lastName || ""} ${
+          apiDetail.firstName || ""
+        }`.trim();
+        return (
+          fullName ||
+          apiDetail.username ||
+          fallbackName ||
+          `User (${String(apiDetail.id).substring(0, 4)})`
+        );
+      } else if (
+        "name" in detail &&
+        "id" in detail &&
+        typeof detail.id !== "undefined"
+      ) {
+        // Ensure it's ChatParticipant
+        const participantDetail = detail as ChatParticipant;
+        return (
+          participantDetail.name ||
+          fallbackName ||
+          `User (${String(participantDetail.id).substring(0, 4)})`
+        );
+      }
+      return fallbackName || "Người dùng không xác định";
+    },
+    []
+  );
+
+  const fetchChatConversationsAPI = useCallback(async () => {
+    if (!user?.id) {
+      setErrorChatConversations("Thông tin người dùng không hợp lệ.");
+      setIsLoadingChatConversations(false);
+      setChatConversations([]);
+      return;
+    }
+    setIsLoadingChatConversations(true);
+    setErrorChatConversations(null);
+    const userId = user.id;
+    let token: string | null = null;
+    try {
+      token = localStorage.getItem("authToken");
+      if (!token) throw new Error("Yêu cầu xác thực.");
+
+      const listUrl = `http://localhost:8080/identity/api/events/group-chats/user/${userId}`;
+      const listResponse = await fetch(listUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!listResponse.ok)
+        throw new Error(`Lỗi ${listResponse.status} khi tải danh sách nhóm.`);
+      const listData = await listResponse.json();
+      if (listData.code !== 1000 || !Array.isArray(listData.result)) {
+        throw new Error(
+          listData.message || "Dữ liệu danh sách nhóm không hợp lệ."
+        );
+      }
+
+      const groupBaseInfo: {
+        id: string;
+        name: string;
+        groupLeaderId: string | null;
+        avatar: string;
+      }[] = listData.result.map((g: ApiGroupChatListItem) => ({
+        id: g.id,
+        name: g.name,
+        groupLeaderId: g.groupLeaderId,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          g.name
+        )}&background=random&font-size=0.4`,
+      }));
+
+      if (groupBaseInfo.length === 0) {
+        setChatConversations([]);
+        setIsLoadingChatConversations(false);
+        return;
+      }
+      const tempUserCacheForConversations: Record<string, ApiUserDetail> = {};
+      const conversationPromises = groupBaseInfo.map(async (groupInfo) => {
+        let lastMessageContent = "Chưa có tin nhắn";
+        let sentAt: string | undefined = undefined;
+        let lastMessageSenderId: string | undefined = undefined;
+        let lastMessageSenderNameDisplay: string | undefined = undefined;
+
+        try {
+          const messagesUrl = `http://localhost:8080/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
+          const messagesResponse = await fetch(messagesUrl, {
+            headers: { Authorization: `Bearer ${token!}` },
+          });
+          if (messagesResponse.ok) {
+            const messagesData = await messagesResponse.json();
+            const messagesResult =
+              messagesData.result?.content || messagesData.result;
+            if (
+              messagesData.code === 1000 &&
+              Array.isArray(messagesResult) &&
+              messagesResult.length > 0
+            ) {
+              const lastMessage = messagesResult[0] as Message;
+              lastMessageContent =
+                lastMessage.content ??
+                `Đã gửi: ${lastMessage.fileName || "File"}`;
+              sentAt = lastMessage.sentAt;
+              lastMessageSenderId = lastMessage.senderId;
+
+              if (lastMessage.senderId === user.id) {
+                lastMessageSenderNameDisplay = "Bạn";
+              } else {
+                let userDetail =
+                  tempUserCacheForConversations[lastMessage.senderId] ||
+                  chatUserCache[lastMessage.senderId];
+                if (!userDetail && token) {
+                  const fetchedDetail = await fetchChatUserDetailsWithCache(
+                    lastMessage.senderId,
+                    token
+                  );
+                  if (fetchedDetail) {
+                    tempUserCacheForConversations[lastMessage.senderId] =
+                      fetchedDetail;
+                    userDetail = fetchedDetail;
+                  }
+                }
+                lastMessageSenderNameDisplay = getChatDisplayName(
+                  userDetail,
+                  lastMessage.senderName ||
+                    `User (${lastMessage.senderId.substring(0, 4)})`
+                );
+              }
+            }
+          } else {
+            lastMessageContent = "Lỗi tải tin nhắn";
+          }
+        } catch (err) {
+          lastMessageContent = "Lỗi tải tin nhắn";
+        }
+        return {
+          id: groupInfo.id,
+          name: groupInfo.name,
+          isGroup: true,
+          groupLeaderId: groupInfo.groupLeaderId,
+          avatar: groupInfo.avatar,
+          participants: [],
+          message: lastMessageContent,
+          sentAt: sentAt,
+          lastMessageSenderId: lastMessageSenderId,
+          lastMessageSenderName: lastMessageSenderNameDisplay,
+        };
+      });
+
+      const resolvedConversations = await Promise.all(conversationPromises);
+      if (Object.keys(tempUserCacheForConversations).length > 0) {
+        setChatUserCache((prev) => ({
+          ...prev,
+          ...tempUserCacheForConversations,
+        }));
+      }
+
+      const sortedChats = resolvedConversations.sort(
+        (a, b) =>
+          (b.sentAt ? new Date(b.sentAt).getTime() : 0) -
+          (a.sentAt ? new Date(a.sentAt).getTime() : 0)
+      );
+      setChatConversations(sortedChats);
+    } catch (error: any) {
+      setErrorChatConversations(error.message || "Lỗi tải danh sách.");
+      toast.error(error.message || "Lỗi tải danh sách.");
+      setChatConversations([]);
+    } finally {
+      setIsLoadingChatConversations(false);
+    }
+  }, [user, fetchChatUserDetailsWithCache, getChatDisplayName, chatUserCache]);
+
+  const fetchChatMessagesAPI = useCallback(
+    async (groupId: string) => {
+      if (!groupId || !user?.id) return;
+      setIsLoadingChatMessages(true);
+      setErrorChatMessages(null);
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        setErrorChatMessages("Yêu cầu xác thực.");
+        setIsLoadingChatMessages(false);
+        toast.error("Yêu cầu xác thực để tải tin nhắn.");
+        return;
+      }
+      try {
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          let eMsg = `Lỗi ${response.status}`;
+          try {
+            const errData = await response.json();
+            eMsg = errData.message || eMsg;
+          } catch {}
+          throw new Error(eMsg);
+        }
+        const data = await response.json();
+        if (data.code === 1000 && data.result) {
+          let fetchedMessages: Message[] = [];
+          if (Array.isArray(data.result)) fetchedMessages = data.result;
+          else if (data.result.content && Array.isArray(data.result.content))
+            fetchedMessages = data.result.content;
+          else
+            throw new Error("Định dạng dữ liệu tin nhắn không hợp lệ từ API.");
+
+          const tempMsgUserCache: Record<string, ApiUserDetail> = {};
+          const messagesWithSenderNames = await Promise.all(
+            fetchedMessages.map(async (msg) => {
+              if (msg.senderId === user.id)
+                return { ...msg, senderName: "Bạn" };
+              if (
+                msg.senderName &&
+                msg.senderName.includes(" ") &&
+                !msg.senderName.startsWith("User (")
+              )
+                return msg;
+              let senderDetail =
+                tempMsgUserCache[msg.senderId] ||
+                chatUserCache[msg.senderId] ||
+                selectedChatConversation?.participants?.find(
+                  (p) => p.id === msg.senderId
+                );
+              if (!senderDetail && token) {
+                const fetchedDetail = await fetchChatUserDetailsWithCache(
+                  msg.senderId,
+                  token
+                );
+                if (fetchedDetail) {
+                  tempMsgUserCache[msg.senderId] = fetchedDetail;
+                  senderDetail = fetchedDetail;
+                }
+              }
+              const displayName = getChatDisplayName(
+                senderDetail,
+                msg.senderName || `User (${msg.senderId.substring(0, 4)})`
+              );
+              return { ...msg, senderName: displayName };
+            })
+          );
+          if (Object.keys(tempMsgUserCache).length > 0) {
+            setChatUserCache((prev) => ({ ...prev, ...tempMsgUserCache }));
+          }
+          const sortedMessages = messagesWithSenderNames.sort(
+            (a, b) =>
+              new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+          );
+          setChatMessages(sortedMessages);
+        } else if (
+          data.code === 1000 &&
+          ((Array.isArray(data.result) && data.result.length === 0) ||
+            (data.result.content &&
+              Array.isArray(data.result.content) &&
+              data.result.content.length === 0))
+        ) {
+          setChatMessages([]);
+        } else
+          throw new Error(
+            data.message || "Định dạng dữ liệu tin nhắn không hợp lệ"
+          );
+      } catch (error: any) {
+        setErrorChatMessages(error.message || "Lỗi tải tin nhắn.");
+        toast.error(`Lỗi tải tin nhắn: ${error.message}`);
+        setChatMessages([]);
+      } finally {
+        setIsLoadingChatMessages(false);
+      }
+    },
+    [
+      user,
+      chatUserCache,
+      fetchChatUserDetailsWithCache,
+      getChatDisplayName,
+      selectedChatConversation?.participants,
+    ]
+  );
+
+  const fetchGroupChatDetailsAPI = useCallback(
+    async (groupId: string) => {
+      if (!groupId || !user?.id) return;
+      setIsLoadingChatDetails(true);
+      const currentSummary = chatConversations.find(
+        (c) => String(c.id) === groupId
+      );
+      setSelectedChatConversation((prev) => ({
+        ...(prev || ({} as MainConversationType)),
+        ...(currentSummary || { id: groupId, name: "Đang tải..." }),
+        id: groupId,
+        participants: prev?.participants || [],
+      }));
+
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        toast.error("Yêu cầu xác thực.");
+        setIsLoadingChatDetails(false);
+        return;
+      }
+      try {
+        const groupUrl = `http://localhost:8080/identity/api/events/group-chats/${groupId}`;
+        const groupResponse = await fetch(groupUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!groupResponse.ok) {
+          let e = `Lỗi ${groupResponse.status}`;
+          try {
+            const d = await groupResponse.json();
+            e = d.message || e;
+          } catch {}
+          throw new Error(e);
+        }
+        const groupData = await groupResponse.json();
+        if (groupData.code !== 1000 || !groupData.result) {
+          throw new Error(groupData.message || "Không lấy được chi tiết nhóm.");
+        }
+        const groupDetailsApi = groupData.result as ApiGroupChatDetail;
+        const memberIds = new Set<string>(groupDetailsApi.memberIds || []);
+        if (groupDetailsApi.groupLeaderId)
+          memberIds.add(groupDetailsApi.groupLeaderId);
+
+        const tempDetailUserCache: Record<string, ApiUserDetail> = {};
+        const participantPromises = Array.from(memberIds).map(async (id) => {
+          let detail = chatUserCache[id];
+          if (!detail && token) {
+            const fetched = await fetchChatUserDetailsWithCache(id, token);
+            if (fetched) {
+              tempDetailUserCache[id] = fetched;
+              detail = fetched;
+            }
+          }
+          return detail;
+        });
+        const fetchedUserDetailsArray = (
+          await Promise.all(participantPromises)
+        ).filter(Boolean) as ApiUserDetail[];
+        if (Object.keys(tempDetailUserCache).length > 0) {
+          setChatUserCache((prev) => ({ ...prev, ...tempDetailUserCache }));
+        }
+
+        const finalParticipantList: ChatParticipant[] = Array.from(
+          memberIds
+        ).map((id) => {
+          const userDetail =
+            fetchedUserDetailsArray.find((u) => u.id === id) ||
+            chatUserCache[id];
+          const name = getChatDisplayName(
+            userDetail,
+            `User (${id.substring(0, 4)})`
+          );
+          const avatar =
+            userDetail?.avatar ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(
+              name.charAt(0) || "?"
+            )}&background=random&size=32`;
+          return { id, name, avatar };
+        });
+
+        setSelectedChatConversation((prev) => ({
+          ...(prev || ({} as MainConversationType)),
+          id: groupDetailsApi.id,
+          name: groupDetailsApi.name,
+          isGroup: true,
+          groupLeaderId: groupDetailsApi.groupLeaderId,
+          participants: finalParticipantList,
+          avatar:
+            prev?.avatar ||
+            currentSummary?.avatar ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(
+              groupDetailsApi.name
+            )}&background=random&font-size=0.4`,
+          message: prev?.message || currentSummary?.message || "...",
+          sentAt: prev?.sentAt || currentSummary?.sentAt,
+          lastMessageSenderId:
+            prev?.lastMessageSenderId || currentSummary?.lastMessageSenderId,
+          lastMessageSenderName:
+            prev?.lastMessageSenderName ||
+            currentSummary?.lastMessageSenderName,
+        }));
+      } catch (error: any) {
+        toast.error(`Lỗi tải chi tiết nhóm: ${error.message}`);
+        setSelectedChatConversation((prev) => ({
+          ...(prev || ({} as MainConversationType)),
+          id: groupId,
+          name: prev?.name || "Lỗi tải tên nhóm",
+          participants: prev?.participants || [],
+        }));
+      } finally {
+        setIsLoadingChatDetails(false);
+      }
+    },
+    [
+      chatConversations,
+      user,
+      fetchChatUserDetailsWithCache,
+      getChatDisplayName,
+      chatUserCache,
+    ]
+  );
+
+  const fetchChatMediaMessagesAPI = useCallback(async (groupId: string) => {
+    if (!groupId) return;
+    setIsLoadingChatMedia(true);
+    setErrorChatMedia(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      if (!token) throw new Error("Auth required.");
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/media`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let e = `Lỗi ${res.status}`;
+        try {
+          const d = await res.json();
+          e = d.message || e;
+        } catch {}
+        throw new Error(e);
+      }
+      const data = await res.json();
+      if (data.code === 1000 && Array.isArray(data.result))
+        setChatMediaMessages(data.result);
+      else if (
+        data.code === 1000 &&
+        Array.isArray(data.result) &&
+        data.result.length === 0
+      )
+        setChatMediaMessages([]);
+      else throw new Error(data.message || "Cannot load media list.");
+    } catch (error: any) {
+      setErrorChatMedia(error.message || "Error loading media.");
+      setChatMediaMessages([]);
+    } finally {
+      setIsLoadingChatMedia(false);
+    }
+  }, []);
+
+  const fetchChatFileMessagesAPI = useCallback(async (groupId: string) => {
+    if (!groupId) return;
+    setIsLoadingChatFiles(true);
+    setErrorChatFiles(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      if (!token) throw new Error("Auth required.");
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/files`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let e = `Lỗi ${res.status}`;
+        try {
+          const d = await res.json();
+          e = d.message || e;
+        } catch {}
+        throw new Error(e);
+      }
+      const data = await res.json();
+      if (data.code === 1000 && Array.isArray(data.result))
+        setChatFileMessages(data.result);
+      else if (
+        data.code === 1000 &&
+        Array.isArray(data.result) &&
+        data.result.length === 0
+      )
+        setChatFileMessages([]);
+      else throw new Error(data.message || "Cannot load file list.");
+    } catch (error: any) {
+      setErrorChatFiles(error.message || "Error loading files.");
+      setChatFileMessages([]);
+    } finally {
+      setIsLoadingChatFiles(false);
+    }
+  }, []);
+
+  const fetchChatAudioMessagesAPI = useCallback(async (groupId: string) => {
+    if (!groupId) return;
+    setIsLoadingChatAudio(true);
+    setErrorChatAudio(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      if (!token) throw new Error("Auth required.");
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audios`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let e = `Lỗi ${res.status}`;
+        try {
+          const d = await res.json();
+          e = d.message || e;
+        } catch {}
+        throw new Error(e);
+      }
+      const data = await res.json();
+      if (data.code === 1000 && Array.isArray(data.result))
+        setChatAudioMessages(data.result);
+      else if (
+        data.code === 1000 &&
+        Array.isArray(data.result) &&
+        data.result.length === 0
+      )
+        setChatAudioMessages([]);
+      else throw new Error(data.message || "Cannot load audio list.");
+    } catch (error: any) {
+      setErrorChatAudio(error.message || "Error loading audio.");
+      setChatAudioMessages([]);
+    } finally {
+      setIsLoadingChatAudio(false);
+    }
+  }, []);
+
+  const handleRemoveMemberChatAPI = useCallback(
+    async (groupId: string | number, memberId: string, leaderId: string) => {
+      if (!groupId || !memberId || !leaderId) {
+        toast.error("Missing info.");
+        return;
+      }
+      setIsProcessingChatAction(true);
+      const tId = toast.loading("Removing...");
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Auth required.");
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
+        const res = await fetch(url, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          let e = `Lỗi ${res.status}`;
+          try {
+            const d = await res.json();
+            e = d.message || e;
+          } catch {}
+          throw new Error(e);
+        }
+        toast.success("Removed!", { id: tId });
+        fetchGroupChatDetailsAPI(String(groupId));
+      } catch (error: any) {
+        toast.error(`Failed: ${error.message}`, { id: tId });
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    [fetchGroupChatDetailsAPI]
+  );
+
+  const handleLeaveGroupChatAPI = useCallback(
+    async (groupId: string | number, memberId: string) => {
+      if (!groupId || !memberId) {
+        toast.error("Missing info.");
+        return;
+      }
+      setIsProcessingChatAction(true);
+      const tId = toast.loading("Leaving...");
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Auth required.");
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          let e = `Lỗi ${res.status}`;
+          try {
+            const d = await res.json();
+            e = d.message || e;
+          } catch {}
+          throw new Error(e);
+        }
+        toast.success("Left group!", { id: tId });
+        setChatConversations((prev) =>
+          prev.filter((c) => String(c.id) !== String(groupId))
+        );
+        setSelectedChatConversation(null);
+      } catch (error: any) {
+        toast.error(`Failed: ${error.message}`, { id: tId });
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    []
+  );
+
+  const handleSendMessageChatAPI = useCallback(
+    async (
+      groupId: string,
+      senderId: string,
+      messageText: string,
+      tempMessageId: string
+    ): Promise<Message | null> => {
+      setIsProcessingChatAction(true);
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Auth required.");
+        if (!groupId) throw new Error("Group ID không tồn tại.");
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
+        const form = new FormData();
+        form.append("senderId", senderId);
+        form.append("content", messageText);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          let e = `Lỗi ${res.status}`;
+          e = data.message || e;
+          throw new Error(e);
+        }
+        if (!(data.code === 1000 && data.result && data.result.id)) {
+          throw new Error(
+            data.message ||
+              "Gửi thất bại, không có dữ liệu tin nhắn trả về hợp lệ."
+          );
+        }
+        const actualMessageFromServer = {
+          ...data.result,
+          senderName: "Bạn",
+        } as Message;
+
+        setChatConversations((prevList) => {
+          const idx = prevList.findIndex(
+            (c) => String(c.id) === String(groupId)
+          );
+          if (idx === -1) return prevList;
+          const updatedConvo = {
+            ...prevList[idx],
+            message:
+              actualMessageFromServer.content ??
+              `Đã gửi: ${actualMessageFromServer.fileName || "File"}`,
+            sentAt: actualMessageFromServer.sentAt,
+            lastMessageSenderId: actualMessageFromServer.senderId,
+            lastMessageSenderName: "Bạn",
+          };
+          const newList = prevList.filter(
+            (c) => String(c.id) !== String(groupId)
+          );
+          newList.unshift(updatedConvo);
+          return newList.sort(
+            (a, b) =>
+              new Date(b.sentAt || 0).getTime() -
+              new Date(a.sentAt || 0).getTime()
+          );
+        });
+        return actualMessageFromServer;
+      } catch (error: any) {
+        toast.error(`Gửi thất bại: ${error.message}`);
+        return null;
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    []
+  );
+
+  const handleSendFileChatAPI = useCallback(
+    async (
+      groupId: string,
+      senderId: string,
+      file: File
+    ): Promise<Message | null> => {
+      setIsProcessingChatAction(true);
+      const tId = toast.loading(`Uploading ${file.name}...`);
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Auth required.");
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
+        const form = new FormData();
+        form.append("senderId", senderId);
+        form.append("file", file);
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+        if (!res.ok) {
+          let e = `Lỗi ${res.status}`;
+          try {
+            const d = await res.json();
+            e = d.message || e;
+          } catch {}
+          throw new Error(e);
+        }
+        const data = await res.json();
+        if (data.code === 1000 && data.result) {
+          toast.success(`Sent ${file.name}!`, { id: tId });
+          const sentMessage = { ...data.result, senderName: "Bạn" } as Message;
+          setChatMessages((prev) =>
+            [...prev, sentMessage].sort(
+              (a, b) =>
+                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+            )
+          );
+          setChatConversations((prevList) => {
+            const idx = prevList.findIndex(
+              (c) => String(c.id) === String(groupId)
+            );
+            if (idx === -1) return prevList;
+            const updatedConvo = {
+              ...prevList[idx],
+              message: `Đã gửi: ${sentMessage.fileName || "File"}`,
+              sentAt: sentMessage.sentAt,
+              lastMessageSenderId: sentMessage.senderId,
+              lastMessageSenderName: "Bạn",
+            };
+            const newList = prevList.filter(
+              (c) => String(c.id) !== String(groupId)
+            );
+            newList.unshift(updatedConvo);
+            return newList.sort(
+              (a, b) =>
+                new Date(b.sentAt || 0).getTime() -
+                new Date(a.sentAt || 0).getTime()
+            );
+          });
+          return sentMessage;
+        } else throw new Error(data.message || `Send failed ${file.name}.`);
+      } catch (error: any) {
+        toast.error(`Send failed: ${error.message}`, { id: tId });
+        return null;
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    []
+  );
+
+  const handleDeleteMessageChatAPI = useCallback(
+    async (
+      messageId: string,
+      userId: string,
+      currentGroupId: string | number
+    ): Promise<boolean> => {
+      setIsProcessingChatAction(true);
+      const toastId = toast.loading("Đang xóa tin nhắn...");
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Yêu cầu xác thực.");
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}?userId=${userId}`;
+        const response = await fetch(url, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const responseText = await response.text();
+        let responseData;
+        try {
+          responseData = responseText
+            ? JSON.parse(responseText)
+            : { code: response.ok ? 1000 : 0 };
+        } catch (e) {
+          if (response.ok && !responseText) responseData = { code: 1000 };
+          else throw new Error("Phản hồi xóa không hợp lệ.");
+        }
+        if (!response.ok && responseData.code !== 1000)
+          throw new Error(responseData.message || `Lỗi ${response.status}`);
+        toast.success("Đã xóa tin nhắn!", { id: toastId });
+
+        let newLastMessage: Message | null = null;
+        setChatMessages((prevMessages) => {
+          const remaining = prevMessages.filter((msg) => msg.id !== messageId);
+          if (remaining.length > 0)
+            newLastMessage = remaining[remaining.length - 1];
+          return remaining;
+        });
+        setChatConversations((prevList) => {
+          const idx = prevList.findIndex(
+            (c) => String(c.id) === String(currentGroupId)
+          );
+          if (idx === -1) return prevList;
+          const senderDetails =
+            selectedChatConversation?.participants?.find(
+              (p) => p.id === newLastMessage?.senderId
+            ) ||
+            (newLastMessage ? chatUserCache[newLastMessage.senderId] : null);
+          const senderName = newLastMessage
+            ? newLastMessage.senderId === user?.id
+              ? "Bạn"
+              : getChatDisplayName(senderDetails, newLastMessage.senderName)
+            : undefined;
+          const updatedConvo = {
+            ...prevList[idx],
+            message: newLastMessage
+              ? newLastMessage.content ??
+                `Đã gửi: ${newLastMessage.fileName || "File"}`
+              : "Chưa có tin nhắn",
+            sentAt: newLastMessage?.sentAt,
+            lastMessageSenderId: newLastMessage?.senderId,
+            lastMessageSenderName: senderName,
+          };
+          const newList = prevList.filter(
+            (c) => String(c.id) !== String(currentGroupId)
+          );
+          newList.unshift(updatedConvo);
+          return newList.sort(
+            (a, b) =>
+              new Date(b.sentAt || 0).getTime() -
+              new Date(a.sentAt || 0).getTime()
+          );
+        });
+        return true;
+      } catch (error: any) {
+        toast.error(`Xóa thất bại: ${error.message}`, { id: toastId });
+        return false;
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    [
+      user?.id,
+      selectedChatConversation?.participants,
+      chatUserCache,
+      getChatDisplayName,
+    ]
+  );
+
+  const handleDownloadFileChatAPI = useCallback(
+    async (messageId: string, fileName?: string | null) => {
+      if (!messageId) return;
+      setDownloadingChatFileId(messageId);
+      const tId = toast.loading(`Downloading ${fileName || "file"}...`);
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) throw new Error("Auth required.");
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}/download`;
+        const res = await fetch(url, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          let e = `Download error: ${res.status}`;
+          try {
+            const d = await res.json();
+            e = d.message || e;
+          } catch {
+            e = `Error ${res.status}: ${res.statusText || "Download failed"}`;
+          }
+          throw new Error(e);
+        }
+        const disposition = res.headers.get("content-disposition");
+        let finalFName = fileName || "downloaded_file";
+        if (disposition) {
+          const m = disposition.match(/filename\*?=['"]?([^'";]+)['"]?/i);
+          if (m && m[1]) {
+            const encoded = m[1];
+            if (encoded.toLowerCase().startsWith("utf-8''"))
+              finalFName = decodeURIComponent(encoded.substring(7));
+            else {
+              try {
+                finalFName = decodeURIComponent(escape(encoded));
+              } catch (e) {
+                finalFName = encoded;
+              }
+            }
+          }
+        }
+        const blob = await res.blob();
+        const dlUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = dlUrl;
+        a.download = finalFName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(dlUrl);
+        a.remove();
+        toast.success(`Downloaded ${finalFName}!`, { id: tId });
+      } catch (error: any) {
+        toast.error(`Download failed: ${error.message || "Unknown error"}`, {
+          id: tId,
+        });
+      } finally {
+        setDownloadingChatFileId(null);
+      }
+    },
+    []
+  );
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -173,59 +1113,35 @@ export default function HomeAdmin() {
   }, []);
 
   const fetchNews = useCallback(async () => {
-    if (!isMountedRef.current) return;
     setIsLoadingNews(true);
     setErrorNews(null);
     let currentToken = localStorage.getItem("authToken");
-    const handleAuthFailure = createAuthFailureHandler(() => {
-      if (isMountedRef.current) setIsLoadingNews(false);
-    }, setErrorNews);
-
-    if (!currentToken && appIsInitialized) {
-      handleAuthFailure();
-      return;
-    }
-    if (!currentToken && !appIsInitialized) {
-      if (isMountedRef.current) setIsLoadingNews(false);
-      return;
-    }
-
     try {
-      let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
+      let headers: HeadersInit = {};
+      if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
       const url = `http://localhost:8080/identity/api/news/status?status=APPROVED`;
       let res = await fetch(url, { headers, cache: "no-store" });
-
-      if (res.status === 401 || res.status === 403) {
-        const refreshResult = await refreshToken();
-        if (!isMountedRef.current) return;
-        if (refreshResult.sessionExpired) {
-          handleAuthFailure("expired");
-          return;
-        }
-        if (refreshResult.error) {
-          handleAuthFailure("error");
-          return;
-        }
-        if (refreshResult.token) {
-          currentToken = refreshResult.token;
+      if (
+        (res.status === 401 || res.status === 403) &&
+        currentToken &&
+        refreshToken
+      ) {
+        const nt = await refreshToken();
+        if (nt) {
+          currentToken = nt;
+          localStorage.setItem("authToken", nt);
           headers["Authorization"] = `Bearer ${currentToken}`;
           res = await fetch(url, { headers, cache: "no-store" });
-        } else {
-          handleAuthFailure("expired");
-          return;
-        }
+        } else throw new Error("Unauthorized or Refresh Failed");
       }
-
-      if (!isMountedRef.current) return;
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          handleAuthFailure("expired");
-          return;
-        }
-        const err = await res
-          .json()
-          .catch(() => ({ message: `HTTP error ${res.status}` }));
-        throw new Error(err.message || `HTTP error ${res.status}`);
+        const status = res.status;
+        let msg = `HTTP ${status}`;
+        try {
+          const err = await res.json();
+          msg = err.message || msg;
+        } catch (_) {}
+        throw new Error(msg);
       }
       const d = await res.json();
       if (d.code === 1000 && Array.isArray(d.result)) {
@@ -248,328 +1164,199 @@ export default function HomeAdmin() {
           coverImageUrl: item.coverImageUrl,
           rejectionReason: item.rejectionReason,
         }));
-        if (isMountedRef.current) setNewsItems(fmt);
+        setNewsItems(fmt);
       } else throw new Error(d.message || "Lỗi định dạng dữ liệu tin tức");
     } catch (e: any) {
-      if (
-        isMountedRef.current &&
-        e.message !== "Phiên đăng nhập hết hạn." &&
-        e.message !== "Lỗi xác thực."
-      )
-        setErrorNews(e.message || "Lỗi tải tin tức.");
+      setErrorNews(e.message || "Lỗi tải tin tức.");
     } finally {
-      if (isMountedRef.current) setIsLoadingNews(false);
+      setIsLoadingNews(false);
     }
-  }, [refreshToken, appIsInitialized, setSessionStatus]);
-//
-  const fetchAdminHomeEvents = useCallback(async () => {
-    if (!isMountedRef.current) return;
+  }, [refreshToken]);
+
+  const fetchAllEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     setErrorEvents(null);
     let currentToken = localStorage.getItem("authToken");
-    const handleAuthFailure = createAuthFailureHandler(() => {
-      if (isMountedRef.current) setIsLoadingEvents(false);
-    }, setErrorEvents);
-
-    if (!currentToken && appIsInitialized) {
-      handleAuthFailure();
-      return;
-    }
-    if (!currentToken && !appIsInitialized) {
-      if (isMountedRef.current) setIsLoadingEvents(false);
-      return;
-    }
-
     try {
-      let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
-      const url = `http://localhost:8080/identity/api/events`;
+      let headers: HeadersInit = {};
+      if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
+      const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
       let res = await fetch(url, { headers, cache: "no-store" });
-
-      if (res.status === 401 || res.status === 403) {
-        const refreshResult = await refreshToken();
-        if (!isMountedRef.current) return;
-        if (refreshResult.sessionExpired) {
-          handleAuthFailure("expired");
-          return;
-        }
-        if (refreshResult.error) {
-          handleAuthFailure("error");
-          return;
-        }
-        if (refreshResult.token) {
-          currentToken = refreshResult.token;
+      if (
+        (res.status === 401 || res.status === 403) &&
+        currentToken &&
+        refreshToken
+      ) {
+        const nt = await refreshToken();
+        if (nt) {
+          currentToken = nt;
+          localStorage.setItem("authToken", nt);
           headers["Authorization"] = `Bearer ${currentToken}`;
           res = await fetch(url, { headers, cache: "no-store" });
-        } else {
-          handleAuthFailure("expired");
-          return;
-        }
+        } else throw new Error("Unauthorized or Refresh Failed");
       }
-      if (!isMountedRef.current) return;
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          handleAuthFailure("expired");
-          return;
-        }
-        const err = await res
-          .json()
-          .catch(() => ({ message: `HTTP error ${res.status}` }));
-        throw new Error(err.message || `HTTP error ${res.status}`);
-      }
-      const data = await res.json();
-      if (data.code === 1000 && Array.isArray(data.result)) {
-        const formattedEvents: EventDisplayInfo[] = data.result
-          .filter((e: any) => !e.deleted)
-          .map((apiEvent: any) => ({
-            id: apiEvent.id,
-            title: apiEvent.name || "Chưa có tiêu đề",
-            name: apiEvent.name,
-            date: apiEvent.time || apiEvent.createdAt || "",
-            location: apiEvent.location || "Chưa xác định",
-            description:
-              apiEvent.content || apiEvent.purpose || "Không có mô tả",
-            content: apiEvent.content,
-            speaker: apiEvent.speaker,
-            image: apiEvent.avatarUrl,
-            avatarUrl: apiEvent.avatarUrl || null,
-            time: apiEvent.time,
-            status: apiEvent.status,
-            purpose: apiEvent.purpose,
-            createdBy: apiEvent.createdBy,
-            organizers: apiEvent.organizers || [],
-            participants: apiEvent.participants || [],
-            attendees: apiEvent.attendees || [],
-          }));
-        if (isMountedRef.current) setAllEvents(formattedEvents);
-      } else throw new Error(data.message || "Dữ liệu sự kiện không hợp lệ");
-    } catch (err: any) {
-      if (
-        isMountedRef.current &&
-        err.message !== "Phiên đăng nhập hết hạn." &&
-        err.message !== "Lỗi xác thực."
-      )
-        setErrorEvents(err.message || "Không thể tải danh sách sự kiện.");
-    } finally {
-      if (isMountedRef.current) setIsLoadingEvents(false);
-    }
-  }, [refreshToken, appIsInitialized, setSessionStatus]);
-
-  //  fetchUserCreatedEvents
-   const fetchUserCreatedEvents = useCallback(
-      async (userId: string, token: string | null) => {
-        if (!userId || !token) {
-          setIsLoadingCreatedEventIds(false);
-          setCreatedEventIds(new Set());
-          return;
-        }
-        setIsLoadingCreatedEventIds(true);
-        let currentToken = token;
+        const status = res.status;
+        let msg = `HTTP ${status}`;
         try {
-          const url = `http://localhost:8080/identity/api/events/creator/${userId}`;
-          let res = await fetch(url, {
-            headers: { Authorization: `Bearer ${currentToken}` },
-            cache: "no-store",
-          });
-          if (res.status === 401 || res.status === 403) {
-            const nt = await refreshToken();
-            if (nt) {
-              currentToken = nt;
-              localStorage.setItem("authToken", nt);
-              res = await fetch(url, {
-                headers: { Authorization: `Bearer ${currentToken}` },
-                cache: "no-store",
-              });
-            } else throw new Error("Unauthorized or Refresh Failed");
-          }
-          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-          const data = await res.json();
-          if (data.code === 1000 && Array.isArray(data.result))
-            setCreatedEventIds(
-              new Set(data.result.map((event: any) => event.id))
-            );
-          else setCreatedEventIds(new Set());
-        } catch (err: any) {
-          console.error("Lỗi tải ID sự kiện đã tạo:", err);
-          setCreatedEventIds(new Set());
-          if (err.message?.includes("Unauthorized"))
-            router.push("/login?sessionExpired=true");
-        } finally {
-          setIsLoadingCreatedEventIds(false);
-        }
-      },
-      [refreshToken, router]
-    );
+          const err = await res.json();
+          msg = err.message || msg;
+        } catch (_) {}
+        throw new Error(msg);
+      }
+      const d = await res.json();
+      if (d.code === 1000 && Array.isArray(d.result)) {
+        const fmt: EventDisplayInfo[] = d.result
+          .filter((e: any) => !e.deleted)
+          .map((e: any) => ({
+            id: e.id,
+            title: e.name || "N/A",
+            name: e.name,
+            date: e.time || e.createdAt || "",
+            time: e.time,
+            location: e.location || "N/A",
+            description: e.content || e.purpose || "",
+            content: e.content,
+            purpose: e.purpose,
+            avatarUrl: e.avatarUrl || null,
+            status: e.status,
+            createdBy: e.createdBy,
+            organizers: e.organizers || [],
+            participants: e.participants || [],
+            attendees: e.attendees || [],
+          }));
+        setAllEvents(fmt);
+      } else throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
+    } catch (e: any) {
+      setErrorEvents(e.message || "Lỗi tải sự kiện.");
+      if (e.message?.includes("Unauthorized"))
+        router.push("/login?sessionExpired=true");
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  }, [refreshToken, router]);
 
-//Sự kiện đã đăng ký
-     const fetchRegisteredEventIds = useCallback(
-        async (userId: string, token: string | null) => {
-          if (!userId || !token) {
-            setIsLoadingRegisteredIds(false);
-            setRegisteredEventIds(new Set());
-            return;
-          }
-          setIsLoadingRegisteredIds(true);
-          let currentToken = token;
-          try {
-            const url = `http://localhost:8080/identity/api/events/attendee/${userId}`;
-            let res = await fetch(url, {
+  const fetchUserCreatedEvents = useCallback(
+    async (userIdParam: string, token: string | null) => {
+      if (!userIdParam || !token) {
+        setIsLoadingCreatedEventIds(false);
+        setCreatedEventIds(new Set());
+        return;
+      }
+      setIsLoadingCreatedEventIds(true);
+      let currentToken = token;
+      try {
+        const url = `http://localhost:8080/identity/api/events/creator/${userIdParam}`;
+        let res = await fetch(url, {
+          headers: { Authorization: `Bearer ${currentToken}` },
+          cache: "no-store",
+        });
+        if (res.status === 401 || res.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            currentToken = nt;
+            localStorage.setItem("authToken", nt);
+            res = await fetch(url, {
               headers: { Authorization: `Bearer ${currentToken}` },
               cache: "no-store",
             });
-            if (res.status === 401 || res.status === 403) {
-              const nt = await refreshToken();
-              if (nt) {
-                currentToken = nt;
-                localStorage.setItem("authToken", nt);
-                res = await fetch(url, {
-                  headers: { Authorization: `Bearer ${currentToken}` },
-                  cache: "no-store",
-                });
-              } else throw new Error("Unauthorized or Refresh Failed");
-            }
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-            const data = await res.json();
-            if (data.code === 1000 && Array.isArray(data.result))
-              setRegisteredEventIds(
-                new Set(data.result.map((event: any) => event.id))
-              );
-            else {
-              setRegisteredEventIds(new Set());
-              console.warn(
-                "API /events/attendee/ không trả về cấu trúc mong đợi:",
-                data
-              );
-            }
-          } catch (err: any) {
-            console.error("Lỗi tải ID sự kiện đã đăng ký:", err);
-            setRegisteredEventIds(new Set());
-            if (err.message?.includes("Unauthorized"))
-              router.push("/login?sessionExpired=true");
-          } finally {
-            setIsLoadingRegisteredIds(false);
-          }
-        },
-        [refreshToken, router]
-      );
-
-      //
-       const fetchAllEvents = useCallback(async () => {
-          setIsLoadingEvents(true);
-          setErrorEvents(null);
-          let currentToken = localStorage.getItem("authToken");
-          try {
-            let headers: HeadersInit = {};
-            if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-            const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
-            let res = await fetch(url, { headers, cache: "no-store" });
-            if (
-              (res.status === 401 || res.status === 403) &&
-              currentToken &&
-              refreshToken
-            ) {
-              const nt = await refreshToken();
-              if (nt) {
-                currentToken = nt;
-                localStorage.setItem("authToken", nt);
-                headers["Authorization"] = `Bearer ${currentToken}`;
-                res = await fetch(url, { headers, cache: "no-store" });
-              } else throw new Error("Unauthorized or Refresh Failed");
-            }
-            if (!res.ok) {
-              const status = res.status;
-              let msg = `HTTP ${status}`;
-              try {
-                const err = await res.json();
-                msg = err.message || msg;
-              } catch (_) {}
-              throw new Error(msg);
-            }
-            const d = await res.json();
-            if (d.code === 1000 && Array.isArray(d.result)) {
-              const fmt: EventDisplayInfo[] = d.result
-                .filter((e: any) => !e.deleted)
-                .map((e: any) => ({
-                  id: e.id,
-                  title: e.name || "N/A",
-                  name: e.name,
-                  date: e.time || e.createdAt || "",
-                  time: e.time,
-                  location: e.location || "N/A",
-                  description: e.content || e.purpose || "",
-                  content: e.content,
-                  purpose: e.purpose,
-                  avatarUrl: e.avatarUrl || null,
-                  status: e.status,
-                  createdBy: e.createdBy,
-                  organizers: e.organizers || [],
-                  participants: e.participants || [],
-                  attendees: e.attendees || [],
-                }));
-              setAllEvents(fmt);
-            } else throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
-          } catch (e: any) {
-            console.error("Lỗi fetchAllEvents:", e);
-            setErrorEvents(e.message || "Lỗi tải sự kiện.");
-            if (e.message?.includes("Unauthorized"))
-              router.push("/login?sessionExpired=true");
-          } finally {
-            setIsLoadingEvents(false);
-          }
-        }, [refreshToken, router]);
-
-  const fetchNotifications = useCallback(
-    async (userId: string) => {
-      if (!isMountedRef.current) return;
-      setIsLoadingNotifications(true);
-      setErrorNotifications(null);
-      let currentToken = localStorage.getItem("authToken");
-      const handleAuthFailure = createAuthFailureHandler(() => {
-        if (isMountedRef.current) setIsLoadingNotifications(false);
-      }, setErrorNotifications);
-
-      if (!currentToken || !userId) {
-        if (isMountedRef.current) {
-          setIsLoadingNotifications(false);
-          setNotifications([]);
+          } else throw new Error("Unauthorized or Refresh Failed");
         }
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result))
+          setCreatedEventIds(
+            new Set(data.result.map((event: any) => event.id))
+          );
+        else setCreatedEventIds(new Set());
+      } catch (err: any) {
+        setCreatedEventIds(new Set());
+        if (err.message?.includes("Unauthorized"))
+          router.push("/login?sessionExpired=true");
+      } finally {
+        setIsLoadingCreatedEventIds(false);
+      }
+    },
+    [refreshToken, router]
+  );
+
+  const fetchRegisteredEventIds = useCallback(
+    async (userIdParam: string, token: string | null) => {
+      if (!userIdParam || !token) {
+        setIsLoadingRegisteredIds(false);
+        setRegisteredEventIds(new Set());
         return;
       }
-
+      setIsLoadingRegisteredIds(true);
+      let currentToken = token;
       try {
-        const limit = 10;
-        const url = `http://localhost:8080/identity/api/notifications?userId=${userId}&limit=${limit}`;
+        const url = `http://localhost:8080/identity/api/events/attendee/${userIdParam}`;
+        let res = await fetch(url, {
+          headers: { Authorization: `Bearer ${currentToken}` },
+          cache: "no-store",
+        });
+        if (res.status === 401 || res.status === 403) {
+          const nt = await refreshToken();
+          if (nt) {
+            currentToken = nt;
+            localStorage.setItem("authToken", nt);
+            res = await fetch(url, {
+              headers: { Authorization: `Bearer ${currentToken}` },
+              cache: "no-store",
+            });
+          } else throw new Error("Unauthorized or Refresh Failed");
+        }
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result))
+          setRegisteredEventIds(
+            new Set(data.result.map((event: any) => event.id))
+          );
+        else {
+          setRegisteredEventIds(new Set());
+        }
+      } catch (err: any) {
+        setRegisteredEventIds(new Set());
+        if (err.message?.includes("Unauthorized"))
+          router.push("/login?sessionExpired=true");
+      } finally {
+        setIsLoadingRegisteredIds(false);
+      }
+    },
+    [refreshToken, router]
+  );
+
+  const fetchNotifications = useCallback(
+    async (userIdParam: string, token: string | null) => {
+      if (!userIdParam || !token) {
+        setNotifications([]);
+        return;
+      }
+      setIsLoadingNotifications(true);
+      setErrorNotifications(null);
+      const limit = 10;
+      let currentToken = token;
+      try {
+        const url = `http://localhost:8080/identity/api/notifications?userId=${userIdParam}&limit=${limit}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers, cache: "no-store" });
         if (res.status === 401 || res.status === 403) {
-          const refreshResult = await refreshToken();
-          if (!isMountedRef.current) return;
-          if (refreshResult.sessionExpired) {
-            handleAuthFailure("expired");
-            return;
-          }
-          if (refreshResult.error) {
-            handleAuthFailure("error");
-            return;
-          }
-          if (refreshResult.token) {
-            currentToken = refreshResult.token;
-            headers["Authorization"] = `Bearer ${currentToken}`;
+          const newToken = await refreshToken();
+          if (newToken) {
+            currentToken = newToken;
+            localStorage.setItem("authToken", newToken);
+            headers["Authorization"] = `Bearer ${newToken}`;
             res = await fetch(url, { headers, cache: "no-store" });
-          } else {
-            handleAuthFailure("expired");
-            return;
-          }
+          } else throw new Error("Unauthorized or Refresh Failed");
         }
-        if (!isMountedRef.current) return;
         if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
-            handleAuthFailure("expired");
-            return;
-          }
-          const errorData = await res
-            .json()
-            .catch(() => ({ message: `HTTP error ${res.status}` }));
-          throw new Error(errorData.message || `HTTP error ${res.status}`);
+          const status = res.status;
+          let msg = `HTTP error ${status}`;
+          try {
+            const errorData = await res.json();
+            msg = errorData.message || msg;
+          } catch (_) {}
+          throw new Error(msg);
         }
         const data = await res.json();
         if (data.code === 1000 && Array.isArray(data.result)) {
@@ -581,164 +1368,121 @@ export default function HomeAdmin() {
               type: item.type,
               read: item.read,
               createdAt: item.createdAt,
-              relatedId: item.relatedId,
-              userId: item.userId,
+              relatedId: item.relatedId ?? null,
+              userId: item.userId ?? null,
             })
           );
-          if (isMountedRef.current) setNotifications(formattedNotifications);
+          setNotifications(formattedNotifications);
         } else
           throw new Error(data.message || "Lỗi định dạng dữ liệu thông báo");
       } catch (error: any) {
-        if (
-          isMountedRef.current &&
-          error.message !== "Phiên đăng nhập hết hạn." &&
-          error.message !== "Lỗi xác thực."
-        )
-          setErrorNotifications(error.message || "Lỗi tải thông báo.");
-        if (isMountedRef.current) setNotifications([]);
+        setErrorNotifications(error.message || "Lỗi tải thông báo.");
+        setNotifications([]);
+        if (error.message?.includes("Unauthorized"))
+          router.push("/login?sessionExpired=true");
       } finally {
-        if (isMountedRef.current) setIsLoadingNotifications(false);
+        setIsLoadingNotifications(false);
       }
     },
-    [refreshToken, setSessionStatus]
+    [refreshToken, router]
   );
 
   useEffect(() => {
-    if (sessionStatus === "expired" || appIsInitialized) {
-      return;
-    }
+    if (initializedRef.current) return;
+    initializedRef.current = true;
 
-    const loadAdminData = async () => {
-      if (!isMountedRef.current) return;
+    const loadInitialData = async () => {
       setIsLoadingUser(true);
-      let currentAuthToken = localStorage.getItem("authToken");
+      setIsLoadingEvents(true);
+      setIsLoadingRegisteredIds(true);
+      setIsLoadingCreatedEventIds(true);
+      setIsLoadingNews(true);
+
+      const currentAuthToken = localStorage.getItem("authToken");
       let userIdForFetches: string | null = null;
       let tokenForSubFetches: string | null = currentAuthToken;
 
-      if (currentAuthToken) {
-        try {
+      try {
+        if (currentAuthToken) {
+          const headers: HeadersInit = {
+            Authorization: `Bearer ${currentAuthToken}`,
+          };
           const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
           let userRes = await fetch(userInfoUrl, {
-            headers: { Authorization: `Bearer ${currentAuthToken}` },
+            headers,
             cache: "no-store",
           });
 
           if (userRes.status === 401 || userRes.status === 403) {
-            const refreshResult = await refreshToken();
-            if (!isMountedRef.current) return;
-            if (refreshResult.sessionExpired || refreshResult.error) {
-              setSessionStatus(
-                refreshResult.sessionExpired ? "expired" : "error"
-              );
-              return;
-            }
-            if (refreshResult.token) {
-              tokenForSubFetches = refreshResult.token;
+            const nt = await refreshToken();
+            if (nt) {
+              tokenForSubFetches = nt;
+              localStorage.setItem("authToken", nt);
               userRes = await fetch(userInfoUrl, {
-                headers: { Authorization: `Bearer ${tokenForSubFetches}` },
+                headers: { Authorization: `Bearer ${nt}` },
                 cache: "no-store",
               });
             } else {
-              setSessionStatus("expired");
-              return;
+              throw new Error("Unauthorized or Refresh Failed");
             }
           }
 
-          if (!isMountedRef.current) return;
           if (!userRes.ok) {
-            if (userRes.status === 401 || userRes.status === 403) {
-              setSessionStatus("expired");
-              return;
-            }
-            const errorText = await userRes.text();
-            throw new Error(
-              `Admin user info failed: ${userRes.status} - ${errorText}`
-            );
+            throw new Error(`Workspace user info failed: ${userRes.status}`);
           }
 
           const userData = await userRes.json();
-          if (!isMountedRef.current) return;
           if (userData.code === 1000 && userData.result?.id) {
             const fetchedUser: User = userData.result;
-            if (!fetchedUser.roles?.some((r) => r.name === "ADMIN")) {
-              toast.error("Truy cập bị từ chối. Bạn không phải Admin.");
-              setSessionStatus("expired");
-              return;
-            } else {
-              setUser(fetchedUser);
-              userIdForFetches = fetchedUser.id;
-            }
+            userIdForFetches = fetchedUser.id;
+            setUser(fetchedUser);
           } else {
-            throw new Error("Invalid user data structure received");
+            throw new Error("Invalid user data received");
           }
-        } catch (error: any) {
-          if (isMountedRef.current) {
-            setUser(null);
-            if (
-              error.message !== "Invalid user data structure received" &&
-              error.message !== "Phiên đăng nhập hết hạn." &&
-              error.message !== "Lỗi xác thực."
-            ) {
-              setSessionStatus("expired");
-            } else if (
-              error.message === "Phiên đăng nhập hết hạn." ||
-              error.message === "Lỗi xác thực."
-            ) {
-              setSessionStatus("expired");
-            }
-            console.error("Error in loadAdminData (fetch user):", error);
-          }
-        } finally {
-          if (isMountedRef.current) setIsLoadingUser(false);
+        } else {
+          setUser(null);
         }
-      } else {
-        if (isMountedRef.current) {
-          setIsLoadingUser(false);
-          setSessionStatus("expired");
+      } catch (error: any) {
+        setUser(null);
+        userIdForFetches = null;
+        tokenForSubFetches = null;
+        if (!error.message?.includes("Invalid user data")) {
+          router.push("/login?sessionExpired=true");
         }
-        return;
+      } finally {
+        setIsLoadingUser(false);
       }
 
-      if (
-        userIdForFetches &&
-        tokenForSubFetches &&
-        isMountedRef.current &&
-        sessionStatus === "active"
-      ) {
+      await Promise.all([fetchAllEvents(), fetchNews()]);
+
+      if (userIdForFetches && tokenForSubFetches) {
         await Promise.all([
-          fetchAdminHomeEvents(),
-          fetchNews(),
-          fetchNotifications(userIdForFetches),
+          fetchRegisteredEventIds(userIdForFetches, tokenForSubFetches),
+          fetchUserCreatedEvents(userIdForFetches, tokenForSubFetches),
+          fetchNotifications(userIdForFetches, tokenForSubFetches),
         ]);
-      } else if (isMountedRef.current && !userIdForFetches && !isLoadingUser) {
-        setIsLoadingEvents(false);
-        setIsLoadingNews(false);
+      } else {
+        setIsLoadingRegisteredIds(false);
+        setIsLoadingCreatedEventIds(false);
         setNotifications([]);
-        setAllEvents([]);
-        setNewsItems([]);
-      }
-
-      if (isMountedRef.current) {
-        setAppIsInitialized(true);
+        setIsLoadingNotifications(false);
       }
     };
 
-    loadAdminData();
+    loadInitialData();
   }, [
-    appIsInitialized,
-    sessionStatus,
-    refreshToken,
-    fetchAdminHomeEvents,
+    fetchAllEvents,
+    fetchRegisteredEventIds,
+    fetchUserCreatedEvents,
     fetchNews,
     fetchNotifications,
+    refreshToken,
+    router,
   ]);
 
+  // Chú ý
   useEffect(() => {
-    if (
-      user?.id &&
-      user.roles?.some((r) => r.name === "ADMIN") &&
-      sessionStatus === "active"
-    ) {
+    if (user?.id && user.roles?.some((r) => r.name === "ADMIN")) {
       if (socketRef.current) socketRef.current.disconnect();
       const socket = io("ws://localhost:9099", {
         path: "/socket.io",
@@ -794,7 +1538,7 @@ export default function HomeAdmin() {
         socketRef.current = null;
       }
     }
-  }, [user, sessionStatus]);
+  }, [user]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -811,86 +1555,190 @@ export default function HomeAdmin() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleLogout = async () => {
-    if (socketRef.current) socketRef.current.disconnect();
+  const executeRegistration = async (event: EventDisplayInfo) => {
+    if (!user?.id || isRegistering) return;
+    setIsRegistering(event.id);
+    let token = localStorage.getItem("authToken");
+    if (!token) {
+      toast.error("Vui lòng đăng nhập lại.");
+      setIsRegistering(null);
+      router.push("/login");
+      return;
+    }
     try {
-      const token = localStorage.getItem("authToken");
-      if (token) {
-        await fetch("http://localhost:8080/identity/auth/logout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: token }),
-        });
+      const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
+      let res = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401 || res.status === 403) {
+        const nt = await refreshToken();
+        if (nt) {
+          token = nt;
+          localStorage.setItem("authToken", nt);
+          res = await fetch(url, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        } else throw new Error("Không thể làm mới phiên đăng nhập.");
       }
-    } catch (error) {
-      console.error("Lỗi khi đăng xuất:", error);
+      if (!res.ok) {
+        let m = "Đăng ký thất bại";
+        try {
+          const d = await res.json();
+          m = d.message || m;
+        } catch (_) {}
+        if (res.status === 403) m = "Không có quyền.";
+        else if (res.status === 400) m = "Yêu cầu không hợp lệ.";
+        else if (res.status === 409) m = "Bạn đã đăng ký sự kiện này rồi.";
+        else if (res.status === 401)
+          m = "Phiên đăng nhập hết hạn hoặc không hợp lệ.";
+        throw new Error(m);
+      }
+      const data = await res.json();
+      if (data.code === 1000) {
+        toast.success(`Đã đăng ký "${event.title}"!`);
+        setRegisteredEventIds((prev) => new Set(prev).add(event.id));
+      } else throw new Error(data.message || "Lỗi đăng ký không xác định.");
+    } catch (err: any) {
+      toast.error(`${err.message || "Đăng ký thất bại."}`);
+      if (err.message?.includes("Unauthorized"))
+        router.push("/login?sessionExpired=true");
     } finally {
-      if (isMountedRef.current) setSessionStatus("expired");
+      setIsRegistering(null);
     }
   };
 
-  const handleEventClick = (event: EventDisplayInfo) => setSelectedEvent(event);
-  const handleBackToList = () => setSelectedEvent(null);
+  const handleRegister = (event: EventDisplayInfo) => {
+    if (!user?.id) {
+      toast.error("Đăng nhập để đăng ký.");
+      router.push("/login");
+      return;
+    }
+    if (
+      registeredEventIds.has(event.id) ||
+      isRegistering ||
+      createdEventIds.has(event.id)
+    ) {
+      if (registeredEventIds.has(event.id))
+        toast.error("Bạn đã đăng ký sự kiện này.");
+      if (createdEventIds.has(event.id))
+        toast.error("Bạn là người tạo sự kiện này.");
+      return;
+    }
+    const isEventUpcoming =
+      new Date(event.date) >= new Date(new Date().setHours(0, 0, 0, 0));
+    if (!isEventUpcoming) {
+      toast.error("Sự kiện này đã diễn ra.");
+      return;
+    }
+    setConfirmationState({
+      isOpen: true,
+      title: "Xác nhận đăng ký",
+      message: (
+        <>
+          Đăng ký sự kiện <br />{" "}
+          <strong className="text-indigo-600">"{event.title}"</strong>?
+        </>
+      ),
+      onConfirm: () => {
+        executeRegistration(event);
+        setConfirmationState((prev) => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () =>
+        setConfirmationState((prev) => ({ ...prev, isOpen: false })),
+      confirmVariant: "primary",
+      confirmText: "Đăng ký",
+      cancelText: "Hủy",
+    });
+  };
+
+  const handleRegistrationChange = useCallback(
+    (eventId: string, registered: boolean) => {
+      setRegisteredEventIds((prevIds) => {
+        const newIds = new Set(prevIds);
+        if (registered) newIds.add(eventId);
+        else newIds.delete(eventId);
+        return newIds;
+      });
+    },
+    []
+  );
+
+  const handleEventClick = (event: EventDisplayInfo) => {
+    setSelectedEvent(event);
+  };
+  const handleBackToList = () => {
+    setSelectedEvent(null);
+  };
+
+  const handleLogout = async () => {
+    try {
+      const t = localStorage.getItem("authToken");
+      if (t)
+        await fetch("http://localhost:8080/identity/auth/logout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: t }),
+        });
+    } catch (e) {
+    } finally {
+      localStorage.clear();
+      setUser(null);
+      setRegisteredEventIds(new Set());
+      setCreatedEventIds(new Set());
+      setNewsItems([]);
+      setNotifications([]);
+      setShowNotificationDropdown(false);
+      setChatConversations([]);
+      setSelectedChatConversation(null);
+      setChatMessages([]);
+      setChatUserCache({});
+      setActiveTab("home");
+      router.push("/login");
+    }
+  };
+
   const handleNotificationClick = () =>
     setShowNotificationDropdown((prev) => !prev);
 
   const handleMarkAsRead = async (notificationId: string) => {
     let token = localStorage.getItem("authToken");
-    const handleAuthFailure = createAuthFailureHandler(undefined, (msg) =>
-      toast.error(msg || "Lỗi.")
-    );
     if (!token || !user?.id) {
-      handleAuthFailure();
+      toast.error("Vui lòng đăng nhập lại.");
       return;
     }
-
+    let currentToken = token;
     try {
       const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
-      let headers: HeadersInit = { Authorization: `Bearer ${token}` };
+      let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
       let res = await fetch(url, { method: "PUT", headers: headers });
       if (res.status === 401 || res.status === 403) {
-        const refreshResult = await refreshToken();
-        if (!isMountedRef.current) return;
-        if (refreshResult.sessionExpired) {
-          handleAuthFailure("expired");
-          return;
-        }
-        if (refreshResult.error) {
-          handleAuthFailure("error");
-          return;
-        }
-        if (refreshResult.token) {
-          token = refreshResult.token;
-          headers["Authorization"] = `Bearer ${token}`;
+        const newToken = await refreshToken();
+        if (newToken) {
+          currentToken = newToken;
+          localStorage.setItem("authToken", newToken);
+          headers["Authorization"] = `Bearer ${newToken}`;
           res = await fetch(url, { method: "PUT", headers: headers });
         } else {
-          handleAuthFailure("expired");
-          return;
+          throw new Error("Không thể làm mới phiên đăng nhập.");
         }
       }
-      if (!isMountedRef.current) return;
       if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          handleAuthFailure("expired");
-          return;
-        }
-        const errorData = await res
-          .json()
-          .catch(() => ({ message: `Lỗi ${res.status}` }));
-        throw new Error(errorData.message || `Lỗi ${res.status}`);
+        let errorMsg = `Lỗi ${res.status}`;
+        try {
+          const errorData = await res.json();
+          errorMsg = errorData.message || errorMsg;
+        } catch (_) {}
+        throw new Error(errorMsg);
       }
-      if (isMountedRef.current) {
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-        );
-      }
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      );
     } catch (error: any) {
-      if (
-        isMountedRef.current &&
-        error.message !== "Phiên đăng nhập hết hạn." &&
-        error.message !== "Lỗi xác thực."
-      )
-        toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
+      toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
+      if (error.message?.includes("Unauthorized"))
+        router.push("/login?sessionExpired=true");
     }
   };
 
@@ -910,55 +1758,46 @@ export default function HomeAdmin() {
     const apiFormData = new FormData();
     apiFormData.append("title", formData.title);
     apiFormData.append("content", formData.content);
-    if (formData.eventId) apiFormData.append("eventId", formData.eventId);
-
+    if (formData.eventId) {
+      apiFormData.append("eventId", formData.eventId);
+    }
     let API_URL = "http://localhost:8080/identity/api/news";
     let method = "POST";
     let currentToken = localStorage.getItem("authToken");
-    const handleAuthFailure = createAuthFailureHandler(
-      () => setIsSubmittingNews(false),
-      (msg) => toast.error(msg || "Lỗi.")
-    );
-
-    if (!currentToken) {
-      handleAuthFailure();
-      return;
-    }
 
     if (newsId) {
       API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
       method = "PUT";
-      if (formData.imageFile)
+      if (formData.imageFile) {
         apiFormData.append("coverImage", formData.imageFile);
+      }
     } else {
       apiFormData.append("type", "NEWS");
       apiFormData.append("featured", "false");
       apiFormData.append("pinned", "false");
       apiFormData.append("createdById", user.id);
-      if (formData.imageFile)
+      if (formData.imageFile) {
         apiFormData.append("coverImage", formData.imageFile);
+      }
     }
 
     try {
-      let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
+      let headers: HeadersInit = {};
+      if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
       let response = await fetch(API_URL, {
         method: method,
         headers: headers,
         body: apiFormData,
       });
-      if (response.status === 401 || response.status === 403) {
-        const refreshResult = await refreshToken();
-        if (!isMountedRef.current) return;
-        if (refreshResult.sessionExpired) {
-          handleAuthFailure("expired");
-          return;
-        }
-        if (refreshResult.error) {
-          handleAuthFailure("error");
-          return;
-        }
-        if (refreshResult.token) {
-          currentToken = refreshResult.token;
+      if (
+        (response.status === 401 || response.status === 403) &&
+        currentToken &&
+        refreshToken
+      ) {
+        const newToken = await refreshToken();
+        if (newToken) {
+          currentToken = newToken;
+          localStorage.setItem("authToken", newToken);
           headers["Authorization"] = `Bearer ${currentToken}`;
           response = await fetch(API_URL, {
             method: method,
@@ -966,57 +1805,38 @@ export default function HomeAdmin() {
             body: apiFormData,
           });
         } else {
-          handleAuthFailure("expired");
-          return;
+          throw new Error("Refresh token failed or missing.");
         }
       }
-      if (!isMountedRef.current) return;
       const result = await response.json();
       if (response.ok && result.code === 1000) {
         toast.success(
           result.message ||
-            (newsId
-              ? "Cập nhật tin tức thành công!"
-              : "Tạo tin tức thành công!")
+            (newsId ? "Cập nhật thành công!" : "Tạo mới thành công!")
         );
-        if (isMountedRef.current) {
-          refreshNewsList();
-          setIsNewsModalOpen(false);
-          setEditingNewsItem(null);
+
+        setIsNewsModalOpen(false);
+        setEditingNewsItem(null);
+        refreshNewsList();
+        if (activeTab === "myNews") {
         }
       } else {
-        if (response.status === 401 || response.status === 403) {
-          handleAuthFailure("expired");
-          return;
-        }
         toast.error(
           result.message ||
-            (newsId ? "Cập nhật tin tức thất bại." : "Tạo tin tức thất bại.")
+            (newsId ? "Cập nhật thất bại." : "Tạo mới thất bại.")
         );
       }
     } catch (error: any) {
-      if (
-        isMountedRef.current &&
-        error.message !== "Phiên đăng nhập hết hạn." &&
-        error.message !== "Lỗi xác thực."
-      )
+      if (error.message?.includes("Refresh token failed")) {
+        toast.error("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
+        router.push("/login?sessionExpired=true");
+      } else {
         toast.error("Lỗi khi gửi yêu cầu: " + error.message);
+      }
     } finally {
-      if (isMountedRef.current) setIsSubmittingNews(false);
+      setIsSubmittingNews(false);
     }
   };
-
-  const handleRegistrationChange = useCallback(
-      (eventId: string, registered: boolean) => {
-        setRegisteredEventIds((prevIds) => {
-          const newIds = new Set(prevIds);
-          if (registered) newIds.add(eventId);
-          else newIds.delete(eventId);
-          return newIds;
-        });
-      },
-      []
-    );
 
   const handleOpenCreateModal = () => {
     if (!user) {
@@ -1038,10 +1858,19 @@ export default function HomeAdmin() {
   };
 
   const handleSessionExpired = useCallback(() => {
-    if (isMountedRef.current) setSessionStatus("expired");
-  }, []);
+    router.push("/login?sessionExpired=true");
+  }, [router]);
 
-  const isPageReallyLoading = !appIsInitialized || isLoadingUser;
+  const handleGlobalEventRefresh = useCallback(() => {
+    fetchAllEvents();
+    const currentToken = localStorage.getItem("authToken");
+    if (user?.id && currentToken) {
+      fetchUserCreatedEvents(user.id, currentToken);
+      fetchRegisteredEventIds(user.id, currentToken);
+    }
+  }, [user, fetchAllEvents, fetchUserCreatedEvents, fetchRegisteredEventIds]);
+
+  const isPageLoading = !initializedRef.current || isLoadingUser;
   const unreadNotificationCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications]
@@ -1049,7 +1878,7 @@ export default function HomeAdmin() {
 
   const getTabButtonClasses = (tabName: ActiveTab): string => {
     const baseClasses =
-      "cursor-pointer px-4 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition";
+      "cursor-pointer px-3 py-2 text-xs sm:text-sm font-semibold rounded-full shadow-sm transition whitespace-nowrap";
     const activeClasses = "text-white";
     const inactiveClasses = "hover:bg-opacity-80";
     let specificBg = "",
@@ -1068,6 +1897,12 @@ export default function HomeAdmin() {
         specificHoverBg =
           activeTab === tabName ? "hover:bg-green-700" : "hover:bg-green-200";
         break;
+      case "createEvent":
+        specificBg = activeTab === tabName ? "bg-blue-600" : "bg-blue-100";
+        specificText = activeTab === tabName ? "" : "text-blue-800";
+        specificHoverBg =
+          activeTab === tabName ? "hover:bg-blue-700" : "hover:bg-blue-200";
+        break;
       case "approval":
         specificBg = activeTab === tabName ? "bg-yellow-500" : "bg-yellow-100";
         specificText = activeTab === tabName ? "" : "text-yellow-800";
@@ -1075,10 +1910,10 @@ export default function HomeAdmin() {
           activeTab === tabName ? "hover:bg-yellow-600" : "hover:bg-yellow-200";
         break;
       case "myEvents":
-        specificBg = activeTab === tabName ? "bg-green-600" : "bg-green-100";
-        specificText = activeTab === tabName ? "" : "text-green-800";
+        specificBg = activeTab === tabName ? "bg-sky-600" : "bg-sky-100";
+        specificText = activeTab === tabName ? "" : "text-sky-800";
         specificHoverBg =
-          activeTab === tabName ? "hover:bg-green-700" : "hover:bg-green-200";
+          activeTab === tabName ? "hover:bg-sky-700" : "hover:bg-sky-200";
         break;
       case "attendees":
         specificBg = activeTab === tabName ? "bg-teal-600" : "bg-teal-100";
@@ -1104,7 +1939,13 @@ export default function HomeAdmin() {
         specificHoverBg =
           activeTab === tabName ? "hover:bg-purple-700" : "hover:bg-purple-200";
         break;
-     
+      case "statistic":
+        specificBg = activeTab === tabName ? "bg-gray-600" : "bg-gray-100";
+        specificText = activeTab === tabName ? "" : "text-gray-800";
+        specificHoverBg =
+          activeTab === tabName ? "hover:bg-gray-700" : "hover:bg-gray-200";
+        break;
+
       default:
         specificBg = "bg-gray-100";
         specificText = "text-gray-800";
@@ -1121,10 +1962,11 @@ export default function HomeAdmin() {
         return "border-t-indigo-600";
       case "news":
         return "border-t-green-600";
-      
+      case "createEvent":
+        return "border-t-blue-600";
       case "approval":
         return "border-t-yellow-500";
-        case "myEvents":
+      case "myEvents":
         return "border-t-sky-600";
       case "attendees":
         return "border-t-teal-600";
@@ -1134,61 +1976,78 @@ export default function HomeAdmin() {
         return "border-t-orange-500";
       case "chatList":
         return "border-t-purple-600";
-     
+      case "statistic":
+        return "border-t-gray-600";
       default:
         return "border-t-gray-400";
     }
   };
 
-  if (!appIsInitialized && (isLoadingUser || !user)) {
-    return (
-      <div className="min-h-screen flex justify-center items-center bg-gray-100 text-lg font-medium text-gray-600">
-        Đang tải ứng dụng và xác thực...
-      </div>
+  const homeTabObject = useMemo(() => ({ id: "home", label: "🏠 Trang chủ" }), []);
+
+  const otherTabsList = useMemo(
+    () => [
+      { id: "home", label: "🏠 Trang chủ" },
+      { id: "news", label: "📰 Bảng tin" },
+      { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
+      { id: "approval", label: "📅 Phê duyệt" },
+      { id: "myEvents", label: "🛠 Sự kiện / Đăng ký", requiresAuth: true },
+      { id: "attendees", label: "✅ Điểm danh" },
+      { id: "members", label: "👥 Quản lý thành viên" },
+      { id: "roles", label: "📌 Quản lý Vai trò/Chức vụ" },
+      { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true },
+      { id: "statistic", label: "📊 Thống kê" },
+    ],
+    []
+  );
+
+  const totalOtherTabPages = Math.ceil(otherTabsList.length / TABS_PER_PAGE);
+
+  const currentVisibleOtherTabs = useMemo(() => {
+    // Đảm bảo currentTabSetPage không vượt quá giới hạn sau khi TABS_PER_PAGE thay đổi
+    const adjustedCurrentPage = Math.min(
+      currentTabSetPage,
+      Math.max(0, totalOtherTabPages - 1)
     );
-  }
+    if (currentTabSetPage !== adjustedCurrentPage) {
+      setCurrentTabSetPage(adjustedCurrentPage); // Cập nhật state nếu cần
+    }
 
-  if (
-    appIsInitialized &&
-    (!user || !user.roles?.some((r) => r.name === "ADMIN"))
-  ) {
-    return (
-      <div className="min-h-screen flex flex-col justify-center items-center bg-gray-100 p-4 text-center">
-        <p className="text-red-600 text-xl font-semibold mb-4">
-          Truy cập bị từ chối
-        </p>
-        <p className="text-gray-700 mb-6">
-          Bạn không có quyền truy cập trang quản trị hoặc phiên đăng nhập không
-          hợp lệ.
-        </p>
-        <button
-          onClick={() => router.push("/login")}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out"
-        >
-          Đi đến trang Đăng nhập
-        </button>
-      </div>
+    const startIndex = adjustedCurrentPage * TABS_PER_PAGE;
+    const endIndex = startIndex + TABS_PER_PAGE;
+    return otherTabsList.slice(startIndex, endIndex);
+  }, [otherTabsList, currentTabSetPage, TABS_PER_PAGE, totalOtherTabPages]);
+
+  // Cập nhật lại currentTabSetPage nếu nó trở nên không hợp lệ khi TABS_PER_PAGE thay đổi (ví dụ khi resize)
+  useEffect(() => {
+    const newTotalPages = Math.ceil(otherTabsList.length / TABS_PER_PAGE);
+    if (currentTabSetPage >= newTotalPages && newTotalPages > 0) {
+      setCurrentTabSetPage(newTotalPages - 1);
+    } else if (newTotalPages === 0 && currentTabSetPage !== 0) {
+      setCurrentTabSetPage(0);
+    }
+  }, [TABS_PER_PAGE, otherTabsList.length, currentTabSetPage]);
+
+  const handleNextTabs = () => {
+    setCurrentTabSetPage((prevPage) =>
+      Math.min(prevPage + 1, totalOtherTabPages - 1)
     );
-  }
+  };
 
-  const tabs = [
-    { id: "home", label: "🏠 Trang chủ" },
-    { id: "news", label: "📰 Bảng tin" },
-    { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
-    { id: "approval", label: "📅 Phê duyệt" },
-    { id: "myEvents", label: "🛠 Sự kiện / Đăng ký", requiresAuth: true },
-    { id: "attendees", label: "✅ Điểm danh" },
-    { id: "members", label: "👥 Quản lý thành viên" },
-    { id: "roles", label: "📌 Quản lý Vai trò/Chức vụ" },
-    { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true },
+  const handlePrevTabs = () => {
+    setCurrentTabSetPage((prevPage) => Math.max(prevPage - 1, 0));
+  };
 
- 
-  ];
+  const showPrevButton =
+    currentTabSetPage > 0 && otherTabsList.length > TABS_PER_PAGE;
+  const showNextButton =
+    currentTabSetPage < totalOtherTabPages - 1 &&
+    otherTabsList.length > TABS_PER_PAGE;
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
       <Toaster position="top-center" toastOptions={{ duration: 3500 }} />
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-[55]">
+      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-[50]">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="text-lg sm:text-xl font-bold">
             Quản lý Sự kiện & CLB (Admin)
@@ -1201,127 +2060,256 @@ export default function HomeAdmin() {
               Giới thiệu
             </span>
             <span
-              className="cursor-pointer hover:text-gray-300 transition-colors"
+              className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
             >
               Liên hệ
             </span>
-            <UserMenu user={user} onLogout={handleLogout} />
+            {initializedRef.current && !isLoadingUser && (
+              <UserMenu user={user} onLogout={handleLogout} />
+            )}
+            {(!initializedRef.current || isLoadingUser) && (
+              <span className="text-gray-400">Đang tải...</span>
+            )}
+            {initializedRef.current && !isLoadingUser && !user && (
+              <Link href="/login">
+                <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
+                  Đăng nhập
+                </span>
+              </Link>
+            )}
           </div>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-50">
-        <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
-          {tabs.map((tab) => (
-            <div key={tab.id} className="relative flex flex-col items-center">
-              <button
-                onClick={() => setActiveTab(tab.id as ActiveTab)}
-                className={getTabButtonClasses(tab.id as ActiveTab)}
+      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-50 ">
+        <div className="flex items-center justify-start space-x-1 sm:space-x-2 pb-1 ">
+        
+
+          {otherTabsList.length > 0 && (
+            <div className="flex items-center grow justify-center min-w-0 pb-3 ">
+              {showPrevButton && (
+                <button
+                  onClick={handlePrevTabs}
+                  className="p-2 rounded-full  hover:bg-gray-200 transition-colors "
+                  aria-label="Các tab trước"
+                >
+                  <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
+                </button>
+              )}
+              {!showPrevButton && otherTabsList.length > TABS_PER_PAGE && (
+                <div className="w-[36px] h-[36px] shrink-0"></div> 
+              )}
+
+              <div
+                className={`flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible  ${
+                  !showPrevButton &&
+                  !showNextButton &&
+                  otherTabsList.length > TABS_PER_PAGE
+                    ? "mx-auto"
+                    : ""
+                } ${
+                  (showPrevButton && !showNextButton) ||
+                  (!showPrevButton && showNextButton)
+                    ? "flex-grow justify-center"
+                    : ""
+                }`}
               >
-                {tab.label}
-              </button>
-              {activeTab === tab.id && (
-                <div
-                  className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
-                    tab.id as ActiveTab
-                  )} border-r-[6px] border-r-transparent`}
-                  style={{ left: "50%", transform: "translateX(-50%)" }}
-                ></div>
+                {currentVisibleOtherTabs.map((tab) => (
+                  <div
+                    key={tab.id}
+                    className="relative flex flex-col items-center"
+                  >
+                    <button
+                      onClick={() => setActiveTab(tab.id as ActiveTab)}
+                      className={`${getTabButtonClasses(tab.id as ActiveTab)} ${
+                        isMobileView ? "px-2 text-[11px]" : ""
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                    {activeTab === tab.id && (
+                      <div
+                        className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
+                          tab.id as ActiveTab
+                        )} border-r-[6px] border-r-transparent`}
+                        style={{ left: "50%", transform: "translateX(-50%)" }}
+                      ></div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {showNextButton && (
+                <button
+                  onClick={handleNextTabs}
+                  className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0"
+                  aria-label="Các tab kế tiếp"
+                >
+                  <ChevronRightIcon className="h-5 w-5 text-gray-600" />
+                </button>
+              )}
+              {!showNextButton && otherTabsList.length > TABS_PER_PAGE && (
+                <div className="w-[36px] h-[36px] shrink-0"></div> // Placeholder
               )}
             </div>
-          ))}
+          )}
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
-        {activeTab === "home" && user && (
-          <AdminHomeTabContent
-            events={allEvents}
-            isLoading={isLoadingEvents}
-            error={errorEvents}
-            search={search}
-            setSearch={setSearch}
-            sortOption={sortOption}
-            setSortOption={setSortOption}
-            timeFilterOption={timeFilterOption}
-            setTimeFilterOption={setTimeFilterOption}
-            startDateFilter={startDateFilter}
-            setStartDateFilter={setStartDateFilter}
-            endDateFilter={endDateFilter}
-            setEndDateFilter={setEndDateFilter}
-            selectedEvent={selectedEvent}
-            onEventClick={handleEventClick}
-            onBackToList={handleBackToList}
-            onRefreshEvents={fetchAdminHomeEvents}
-          />
+        {isPageLoading ? (
+          <p className="text-center text-gray-500 italic py-6">
+            Đang tải dữ liệu người dùng...
+          </p>
+        ) : (
+          <>
+            {activeTab === "home" && user && (
+              <AdminHomeTabContent
+                events={allEvents}
+                isLoading={isLoadingEvents}
+                error={errorEvents}
+                search={search}
+                setSearch={setSearch}
+                sortOption={sortOption}
+                setSortOption={setSortOption}
+                timeFilterOption={timeFilterOption}
+                setTimeFilterOption={setTimeFilterOption}
+                startDateFilter={startDateFilter}
+                setStartDateFilter={setStartDateFilter}
+                endDateFilter={endDateFilter}
+                setEndDateFilter={setEndDateFilter}
+                selectedEvent={selectedEvent}
+                onEventClick={handleEventClick}
+                onBackToList={handleBackToList}
+                onRefreshEvents={fetchAllEvents}
+              />
+            )}
+            {activeTab === "news" && (
+              <NewsTabContent
+                newsItems={newsItems}
+                isLoading={isLoadingNews}
+                error={errorNews}
+                user={user}
+                onOpenCreateModal={handleOpenCreateModal}
+                onOpenEditModal={handleOpenEditModal}
+                onNewsDeleted={refreshNewsList}
+                onRefreshNews={fetchNews}
+              />
+            )}
+            {user && activeTab === "createEvent" && (
+              <CreateEventTabContent
+                user={user}
+                onEventCreated={() => {
+                  fetchAllEvents();
+                  const t = localStorage.getItem("authToken");
+                  if (user?.id && t) {
+                    fetchUserCreatedEvents(user.id, t);
+                    fetchNotifications(user.id, t);
+                  }
+                  setActiveTab("myEvents");
+                  toast.success("Sự kiện đã được tạo và đang chờ duyệt!");
+                }}
+              />
+            )}
+            {activeTab === "approval" && user && (
+              <ApprovalTabContent
+                user={user}
+                refreshToken={refreshToken}
+              />
+            )}
+            {activeTab === "myEvents" && user && (
+              <MyEventsTabContent
+                user={user}
+                initialRegisteredEventIds={registeredEventIds}
+                isLoadingRegisteredIds={isLoadingRegisteredIds}
+                createdEventIdsFromParent={createdEventIds}
+                onRegistrationChange={handleRegistrationChange}
+                onEventNeedsRefresh={handleGlobalEventRefresh}
+              />
+            )}
+            {activeTab === "attendees" && user && (
+              <AttendeesTabContent user={user} />
+            )}
+            {activeTab === "members" && user && (
+              <MembersTabContent
+                user={user}
+                userRole={
+                  user.roles?.find((r) => r.name.toUpperCase() === "ADMIN")
+                    ?.name ||
+                  user.roles?.[0]?.name?.toUpperCase() ||
+                  "ADMIN"
+                }
+                currentUserEmail={user.email || null}
+                refreshToken={refreshToken}
+                onSessionExpired={handleSessionExpired}
+              />
+            )}
+            {activeTab === "roles" && user && <RolesTabContent user={user} />}
+            {activeTab === "chatList" && user && (
+              <ChatTabContent
+                currentUser={user}
+                globalChatMessagePayload={globalChatPayloadForTab}
+                conversations={chatConversations}
+                isLoadingConversations={isLoadingChatConversations}
+                errorConversations={errorChatConversations}
+                fetchConversations={fetchChatConversationsAPI}
+                setConversations={setChatConversations}
+                selectedConversation={selectedChatConversation}
+                setSelectedConversation={setSelectedChatConversation}
+                isLoadingDetails={isLoadingChatDetails}
+                fetchGroupChatDetails={fetchGroupChatDetailsAPI}
+                messages={chatMessages}
+                isLoadingMessages={isLoadingChatMessages}
+                errorMessages={errorChatMessages}
+                fetchMessages={fetchChatMessagesAPI}
+                setMessages={setChatMessages}
+                mediaMessages={chatMediaMessages}
+                fileMessages={chatFileMessages}
+                audioMessages={chatAudioMessages}
+                isLoadingMedia={isLoadingChatMedia}
+                isLoadingFiles={isLoadingChatFiles}
+                isLoadingAudio={isLoadingChatAudio}
+                errorMedia={errorChatMedia}
+                errorFiles={errorChatFiles}
+                errorAudio={errorChatAudio}
+                fetchMediaMessages={fetchChatMediaMessagesAPI}
+                fetchFileMessages={fetchChatFileMessagesAPI}
+                fetchAudioMessages={fetchChatAudioMessagesAPI}
+                setMediaMessages={setChatMediaMessages}
+                setFileMessages={setChatFileMessages}
+                setAudioMessages={setChatAudioMessages}
+                userCache={chatUserCache}
+                fetchUserDetailsWithCache={fetchChatUserDetailsWithCache}
+                getDisplayName={getChatDisplayName}
+                handleRemoveMember={handleRemoveMemberChatAPI}
+                handleLeaveGroup={handleLeaveGroupChatAPI}
+                handleSendMessageAPI={handleSendMessageChatAPI}
+                handleSendFileAPI={handleSendFileChatAPI}
+                handleDeleteMessageAPI={handleDeleteMessageChatAPI}
+                handleDownloadFileAPI={handleDownloadFileChatAPI}
+                isProcessingChatAction={isProcessingChatAction}
+                downloadingFileId={downloadingChatFileId}
+                setDownloadingFileId={setDownloadingChatFileId}
+              />
+            )}
+            {activeTab === "statistic" && user && (
+              <StatisticTabContent user={user} />
+            )}
+
+            {otherTabsList.find((t) => t.id === activeTab)?.requiresAuth &&
+              !user &&
+              initializedRef.current &&
+              !isLoadingUser && (
+                <p className="text-center text-red-500 py-6">
+                  Vui lòng đăng nhập để truy cập mục này.
+                </p>
+              )}
+          </>
         )}
-        {activeTab === "news" && (
-          <NewsTabContent
-            newsItems={newsItems}
-            isLoading={isLoadingNews}
-            error={errorNews}
-            user={user}
-            onOpenCreateModal={handleOpenCreateModal}
-            onOpenEditModal={handleOpenEditModal}
-            onNewsDeleted={refreshNewsList}
-            onRefreshNews={fetchNews}
-          />
-        )}
-        {activeTab === "approval" && user && (
-          <ApprovalTabContent
-            user={user}
-            refreshTokenProp={async () => {
-              const result = await refreshToken();
-              if (!isMountedRef.current) return null;
-              if (result.sessionExpired || result.error) {
-                setSessionStatus(result.sessionExpired ? "expired" : "error");
-                return null;
-              }
-              return result.token || null;
-            }}
-          />
-        )}
-       { activeTab === "myEvents"&& user  && (
-                      <MyEventsTabContent
-                        user={user}
-                        initialRegisteredEventIds={registeredEventIds}
-                        isLoadingRegisteredIds={isLoadingRegisteredIds}
-                        onRegistrationChange={handleRegistrationChange}
-                        onEventUpdatedOrDeleted={() => {
-                          fetchAllEvents();
-                          const t = localStorage.getItem("authToken");
-                          if (user?.id && t) {
-                            fetchUserCreatedEvents(user.id, t);
-                            fetchRegisteredEventIds(user.id, t);
-                          }
-                        }}
-                      />
-                    )} 
-        {activeTab === "attendees" && user && (
-          <AttendeesTabContent user={user} />
-        )}
-        {activeTab === "members" && user && (
-          <MembersTabContent
-            user={user}
-            userRole={
-              user.roles?.find((r) => r.name.toUpperCase() === "ADMIN")?.name ||
-              user.roles?.[0]?.name?.toUpperCase() ||
-              "ADMIN"
-            }
-            currentUserEmail={user.email || null}
-            refreshToken={refreshToken}
-            onSessionExpired={handleSessionExpired}
-          />
-        )}
-        {activeTab === "roles" && user && <RolesTabContent user={user} />}
-        {activeTab === "chatList" && user && (
-          <ChatTabContent currentUser={user} />
-        )}
-       
       </div>
 
-      {appIsInitialized && !isLoadingUser && user && (
+      {initializedRef.current && !isLoadingUser && user && (
         <div
           className="fixed bottom-6 right-6 z-[65] group"
           ref={notificationContainerRef}

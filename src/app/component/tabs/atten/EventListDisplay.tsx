@@ -191,8 +191,8 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Chế độ xem</label>
               <div className="flex rounded-md shadow-sm">
-                <button onClick={() => setEventViewMode("card")} className={`px-3 py-2 rounded-l-md border text-sm focus:outline-none flex items-center justify-center gap-1.5 w-1/2 ${eventViewMode === "card" ? "bg-indigo-600 text-white border-indigo-600 z-10" : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300"}`}><FaThLarge /> Thẻ</button>
-                <button onClick={() => setEventViewMode("list")} className={`px-3 py-2 rounded-r-md border text-sm focus:outline-none flex items-center justify-center gap-1.5 w-1/2 -ml-px ${eventViewMode === "list" ? "bg-indigo-600 text-white border-indigo-600 z-10" : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300"}`}><FaList /> DSách</button>
+                <button onClick={() => setEventViewMode("card")} className={`px-3 py-2 rounded-l-md border text-sm focus:outline-none flex items-center justify-center gap-1.5 w-1/2 ${eventViewMode === "card" ? "bg-indigo-600 text-white border-indigo-600 z-10" : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300 cursor-pointer"}`}><FaThLarge /> Thẻ</button>
+                <button onClick={() => setEventViewMode("list")} className={`px-3 py-2 rounded-r-md border text-sm focus:outline-none flex items-center justify-center gap-1.5 w-1/2 -ml-px ${eventViewMode === "list" ? "bg-indigo-600 text-white border-indigo-600 z-10" : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300 cursor-pointer"}`}><FaList /> DSách</button>
               </div>
             </div>
           </div>
@@ -220,7 +220,7 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
       {displayedEvents.length > 0 && (
         <>
           {eventViewMode === 'card' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"> {/* Tăng gap một chút */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 "> {/* Tăng gap một chút */}
               {displayedEvents.map((event) => (
                 <div key={event.id} className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden cursor-pointer flex flex-col" onClick={() => onSelectEvent(event)}>
                   <EventImage

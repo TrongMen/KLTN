@@ -2170,9 +2170,9 @@ export default function UserHome() {
             )}
             {user && activeTab === "attendees" && (
                <AttendeesTabContent
-    user={user}                             // Truyền thông tin người dùng hiện tại
-    refreshToken={refreshToken}             // Truyền hàm làm mới token
-    onSessionExpired={handleSessionExpired} // Truyền hàm xử lý khi phiên hết hạn
+    user={user}                             
+    refreshToken={refreshToken}             
+    onSessionExpired={handleSessionExpired} 
   />
             )}
             {user && activeTab === "members" && (

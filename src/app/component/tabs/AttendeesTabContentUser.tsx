@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { User } from "../types/appTypes"; // Bỏ EventDisplayInfo nếu không dùng trực tiếp
+import { User } from "../types/appTypes";
 import { toast } from "react-hot-toast";
 import {
   FaTrashAlt,
@@ -9,12 +9,16 @@ import {
   FaUserTimes,
   FaFileDownload,
   FaQrcode,
-  FaInfoCircle, // Icon cho thông báo
+  FaInfoCircle,
+  FaSyncAlt,
+  FaSort, // Icon chung cho sắp xếp
+  FaSortUp, // Icon sắp xếp tăng dần
+  FaSortDown, // Icon sắp xếp giảm dần
 } from "react-icons/fa";
 import { MdQrCodeScanner } from "react-icons/md";
 import QrCodeModal from "../modals/QrCodeModal";
 import QRScanner from "../modals/QRScanner";
-import { EventListDisplay, AttendableEvent as AttendableEventType } from "./atten/EventListDisplay"; // Đường dẫn ví dụ
+import { EventListDisplay, AttendableEvent as AttendableEventType } from "./atten/EventListDisplay";
 
 interface Attendee {
   id: string;
@@ -27,6 +31,10 @@ interface Attendee {
 }
 
 type AttendableEvent = AttendableEventType;
+
+// Định nghĩa kiểu cho khóa và hướng sắp xếp người tham dự
+type AttendeeSortKey = 'name' | 'studentId' | 'status';
+type AttendeeSortDirection = 'asc' | 'desc';
 
 interface AttendeesTabContentProps {
   user: User;
@@ -41,7 +49,6 @@ interface AttendeesTabContentProps {
   ) => void;
 }
 
-// Hàm helper để xác định trạng thái tương đối của sự kiện
 const getEventRelativeStatus = (
   event: AttendableEvent,
   defaultDurationHours: number
@@ -49,22 +56,16 @@ const getEventRelativeStatus = (
   const now = new Date();
   const startTime = new Date(event.time);
   let endTime;
-
   if (event.endTime) {
     endTime = new Date(event.endTime);
   } else {
     endTime = new Date(startTime.getTime() + defaultDurationHours * 60 * 60 * 1000);
   }
-
-  if (endTime < now) return 'past'; // Ưu tiên kiểm tra past trước nếu endTime rõ ràng
+  if (endTime < now) return 'past';
   if (startTime > now) return 'upcoming';
   if (startTime <= now && endTime >= now) return 'ongoing';
-  
-  // Trường hợp sự kiện không có endTime và startTime đã qua nhưng (startTime + duration) chưa qua
-  // Hoặc trường hợp hiếm hoi khác, mặc định là past nếu không rõ ràng ongoing/upcoming
-  return 'past'; 
+  return 'past';
 };
-
 
 const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
   user,
@@ -90,16 +91,16 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isProcessingCheckIn, setIsProcessingCheckIn] = useState(false);
 
-  const API_BASE_URL = 'http://localhost:8080';
-  const DEFAULT_EVENT_DURATION_HOURS = 2;
+  // State cho cấu hình sắp xếp danh sách người tham dự
+  const [attendeeSortConfig, setAttendeeSortConfig] = useState<{ key: AttendeeSortKey; direction: AttendeeSortDirection }>({ key: 'name', direction: 'asc' });
 
-  // Xác định trạng thái của sự kiện đang được chọn
+  const DEFAULT_EVENT_DURATION_HOURS = 24;
+
   const selectedEventStatus = useMemo(() => {
     if (!selectedEvent) return null;
     return getEventRelativeStatus(selectedEvent, DEFAULT_EVENT_DURATION_HOURS);
   }, [selectedEvent]);
 
-  // Biến boolean để dễ dàng kiểm soát việc cho phép hành động điểm danh
   const canPerformAttendanceActions = selectedEventStatus === 'ongoing';
 
   const authenticatedFetch = useCallback(
@@ -132,14 +133,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     [refreshToken, onSessionExpired]
   );
 
- const fetchAttendableEvents = useCallback(async () => {
+  const fetchAttendableEvents = useCallback(async (showToast = false) => {
     if (!user?.id) return;
+    if(showToast) toast.loading("Đang làm mới danh sách sự kiện...", { id: "refresh-events-toast" });
     setIsLoadingEvents(true);
     setErrorEvents(null);
     try {
-      const response = await authenticatedFetch(
-        `http://localhost:8080/identity/api/events/creator/${user.id}`
-      );
+      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/creator/${user.id}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `Lỗi ${response.status} khi tải sự kiện.`);
@@ -150,29 +150,23 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
           .filter((event: any) => event.status === "APPROVED" && !event.deleted)
           .map(
             (event: any): AttendableEvent => ({
-              id: event.id,
-              name: event.name || "Sự kiện không tên",
-              time: event.startTime || event.time || new Date().toISOString(),
-              endTime: event.endTime,
-              location: event.location || "Không có địa điểm",
-              description: event.content || event.purpose || "",
-              status: event.status,
-              avatarUrl: event.avatarUrl, // << THÊM DÒNG NÀY ĐỂ MAP avatarUrl
+              id: event.id, name: event.name || "Sự kiện không tên", time: event.startTime || event.time || new Date().toISOString(),
+              endTime: event.endTime, location: event.location || "Không có địa điểm", description: event.content || event.purpose || "",
+              status: event.status, avatarUrl: event.avatarUrl,
             })
           );
         setAttendableEvents(events);
-      } else {
-        throw new Error(data.message || "Dữ liệu sự kiện không hợp lệ.");
-      }
+        if(showToast) toast.success("Làm mới danh sách sự kiện thành công!", { id: "refresh-events-toast" });
+      } else { throw new Error(data.message || "Dữ liệu sự kiện không hợp lệ."); }
     } catch (err: any) {
       setErrorEvents(err.message);
-    } finally {
-      setIsLoadingEvents(false);
-    }
-  }, [user?.id, authenticatedFetch]); // API_BASE_URL is constant, not needed in deps if defined outside component scope
+      if(showToast) toast.error(`Làm mới thất bại: ${err.message}`, { id: "refresh-events-toast" });
+    } finally { setIsLoadingEvents(false); }
+  }, [user?.id, authenticatedFetch]);
 
   const fetchAttendeesForEvent = useCallback(
-    async (eventId: string) => {
+    async (eventId: string, showToast = false) => {
+      if(showToast) toast.loading("Đang làm mới danh sách người tham dự...", { id: "refresh-attendees-toast" });
       setIsLoadingAttendees(true);
       setErrorAttendees(null);
       setSelectedAttendeeIds(new Set());
@@ -190,99 +184,61 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
             else if (att.isAttending === false) currentStatus = "ABSENT";
             else currentStatus = "UNKNOWN";
             return {
-              id: att.userId,
-              name: att.fullName || `${att.lastName || ""} ${att.firstName || ""}`.trim() || "Người dùng ẩn danh",
-              studentId: att.studentCode,
-              status: currentStatus,
-              email: att.email,
-              checkedInAt: att.checkedInAt,
+              id: att.userId, name: att.fullName || `${att.lastName || ""} ${att.firstName || ""}`.trim() || "Người dùng ẩn danh",
+              studentId: att.studentCode, status: currentStatus, email: att.email, checkedInAt: att.checkedInAt,
             };
           });
           setAttendees(fetchedAttendees);
-        } else {
-          throw new Error(data.message || "Dữ liệu người tham dự không hợp lệ.");
-        }
+          if(showToast) toast.success("Làm mới danh sách tham dự thành công!", { id: "refresh-attendees-toast" });
+        } else { throw new Error(data.message || "Dữ liệu người tham dự không hợp lệ."); }
       } catch (err: any) {
         setErrorAttendees(err.message);
+        if(showToast) toast.error(`Làm mới thất bại: ${err.message}`, { id: "refresh-attendees-toast" });
         setAttendees([]);
-      } finally {
-        setIsLoadingAttendees(false);
-      }
+      } finally { setIsLoadingAttendees(false); }
     },
     [authenticatedFetch]
   );
 
   const fetchEventQrCodeImage = useCallback(async (eventId: string) => {
-    // Kiểm tra nếu sự kiện không đang diễn ra
-    if (!canPerformAttendanceActions && selectedEventStatus) { 
-        // Không fetch QR nếu không phải sự kiện đang diễn ra, selectedEventStatus đảm bảo selectedEvent tồn tại
-        toast.error("Chỉ hiển thị mã QR cho sự kiện đang diễn ra.");
-        setIsLoadingEventQr(false); // Đảm bảo reset loading state
-        return null;
+    if (!canPerformAttendanceActions && selectedEventStatus) {
+        toast.error("Chỉ hiển thị mã QR cho sự kiện đang diễn ra."); setIsLoadingEventQr(false); return null;
     }
-    setIsLoadingEventQr(true);
-    setEventQrError(null);
-    setEventQrCodeUrl(null); // Reset trước khi fetch
+    setIsLoadingEventQr(true); setEventQrError(null); setEventQrCodeUrl(null);
     let tempUrlToRevoke: string | null = null;
     try {
       const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${eventId}/qr-code-image`, { method: "GET" }, true);
       if (!response.ok) {
         let errorMsg = `Lỗi ${response.status} khi tải mã QR.`;
-        try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) { /* giữ nguyên */ }
+        try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) {}
         throw new Error(errorMsg);
       }
       const imageBlob = await response.blob();
-      if (!imageBlob.type.startsWith('image/')) {
-        throw new Error("API không trả về ảnh QR hợp lệ.");
-      }
-      tempUrlToRevoke = window.URL.createObjectURL(imageBlob);
-      setEventQrCodeUrl(tempUrlToRevoke);
+      if (!imageBlob.type.startsWith('image/')) { throw new Error("API không trả về ảnh QR hợp lệ."); }
+      tempUrlToRevoke = window.URL.createObjectURL(imageBlob); setEventQrCodeUrl(tempUrlToRevoke);
     } catch (err: any) {
-      setEventQrError(err.message || "Lỗi không xác định khi tải mã QR.");
-      setEventQrCodeUrl(null);
+      setEventQrError(err.message || "Lỗi không xác định khi tải mã QR."); setEventQrCodeUrl(null);
       toast.error(`Lỗi tải mã QR: ${err.message}`);
-    } finally {
-      setIsLoadingEventQr(false);
-    }
+    } finally { setIsLoadingEventQr(false); }
     return tempUrlToRevoke;
-  }, [authenticatedFetch, canPerformAttendanceActions, selectedEventStatus]); // Thêm canPerformAttendanceActions và selectedEventStatus
+  }, [authenticatedFetch, canPerformAttendanceActions, selectedEventStatus]);
 
-  useEffect(() => {
-    fetchAttendableEvents();
-  }, [fetchAttendableEvents]);
+  useEffect(() => { fetchAttendableEvents(); }, [fetchAttendableEvents]);
 
   useEffect(() => {
     let currentEventQrUrlToRevoke: string | null = null;
     if (selectedEvent?.id) {
       fetchAttendeesForEvent(selectedEvent.id);
-      // Chỉ fetch QR nếu sự kiện đang diễn ra (logic đã thêm trong fetchEventQrCodeImage)
-      // Tuy nhiên, gọi nó ở đây và để hàm đó tự quyết định có fetch hay không
       if (getEventRelativeStatus(selectedEvent, DEFAULT_EVENT_DURATION_HOURS) === 'ongoing') {
-          fetchEventQrCodeImage(selectedEvent.id).then(url => {
-            currentEventQrUrlToRevoke = url;
-          });
-      } else {
-        setEventQrCodeUrl(null); // Đảm bảo QR không hiển thị nếu sự kiện không ongoing
-        setIsLoadingEventQr(false);
-        setEventQrError(null);
-      }
-      setIsQrScannerOpen(false);
-      setIsEventQrModalOpen(false);
+          fetchEventQrCodeImage(selectedEvent.id).then(url => { currentEventQrUrlToRevoke = url; });
+      } else { setEventQrCodeUrl(null); setIsLoadingEventQr(false); setEventQrError(null); }
+      setIsQrScannerOpen(false); setIsEventQrModalOpen(false);
     } else {
-      setAttendees([]);
-      setSelectedAttendeeIds(new Set());
-      setEventQrCodeUrl(url => {
-        if (url) window.URL.revokeObjectURL(url);
-        return null;
-      });
-      setIsLoadingEventQr(false);
-      setEventQrError(null);
+      setAttendees([]); setSelectedAttendeeIds(new Set());
+      setEventQrCodeUrl(url => { if (url) window.URL.revokeObjectURL(url); return null; });
+      setIsLoadingEventQr(false); setEventQrError(null);
     }
-    return () => {
-      if (currentEventQrUrlToRevoke) {
-        window.URL.revokeObjectURL(currentEventQrUrlToRevoke);
-      }
-    }
+    return () => { if (currentEventQrUrlToRevoke) window.URL.revokeObjectURL(currentEventQrUrlToRevoke); }
   }, [selectedEvent, fetchAttendeesForEvent, fetchEventQrCodeImage]);
 
   const toggleSelectAttendee = (attendeeId: string) => {
@@ -294,30 +250,73 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     });
   };
 
-  const currentFilteredAttendees = attendees.filter(
-    (attendee) =>
-      attendee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (attendee.email && attendee.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (attendee.studentId && attendee.studentId.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Hàm xử lý thay đổi cấu hình sắp xếp người tham dự
+  const handleAttendeeSortChange = (key: AttendeeSortKey) => {
+    setAttendeeSortConfig(prevConfig => {
+      if (prevConfig.key === key) {
+        return { key, direction: prevConfig.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+  
+  // Sử dụng useMemo để lọc và sắp xếp danh sách người tham dự
+  const sortedAndFilteredAttendees = useMemo(() => {
+    let filtered = attendees.filter(
+      (attendee) =>
+        attendee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (attendee.email && attendee.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (attendee.studentId && attendee.studentId.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
+
+    // Sắp xếp
+    filtered.sort((a, b) => {
+      let valA: string | number, valB: string | number;
+      const { key, direction } = attendeeSortConfig;
+
+      switch (key) {
+        case 'name':
+          valA = a.name.toLowerCase();
+          valB = b.name.toLowerCase();
+          break;
+        case 'studentId':
+          valA = a.studentId || ''; 
+          valB = b.studentId || '';
+          // Sắp xếp số dạng chuỗi, hoặc chuyển sang số nếu chắc chắn là số
+          // Nếu MSSV có thể có chữ, thì sắp xếp như chuỗi là ổn
+          if (!isNaN(Number(valA)) && !isNaN(Number(valB)) && valA !== '' && valB !== '') {
+            valA = Number(valA);
+            valB = Number(valB);
+          }
+          break;
+        case 'status':
+          const statusOrder = { 'PRESENT': 1, 'UNKNOWN': 2, 'ABSENT': 3 };
+          valA = statusOrder[a.status];
+          valB = statusOrder[b.status];
+          break;
+        default:
+          return 0;
+      }
+
+      if (valA < valB) return direction === 'asc' ? -1 : 1;
+      if (valA > valB) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return filtered;
+  }, [attendees, searchTerm, attendeeSortConfig]);
+
 
   const toggleSelectAll = () => {
-    if (selectedAttendeeIds.size === currentFilteredAttendees.length && currentFilteredAttendees.length > 0) {
+    if (selectedAttendeeIds.size === sortedAndFilteredAttendees.length && sortedAndFilteredAttendees.length > 0) {
       setSelectedAttendeeIds(new Set());
     } else {
-      setSelectedAttendeeIds(new Set(currentFilteredAttendees.map((att) => att.id)));
+      setSelectedAttendeeIds(new Set(sortedAndFilteredAttendees.map((att) => att.id)));
     }
   };
 
   const handleBulkSetAttendanceStatus = useCallback(async (newStatus: "PRESENT" | "ABSENT") => {
-    if (!canPerformAttendanceActions) {
-      toast.error("Chỉ có thể điểm danh cho sự kiện đang diễn ra.");
-      return;
-    }
-    if (selectedAttendeeIds.size === 0 || !selectedEvent) {
-      toast.error("Vui lòng chọn ít nhất một người tham dự.");
-      return;
-    }
+    if (!canPerformAttendanceActions) { toast.error("Chỉ có thể điểm danh cho sự kiện đang diễn ra."); return; }
+    if (selectedAttendeeIds.size === 0 || !selectedEvent) { toast.error("Vui lòng chọn ít nhất một người tham dự."); return; }
     setIsPerformingBulkAction(true);
     const isAttendingBoolean = newStatus === "PRESENT";
     const SucceededUpdates: string[] = [];
@@ -332,9 +331,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
         if (!response.ok) throw new Error(responseData?.message || `Lỗi ${response.status}`);
         if (responseData && responseData.code !== 1000 && response.ok) throw new Error(responseData.message || 'Lỗi server');
         SucceededUpdates.push(userId);
-      } catch (err: any) {
-        FailedUpdates.push({ id: userId, name: attendeeToUpdate?.name, error: err.message });
-      }
+      } catch (err: any) { FailedUpdates.push({ id: userId, name: attendeeToUpdate?.name, error: err.message }); }
     }
     if (SucceededUpdates.length > 0) {
       setAttendees((prev) => prev.map((att) => SucceededUpdates.includes(att.id) ? { ...att, status: newStatus, checkedInAt: newStatus === "PRESENT" ? new Date().toISOString() : att.checkedInAt } : att));
@@ -346,11 +343,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
   }, [selectedAttendeeIds, selectedEvent, attendees, authenticatedFetch, canPerformAttendanceActions]);
 
   const handleBulkDeleteAttendees = useCallback(async () => {
-    // Quyết định: Cho phép xóa người tham dự bất kể trạng thái sự kiện
-    if (selectedAttendeeIds.size === 0 || !selectedEvent) {
-      toast.error("Vui lòng chọn người để xóa.");
-      return;
-    }
+    if (selectedAttendeeIds.size === 0 || !selectedEvent) { toast.error("Vui lòng chọn người để xóa."); return; }
     const confirmFn = async () => {
       setIsPerformingBulkAction(true);
       const SucceededDeletes: string[] = [];
@@ -384,7 +377,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
   }, [selectedAttendeeIds, selectedEvent, attendees, authenticatedFetch, showConfirmationDialog]);
 
   const handleExportAttendees = useCallback(async () => {
-    // Quyết định: Cho phép xuất danh sách bất kể trạng thái sự kiện
     if (!selectedEvent) return;
     setIsExporting(true);
     const toastId = toast.loading("Đang xuất file...");
@@ -404,36 +396,18 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
 
   const handleShowEventQrCode = useCallback(() => {
     if (!selectedEvent || isLoadingEventQr) return;
-    if (!canPerformAttendanceActions) {
-      toast.error("Chỉ hiển thị mã QR cho sự kiện đang diễn ra.");
-      return;
-    }
-    if (eventQrCodeUrl) {
-      setIsEventQrModalOpen(true);
-    } else {
-      setIsEventQrModalOpen(true);
-      if (selectedEvent?.id) {
-        fetchEventQrCodeImage(selectedEvent.id);
-      }
-    }
+    if (!canPerformAttendanceActions) { toast.error("Chỉ hiển thị mã QR cho sự kiện đang diễn ra."); return; }
+    if (eventQrCodeUrl) { setIsEventQrModalOpen(true); }
+    else { setIsEventQrModalOpen(true); if (selectedEvent?.id) fetchEventQrCodeImage(selectedEvent.id); }
   }, [selectedEvent, eventQrCodeUrl, isLoadingEventQr, canPerformAttendanceActions, fetchEventQrCodeImage]);
 
   const handleCheckInScanSuccess = useCallback(async (qrData: string) => {
-    setIsQrScannerOpen(false); // Luôn đóng scanner sau khi có kết quả
-    if (!canPerformAttendanceActions) {
-      toast.error("Sự kiện không đang diễn ra. Không thể điểm danh.");
-      setIsProcessingCheckIn(false); // Reset state nếu có
-      return;
-    }
-    if (!selectedEvent) {
-      toast.error("Chưa chọn sự kiện.");
-      setIsProcessingCheckIn(false);
-      return;
-    }
+    setIsQrScannerOpen(false);
+    if (!canPerformAttendanceActions) { toast.error("Sự kiện không đang diễn ra. Không thể điểm danh."); setIsProcessingCheckIn(false); return; }
+    if (!selectedEvent) { toast.error("Chưa chọn sự kiện."); setIsProcessingCheckIn(false); return; }
     setIsProcessingCheckIn(true);
     const toastId = toast.loading(`Đang điểm danh...`);
-    const formData = new FormData();
-    formData.append('qrCodeData', qrData);
+    const formData = new FormData(); formData.append('qrCodeData', qrData);
     try {
       const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/check-in`, { method: "POST", body: formData }, true);
       const responseData = await response.json();
@@ -448,11 +422,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       const nameMatchQr = qrData.match(/NAME:([^|]+)/); if (nameMatchQr?.[1]) scannedName = nameMatchQr[1].trim();
       toast.success(`Điểm danh thành công: ${scannedName}!`, { id: toastId });
       setAttendees(prev => prev.map(att => att.id === attendeeId ? { ...att, status: 'PRESENT', checkedInAt } : att));
-    } catch (err: any) {
-      toast.error(`${err.message}`, { id: toastId });
-    } finally {
-      setIsProcessingCheckIn(false);
-    }
+    } catch (err: any) { toast.error(`${err.message}`, { id: toastId }); }
+    finally { setIsProcessingCheckIn(false); }
   }, [selectedEvent, attendees, authenticatedFetch, canPerformAttendanceActions]);
 
   const handleCheckInScanError = useCallback((errorMsg: string) => {
@@ -466,56 +437,60 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     if (status === "ABSENT") return "bg-red-100 text-red-700";
     return "bg-gray-100 text-gray-700";
   };
+  
+  // Helper để render icon sắp xếp
+  const SortIndicator = ({ sortKey }: { sortKey: AttendeeSortKey }) => {
+    if (attendeeSortConfig.key !== sortKey) {
+      return <FaSort className="ml-1 text-gray-400" />;
+    }
+    return attendeeSortConfig.direction === 'asc' ? <FaSortUp className="ml-1 text-blue-500" /> : <FaSortDown className="ml-1 text-blue-500" />;
+  };
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-semibold text-teal-600">
-        Điểm danh người tham dự
-      </h2>
+      <h2 className="text-2xl font-semibold text-teal-700"> Điểm danh người tham dự </h2>
       {!selectedEvent ? (
         <div className="space-y-4">
-          <h3 className="text-xl font-medium text-gray-700">
-            Chọn sự kiện để điểm danh:
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-medium text-gray-700"> Chọn sự kiện để điểm danh: </h3>
+            <button
+              onClick={() => fetchAttendableEvents(true)}
+              disabled={isLoadingEvents}
+              className="px-4 py-2 text-sm font-semibold text-white bg-sky-600 cursor-pointer rounded-md hover:bg-sky-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Làm mới danh sách sự kiện"
+            >
+              <FaSyncAlt className={isLoadingEvents ? "animate-spin" : ""} />
+            </button>
+          </div>
           <EventListDisplay
-            initialEvents={attendableEvents}
-            isLoading={isLoadingEvents}
-            error={errorEvents}
+            initialEvents={attendableEvents} isLoading={isLoadingEvents} error={errorEvents}
             onSelectEvent={(event) => setSelectedEvent(event)}
             defaultEventDurationHours={DEFAULT_EVENT_DURATION_HOURS}
+            listHeight="h-[calc(100vh-380px)]" 
           />
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 ">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
             <h3 className="text-xl font-medium text-gray-700">
-              Sự kiện:{" "}
-              <span className="text-indigo-700">{selectedEvent.name}</span>
+              Sự kiện: <span className="text-indigo-700">{selectedEvent.name}</span>
               {selectedEventStatus && (
-                <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  selectedEventStatus === 'ongoing' ? 'bg-green-100 text-green-700' :
-                  selectedEventStatus === 'upcoming' ? 'bg-blue-100 text-blue-700' :
-                  'bg-gray-100 text-gray-700'
-                }`}>
+                <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${ selectedEventStatus === 'ongoing' ? 'bg-green-100 text-green-700' : selectedEventStatus === 'upcoming' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700' }`}>
                   {selectedEventStatus === 'ongoing' && 'Đang diễn ra'}
                   {selectedEventStatus === 'upcoming' && 'Sắp diễn ra'}
                   {selectedEventStatus === 'past' && 'Đã kết thúc'}
                 </span>
               )}
             </h3>
-            <button
-              onClick={() => { setSelectedEvent(null); setSearchTerm(""); }}
-              className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-100 rounded-md hover:bg-indigo-200 transition-colors"
-            >
-              Chọn sự kiện khác
-            </button>
+            <button onClick={() => { setSelectedEvent(null); setSearchTerm(""); }}
+              className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-100 rounded-md hover:bg-indigo-200 transition-colors cursor-pointer"
+            > Chọn sự kiện khác </button>
           </div>
 
-          {/* Thông báo nếu sự kiện không cho phép điểm danh */}
           {selectedEventStatus && !canPerformAttendanceActions && (
             <div className="p-3 mb-4 text-sm text-yellow-700 bg-yellow-100 rounded-lg flex items-center gap-2" role="alert">
               <FaInfoCircle className="w-5 h-5"/>
-              <span className="font-medium">Thông báo:</span> Chỉ có thể thực hiện các thao tác điểm danh (đánh dấu, quét QR) cho các sự kiện đang diễn ra.
+              <span className="font-medium">Thông báo:</span> Chỉ có thể thực hiện các thao tác điểm danh cho sự kiện đang diễn ra.
             </div>
           )}
 
@@ -525,47 +500,22 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
           ) : (
             <div className="bg-white p-4 sm:p-6 rounded-lg shadow border border-gray-200">
               <div className="mb-4 flex flex-col sm:flex-row gap-4 items-center">
-                <input type="text" placeholder="Tìm kiếm người tham dự..."
+                <input type="text" placeholder="Tìm kiếm người tham dự (Tên, Email, MSSV)..."
                   className="w-full sm:flex-grow px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
               <div className="mb-4 flex flex-wrap gap-2 items-center">
                 <span className="text-sm text-gray-700 mr-2"> Đã chọn: {selectedAttendeeIds.size} </span>
-                <button
-                  onClick={() => handleBulkSetAttendanceStatus("PRESENT")}
-                  disabled={!canPerformAttendanceActions || isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                > <FaUserCheck /> Có mặt </button>
-                <button
-                  onClick={() => handleBulkSetAttendanceStatus("ABSENT")}
-                  disabled={!canPerformAttendanceActions || isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                > <FaUserTimes /> Vắng mặt </button>
-                <button // Xóa vẫn cho phép
-                  onClick={handleBulkDeleteAttendees}
-                  disabled={isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                > <FaTrashAlt /> Xóa đã chọn </button>
-                <button // Xuất DS vẫn cho phép
-                  onClick={handleExportAttendees}
-                  disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                > <FaFileDownload /> {isExporting ? "Đang xuất..." : "Xuất DS"} </button>
-                <button
-                  onClick={handleShowEventQrCode}
-                  disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                > <FaQrcode /> {isLoadingEventQr ? "Tải QR..." : "Mã QR Sự kiện"} </button>
-                <button
-                  onClick={() => {
-                    if (!selectedEvent) { toast.error("Vui lòng chọn sự kiện."); return; }
-                    if (!canPerformAttendanceActions) { toast.error("Chỉ điểm danh QR cho sự kiện đang diễn ra."); return;}
-                    setIsQrScannerOpen(true);
-                  }}
-                  disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !selectedEvent}
-                  className="px-3 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-                > <MdQrCodeScanner /> {isProcessingCheckIn ? "Xử lý..." : "Điểm danh QR"}
+                {/* Các nút hành động khác */}
+                <button onClick={() => handleBulkSetAttendanceStatus("PRESENT")} disabled={!canPerformAttendanceActions || isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaUserCheck /> Có mặt </button>
+                <button onClick={() => handleBulkSetAttendanceStatus("ABSENT")} disabled={!canPerformAttendanceActions || isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaUserTimes /> Vắng mặt </button>
+                <button onClick={handleBulkDeleteAttendees} disabled={isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaTrashAlt /> Xóa </button>
+                <button onClick={handleExportAttendees} disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaFileDownload /> {isExporting ? "Đang xuất..." : "Xuất DS"} </button>
+                <button onClick={handleShowEventQrCode} disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaQrcode /> {isLoadingEventQr ? "Tải QR..." : "QR Sự kiện"} </button>
+                <button onClick={() => { if (!selectedEvent) { toast.error("Vui lòng chọn sự kiện."); return; } if (!canPerformAttendanceActions) { toast.error("Chỉ điểm danh QR cho sự kiện đang diễn ra."); return;} setIsQrScannerOpen(true); }} disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !selectedEvent} className="px-3 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <MdQrCodeScanner /> {isProcessingCheckIn ? "Xử lý..." : "Điểm danh QR"} </button>
+                <button onClick={() => { if (selectedEvent) fetchAttendeesForEvent(selectedEvent.id, true);}} disabled={isLoadingAttendees || !selectedEvent || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer" title="Làm mới danh sách người tham dự" >
+                  <FaSyncAlt className={isLoadingAttendees ? "animate-spin" : ""} /> DS Tham Dự
                 </button>
               </div>
 
@@ -574,25 +524,31 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <input type="checkbox" className="form-checkbox h-4 w-4 text-indigo-600"
-                          checked={currentFilteredAttendees.length > 0 && selectedAttendeeIds.size === currentFilteredAttendees.length}
+                        <input type="checkbox" className="form-checkbox h-4 w-4 text-indigo-600 transition duration-150 ease-in-out"
+                          checked={sortedAndFilteredAttendees.length > 0 && selectedAttendeeIds.size === sortedAndFilteredAttendees.length}
                           onChange={toggleSelectAll}
-                          disabled={currentFilteredAttendees.length === 0 || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !canPerformAttendanceActions} // Vô hiệu hóa cả checkbox nếu không điểm danh được
+                          disabled={sortedAndFilteredAttendees.length === 0 || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !canPerformAttendanceActions}
                         />
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"> Họ Tên </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell"> MSSV </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"> Trạng thái </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleAttendeeSortChange('name')}>
+                        Họ Tên <SortIndicator sortKey="name" />
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell cursor-pointer hover:bg-gray-100" onClick={() => handleAttendeeSortChange('studentId')}>
+                        MSSV <SortIndicator sortKey="studentId" />
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleAttendeeSortChange('status')}>
+                        Trạng thái <SortIndicator sortKey="status" />
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {currentFilteredAttendees.map((attendee, index) => (
+                    {sortedAndFilteredAttendees.map((attendee, index) => (
                       <tr key={attendee.id} className={`${selectedAttendeeIds.has(attendee.id) ? 'bg-indigo-50' : (index % 2 === 0 ? 'bg-white' : 'bg-gray-50')}`} >
                         <td className="px-2 py-3 whitespace-nowrap">
-                          <input type="checkbox" className="form-checkbox h-4 w-4 text-indigo-600"
+                          <input type="checkbox" className="form-checkbox h-4 w-4 text-indigo-600 transition duration-150 ease-in-out"
                             checked={selectedAttendeeIds.has(attendee.id)}
                             onChange={() => toggleSelectAttendee(attendee.id)}
-                            disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !canPerformAttendanceActions} // Vô hiệu hóa cả checkbox nếu không điểm danh được
+                            disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !canPerformAttendanceActions}
                           />
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> {attendee.name} </td>
@@ -609,25 +565,19 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
                   </tbody>
                 </table>
               </div>
-              {currentFilteredAttendees.length === 0 && searchTerm && (<p className="text-center text-gray-500 py-4"> Không tìm thấy người tham dự nào khớp. </p>)}
-              {currentFilteredAttendees.length === 0 && !searchTerm && attendees.length > 0 && (<p className="text-center text-gray-500 py-4"> Không có người tham dự nào (đã lọc hết). </p>)}
+              {sortedAndFilteredAttendees.length === 0 && searchTerm && (<p className="text-center text-gray-500 py-4"> Không tìm thấy người tham dự nào khớp. </p>)}
+              {sortedAndFilteredAttendees.length === 0 && !searchTerm && attendees.length > 0 && (<p className="text-center text-gray-500 py-4"> Không có người tham dự nào (đã lọc hết). </p>)}
             </div>
           )}
         </div>
       )}
 
-      <QrCodeModal
-        isOpen={isEventQrModalOpen && canPerformAttendanceActions} // Chỉ mở modal nếu được phép
-        onClose={() => {
-          setIsEventQrModalOpen(false);
-          if (eventQrCodeUrl) { window.URL.revokeObjectURL(eventQrCodeUrl); setEventQrCodeUrl(null); }
-        }}
-        imageUrl={eventQrCodeUrl}
-        isLoading={isLoadingEventQr}
-        eventName={selectedEvent?.name}
+      <QrCodeModal isOpen={isEventQrModalOpen && canPerformAttendanceActions}
+        onClose={() => { setIsEventQrModalOpen(false); if (eventQrCodeUrl) { window.URL.revokeObjectURL(eventQrCodeUrl); setEventQrCodeUrl(null); }}}
+        imageUrl={eventQrCodeUrl} isLoading={isLoadingEventQr} eventName={selectedEvent?.name}
       />
 
-      {isQrScannerOpen && selectedEvent && canPerformAttendanceActions && ( // Chỉ mở scanner nếu được phép
+      {isQrScannerOpen && selectedEvent && canPerformAttendanceActions && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="flex justify-between items-center p-4 border-b">
@@ -639,8 +589,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
             <div className="p-4">
               {isProcessingCheckIn ? (
                 <div className="text-center py-10">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-2"></div>
-                  <p>Đang xử lý điểm danh...</p>
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-2"></div> <p>Đang xử lý điểm danh...</p>
                 </div>
               ) : ( <QRScanner onScanSuccess={handleCheckInScanSuccess} onScanError={handleCheckInScanError} /> )}
             </div>

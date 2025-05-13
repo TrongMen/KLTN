@@ -523,7 +523,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
           apiFormData.append("eventId", formData.eventId);
         }
 
-        let API_URL = "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news";
+        let API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news`;
         let method = "POST";
 
         if (isEditing && editingNewsItem) {

@@ -271,7 +271,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Chưa xác thực để tải vai trò.");
         const response = await fetch(
-          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole",
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!response.ok) {

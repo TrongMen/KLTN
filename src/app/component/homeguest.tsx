@@ -1787,7 +1787,7 @@ export default function HomeGuest() {
     }
 
     if (!socketRef.current) {
-      const socket = io("ws://localhost:9099", {
+      const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`, {
         path: "/socket.io",
         query: { userId: user.id },
         transports: ["websocket"],
@@ -2014,7 +2014,7 @@ export default function HomeGuest() {
     try {
       const token = localStorage.getItem("authToken");
       if (token) {
-        await fetch("${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/logout", {
+        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/logout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: token }),

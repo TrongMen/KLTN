@@ -233,7 +233,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       setFetchUsersError(null);
       try {
         const res = await fetch(
-          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role",
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {
@@ -258,7 +258,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       setFetchRolesError(null);
       try {
         const res = await fetch(
-          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole",
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {
@@ -547,7 +547,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       organizers: formData.organizers,
       participants: formData.participants,
     };
-    let url = "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events";
+    let url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events`;
     let method = "POST";
 
     if (isEditMode && formData.id) {

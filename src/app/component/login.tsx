@@ -50,7 +50,7 @@ export default function LoginPage() {
 
     try {
       const authResponse = await fetch(
-        "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/token",
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/token`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -69,7 +69,7 @@ export default function LoginPage() {
       localStorage.setItem("authToken", token);
 
       const userInfoResponse = await fetch(
-        "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/myInfo",
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/myInfo`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }

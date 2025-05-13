@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-const REFRESH_URL = "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/refresh";
+const REFRESH_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/refresh`;
 
 export function useRefreshToken() {
   const [refreshing, setRefreshing] = useState(false);

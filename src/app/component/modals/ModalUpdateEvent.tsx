@@ -210,7 +210,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         setFetchUsersError(null);
         try {
           const res = await fetch(
-            "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role",
+            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           if (!res.ok) {
@@ -239,7 +239,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         setFetchRolesError(null);
         try {
           const res = await fetch(
-            "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole",
+            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           if (!res.ok) {

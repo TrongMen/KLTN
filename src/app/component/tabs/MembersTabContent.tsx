@@ -277,7 +277,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       }
 
       try {
-        let response = await fetch("${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users", {
+        let response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           cache: "no-store",
         });
@@ -286,7 +286,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
           const newToken = await refreshToken();
           if (newToken) {
             token = newToken;
-            response = await fetch("${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users", {
+            response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`, {
               headers: { Authorization: `Bearer ${token}` },
               cache: "no-store",
             });
@@ -347,7 +347,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
 
       try {
         let response = await fetch(
-          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/locked",
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/locked`,
           { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
         );
         if (response.status === 401 || response.status === 403) {
@@ -355,7 +355,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
           if (newToken) {
             token = newToken;
             response = await fetch(
-              "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/locked",
+              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/locked`,
               {
                 headers: { Authorization: `Bearer ${token}` },
                 cache: "no-store",
@@ -417,7 +417,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     }
     try {
       let response = await fetch(
-        "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions",
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions`,
         { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
       );
       if (response.status === 401 || response.status === 403) {
@@ -425,7 +425,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
         if (newToken) {
           token = newToken;
           response = await fetch(
-            "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions",
+            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions`,
             { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
           );
         } else {

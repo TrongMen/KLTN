@@ -69,8 +69,8 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
       };
 
       const [positionsRes, rolesRes] = await Promise.all([
-        fetch("${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions", { headers }),
-        fetch("${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole", { headers }),
+        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions`, { headers }),
+        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`, { headers }),
       ]);
 
       const positionsData = await positionsRes.json();
@@ -120,8 +120,8 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
     const { type, action, id } = editMode;
     const urlBase =
       type === "position"
-        ? "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions"
-        : "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole";
+        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions`
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`;
     const url = action === "add" ? urlBase : `${urlBase}/${id}`;
     const method = action === "add" ? "POST" : "PUT";
     const body = JSON.stringify({ name: inputName });
@@ -225,8 +225,8 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
     const type = activeTab;
     const urlBase =
       type === "position"
-        ? "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions"
-        : "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole";
+        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions`
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`;
     const deletePromises = idsToDelete.map((id) =>
       fetch(`${urlBase}/${id}`, {
         method: "DELETE",

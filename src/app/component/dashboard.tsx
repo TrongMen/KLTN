@@ -236,7 +236,7 @@ export default function Dashboard() {
     setErrorEvents(null);
     try {
       const response = await fetch(
-        "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status/notoken?status=APPROVED"
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status/notoken?status=APPROVED`
       );
       if (!response.ok) {
         let errorMessage = `Lỗi HTTP: ${response.status} - ${response.statusText}`;
@@ -288,7 +288,7 @@ export default function Dashboard() {
     setErrorNews(null);
     try {
       const response = await fetch(
-        "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status/notoken?status=APPROVED"
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status/notoken?status=APPROVED`
       );
       if (!response.ok) {
         let errorMessage = `Lỗi HTTP: ${response.status} - ${response.statusText}`;

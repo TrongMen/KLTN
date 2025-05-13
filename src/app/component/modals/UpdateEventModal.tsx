@@ -512,7 +512,7 @@ const ParticipantSection = forwardRef<ParticipantSectionHandle, ParticipantSecti
                     if (!token) throw new Error("Token không tồn tại.");
                     const headers = { Authorization: `Bearer ${token}` };
                     const rRes = await fetch(
-                        "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole", // API endpoint lấy danh sách vai trò
+                        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`, // API endpoint lấy danh sách vai trò
                         { headers }
                     );
                     if (!rRes.ok)
@@ -852,7 +852,7 @@ const UpdateEventModal: React.FC<UpdateEventModalProps> = ({
         const headers = { Authorization: `Bearer ${token}` };
         // API endpoint để lấy users kèm position và organizerRole
         const res = await fetch(
-          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role",
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role`,
           { headers }
         );
         if (!res.ok) {

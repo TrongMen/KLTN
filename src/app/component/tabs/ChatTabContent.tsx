@@ -269,7 +269,7 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
       currentUser
     ) {
       const groupId = selectedConversation.id;
-      const SOCKET_URL = "ws://localhost:9099";
+      const SOCKET_URL = `${process.env.NEXT_PUBLIC_SOCKET_URL}`;
 
       if (
         groupSocket.current?.connected &&

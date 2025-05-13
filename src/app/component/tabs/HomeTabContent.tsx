@@ -3,8 +3,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType, NewsItem, EventDisplayInfo } from "../types/appTypes";
+import {
+  User,
+  NewsItem,
+  EventDisplayInfo,
+  
+} from "../types/appTypes";
+import { useRouter } from "next/navigation";
+import {
 
+  EventDataForForm,
+} from "../types/typCreateEvent";
 import {
   ReloadIcon,
   Pencil1Icon,
@@ -19,7 +28,6 @@ import {
   TrashIcon,
 } from "@radix-ui/react-icons";
 
-import UpdateEventModal from "../modals/UpdateEventModal";
 import ConfirmationDialog, {
   ConfirmationDialogProps,
 } from "../../../utils/ConfirmationDialog";
@@ -53,12 +61,10 @@ const getEventStatus = (eventDateStr: string | undefined): EventStatus => {
       eventDate.getMonth(),
       eventDate.getDate()
     );
-
     if (eventDateStart < todayStart) return "ended";
     else if (eventDateStart > todayStart) return "upcoming";
     else return "ongoing";
   } catch (e) {
-    console.error("Error parsing event date for status:", e);
     return "upcoming";
   }
 };
@@ -157,6 +163,7 @@ interface HomeTabContentProps {
   refreshNewsList: () => void;
   refreshToken?: () => Promise<string | null>;
   onRefreshEvents: () => Promise<void>;
+  onOpenUpdateModal: (event: EventDisplayInfo) => void; 
 }
 
 const HomeTabContent: React.FC<HomeTabContentProps> = ({
@@ -185,6 +192,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   refreshNewsList,
   refreshToken,
   onRefreshEvents,
+  onOpenUpdateModal, // Nhận prop này
 }) => {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [startDateFilter, setStartDateFilter] = useState<string>("");
@@ -194,8 +202,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     ITEMS_PER_PAGE_OPTIONS[0]
   );
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
-  const [eventToEdit, setEventToEdit] = useState<EventDisplayInfo | null>(null);
   const [confirmationDialogState, setConfirmationDialogState] =
     useState<ConfirmationState>({
       isOpen: false,
@@ -211,114 +217,68 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   >(null);
   const [isLoadingOrganizers, setIsLoadingOrganizers] =
     useState<boolean>(false);
-  const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
-  const [isSubmittingNews, setIsSubmittingNews] = useState(false);
-  const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
 
-  useEffect(() => {
-    if (selectedEvent && selectedEvent.createdBy) {
-      const fetchCreatorInfo = async () => {
-        setIsLoadingCreator(true);
-        setCreatorName(null);
-        try {
-          const response = await fetch(
-            `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
-          );
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.message || "Không tìm thấy người tạo");
-          }
-          const data = await response.json();
-          if (data.code === 1000 && data.result) {
-            const creator = data.result;
-            const fullName = [creator.lastName, creator.firstName]
+  const router = useRouter();
+
+  if (
+  selectedEvent &&
+  selectedEvent.organizers &&
+  selectedEvent.organizers.length > 0
+) {
+  const organizers = selectedEvent.organizers; // <-- biến tạm
+
+  const fetchOrganizerDetails = async () => {
+    setIsLoadingOrganizers(true);
+    setDetailedOrganizers(null);
+    try {
+      const organizerPromises = organizers.map(async (org) => {
+        const response = await fetch(
+          `http://localhost:8080/identity/users/notoken/${org.userId}`
+        );
+        if (!response.ok)
+          return {
+            ...org,
+            fullName: `ID: ${org.userId.substring(0, 8)}...`,
+          };
+        const data = await response.json();
+        if (data.code === 1000 && data.result) {
+          const userDetail = data.result;
+          const fullName =
+            [userDetail.lastName, userDetail.firstName]
               .filter(Boolean)
               .join(" ")
-              .trim();
-            setCreatorName(
-              fullName ||
-                creator.username ||
-                `ID: ${selectedEvent.createdBy?.substring(0, 8)}...`
-            );
-          } else {
-            setCreatorName(
-              `ID: ${selectedEvent.createdBy?.substring(0, 8)}...`
-            );
-          }
-        } catch (error) {
-          console.error("Lỗi tải tên người tạo:", error);
-          setCreatorName("Không tải được tên");
-        } finally {
-          setIsLoadingCreator(false);
+              .trim() || userDetail.username;
+          return {
+            ...org,
+            fullName: fullName || `ID: ${org.userId.substring(0, 8)}...`,
+          };
         }
-      };
-      fetchCreatorInfo();
-    } else {
-      setCreatorName(null);
+        return {
+          ...org,
+          fullName: `ID: ${org.userId.substring(0, 8)}...`,
+        };
+      });
+      const settledOrganizers = await Promise.all(organizerPromises);
+      setDetailedOrganizers(settledOrganizers as DetailedOrganizer[]);
+    } catch (error) {
+      console.error("Lỗi tải thông tin ban tổ chức:", error);
+      setDetailedOrganizers(
+        organizers.map((org) => ({
+          ...org,
+          fullName: "Lỗi tải tên",
+        })) as DetailedOrganizer[]
+      );
+    } finally {
+      setIsLoadingOrganizers(false);
     }
+  };
 
-    if (
-      selectedEvent &&
-      selectedEvent.organizers &&
-      selectedEvent.organizers.length > 0
-    ) {
-      const fetchOrganizerDetails = async () => {
-        setIsLoadingOrganizers(true);
-        setDetailedOrganizers(null);
-        try {
-          const organizerPromises = selectedEvent.organizers!.map(
-            async (org) => {
-              const response = await fetch(
-                `http://localhost:8080/identity/users/notoken/${org.userId}`
-              );
-              if (!response.ok)
-                return {
-                  ...org,
-                  fullName: `ID: ${org.userId.substring(0, 8)}...`,
-                };
-              const data = await response.json();
-              if (data.code === 1000 && data.result) {
-                const userDetail = data.result;
-                const fullName =
-                  [userDetail.lastName, userDetail.firstName]
-                    .filter(Boolean)
-                    .join(" ")
-                    .trim() || userDetail.username;
-                return {
-                  ...org,
-                  fullName: fullName || `ID: ${org.userId.substring(0, 8)}...`,
-                };
-              }
-              return {
-                ...org,
-                fullName: `ID: ${org.userId.substring(0, 8)}...`,
-              };
-            }
-          );
-          const settledOrganizers = await Promise.all(organizerPromises);
-          setDetailedOrganizers(settledOrganizers);
-        } catch (error) {
-          console.error("Lỗi tải thông tin ban tổ chức:", error);
-          setDetailedOrganizers(
-            selectedEvent.organizers.map((org) => ({
-              ...org,
-              fullName: "Lỗi tải tên",
-            }))
-          );
-        } finally {
-          setIsLoadingOrganizers(false);
-        }
-      };
-      fetchOrganizerDetails();
-    } else {
-      setDetailedOrganizers(null);
-    }
-  }, [selectedEvent]);
+  fetchOrganizerDetails();
+}
+
 
   const processedEvents = useMemo(() => {
-    if (!allEvents || !Array.isArray(allEvents)) {
-      return [];
-    }
+    if (!allEvents || !Array.isArray(allEvents)) return [];
     let evts = [...allEvents];
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -482,21 +442,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   };
 
   const handleEditEvent = (event: EventDisplayInfo) => {
-    setEventToEdit(event);
-    setIsUpdateModalOpen(true);
+    onOpenUpdateModal(event); // Gọi prop từ UserHome
   };
-  const handleEventUpdated = useCallback(
-    async (updatedEvent: EventDisplayInfo) => {
-      setIsUpdateModalOpen(false);
-      setEventToEdit(null);
-      toast.success(`Sự kiện "${updatedEvent.title}" đã cập nhật.`);
-      await onRefreshEvents();
-      if (selectedEvent?.id === updatedEvent.id) {
-        onEventClick(updatedEvent);
-      }
-    },
-    [onRefreshEvents, selectedEvent, onEventClick]
-  );
 
   const handleDeleteEvent = (event: EventDisplayInfo) => {
     if (!user || !user.id) {
@@ -538,12 +485,14 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             throw new Error("Làm mới phiên thất bại.");
           }
         }
-        if (response.ok) {
+        if (response.ok || response.status === 204) {
           let successMsg = `Đã xoá "${event.title}".`;
-          try {
-            const data = await response.json();
-            successMsg = data.message || successMsg;
-          } catch (e) {}
+          if (response.status !== 204) {
+            try {
+              const data = await response.json();
+              successMsg = data.message || successMsg;
+            } catch (e) {}
+          }
           toast.success(successMsg);
           await onRefreshEvents();
           onBackToList();
@@ -571,11 +520,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       title: "Xác nhận Xoá",
       message: (
         <>
-          {" "}
           <p>
             Bạn chắc chắn muốn xoá sự kiện{" "}
             <strong className="font-semibold">"{event.title}"</strong> không?
-          </p>{" "}
+          </p>
         </>
       ),
       onConfirm: confirmDeleteAction,
@@ -592,120 +540,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     });
   };
 
-  const handleOpenCreateModal = () => {
-    if (!user) {
-      toast.error("Vui lòng đăng nhập.");
-      return;
-    }
-    setEditingNewsItem(null);
-    setIsNewsModalOpen(true);
-  };
-  const handleOpenEditModal = (newsItem: NewsItem) => {
-    setEditingNewsItem(newsItem);
-    setIsNewsModalOpen(true);
-  };
-  const handleCloseModal = () => {
-    if (!isSubmittingNews) {
-      setIsNewsModalOpen(false);
-      setEditingNewsItem(null);
-    }
-  };
-
-  const handleNewsFormSubmit = async (
-    formData: NewsFormData,
-    newsIdToSubmit?: string
-  ) => {
-    if (!user) {
-      toast.error("Vui lòng đăng nhập.");
-      return;
-    }
-    setIsSubmittingNews(true);
-    const toastId = toast.loading(
-      newsIdToSubmit ? "Đang cập nhật..." : "Đang tạo..."
-    );
-    const apiFormData = new FormData();
-    apiFormData.append("title", formData.title);
-    apiFormData.append("content", formData.content);
-    if (formData.eventId) apiFormData.append("eventId", formData.eventId);
-    if (formData.imageFile)
-      apiFormData.append("coverImage", formData.imageFile);
-
-    let API_URL = "http://localhost:8080/identity/api/news";
-    let method = "POST";
-    if (newsIdToSubmit) {
-      API_URL = `http://localhost:8080/identity/api/news/${newsIdToSubmit}`;
-      method = "PUT";
-    } else {
-      apiFormData.append("type", "NEWS");
-      apiFormData.append("featured", "false");
-      apiFormData.append("pinned", "false");
-      apiFormData.append("createById", user.id);
-    }
-
-    let currentToken = localStorage.getItem("authToken");
-    try {
-      let headers: HeadersInit = {};
-      if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      let response = await fetch(API_URL, {
-        method: method,
-        headers: headers,
-        body: apiFormData,
-      });
-      if (
-        (response.status === 401 || response.status === 403) &&
-        currentToken &&
-        refreshToken
-      ) {
-        const newToken = await refreshToken();
-        if (newToken) {
-          currentToken = newToken;
-          localStorage.setItem("authToken", newToken);
-          headers["Authorization"] = `Bearer ${currentToken}`;
-          response = await fetch(API_URL, {
-            method: method,
-            headers: headers,
-            body: apiFormData,
-          });
-        } else {
-          throw new Error("Refresh token failed or missing.");
-        }
-      }
-      const result = await response.json();
-      if (response.ok && result.code === 1000) {
-        toast.success(
-          result.message ||
-            (newsIdToSubmit ? "Cập nhật thành công!" : "Tạo mới thành công!"),
-          { id: toastId }
-        );
-        refreshNewsList();
-        setIsNewsModalOpen(false);
-        setEditingNewsItem(null);
-      } else {
-        toast.error(
-          result.message ||
-            (newsIdToSubmit ? "Cập nhật thất bại." : "Tạo mới thất bại."),
-          { id: toastId }
-        );
-        console.error("API Error:", result);
-      }
-    } catch (error: any) {
-      console.error("Error submitting news form:", error);
-      if (error.message?.includes("Refresh token failed")) {
-        toast.error("Phiên đăng nhập hết hạn.", { id: toastId });
-        router.push("/login?sessionExpired=true");
-      } else {
-        toast.error("Lỗi gửi yêu cầu: " + error.message, { id: toastId });
-      }
-    } finally {
-      setIsSubmittingNews(false);
-    }
-  };
-
   if (errorEvents && !isLoadingEvents && !allEvents.length) {
     return (
       <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-        {" "}
-        Lỗi tải sự kiện: {errorEvents}{" "}
+        Lỗi tải sự kiện: {errorEvents}
       </p>
     );
   }
@@ -714,8 +552,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600 shrink-0">
-          {" "}
-          🎉 Trang chủ{" "}
+          🎉 Trang chủ
         </h1>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
           <div className="flex-grow sm:flex-grow-0">
@@ -745,8 +582,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              <option value="default">Mặc định</option>{" "}
-              <option value="az">🔤 A - Z</option>{" "}
+              <option value="date">📅 Mới nhất</option>
+              <option value="az">🔤 A - Z</option>
               <option value="za">🔤 Z - A</option>
             </select>
           </div>
@@ -763,13 +600,13 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              <option value="all">♾️ Tất cả</option>{" "}
-              <option value="upcoming">☀️ Sắp diễn ra</option>{" "}
-              <option value="ongoing">🟢 Đang diễn ra</option>{" "}
-              <option value="ended">🏁 Đã kết thúc</option>{" "}
-              <option value="today">📅 Hôm nay</option>{" "}
-              <option value="thisWeek">🗓️ Tuần này</option>{" "}
-              <option value="thisMonth">🗓️ Tháng này</option>{" "}
+              <option value="all">♾️ Tất cả</option>
+              <option value="upcoming">☀️ Sắp diễn ra</option>
+              <option value="ongoing">🟢 Đang diễn ra</option>
+              <option value="ended">🏁 Đã kết thúc</option>
+              <option value="today">📅 Hôm nay</option>
+              <option value="thisWeek">🗓️ Tuần này</option>
+              <option value="thisMonth">🗓️ Tháng này</option>
               <option value="dateRange">🔢 Khoảng ngày</option>
             </select>
           </div>
@@ -875,9 +712,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
 
       {isLoadingEvents && !selectedEvent ? (
         <div className="flex justify-center items-center min-h-[200px]">
-          {" "}
-          <ReloadIcon className="w-8 h-8 animate-spin text-indigo-600" />{" "}
-          <p className="ml-3 text-gray-500 italic">Đang tải...</p>{" "}
+          <ReloadIcon className="w-8 h-8 animate-spin text-indigo-600" />
+          <p className="ml-3 text-gray-500 italic">Đang tải...</p>
         </div>
       ) : selectedEvent ? (
         <div className="p-6 border rounded-lg shadow-lg bg-gray-50 mb-6">
@@ -885,14 +721,13 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             onClick={onBackToList}
             className="mb-4 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer p-1 rounded hover:bg-indigo-50"
           >
-            {" "}
-            <ChevronLeftIcon className="h-7 w-7 " /> Quay lại{" "}
+            <ChevronLeftIcon className="h-7 w-7 " /> Quay lại
           </button>
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
-              {selectedEvent.image ? (
+              {selectedEvent.avatarUrl ? (
                 <Image
-                  src={selectedEvent.image}
+                  src={selectedEvent.avatarUrl}
                   alt={`Ảnh bìa ${selectedEvent.title}`}
                   width={300}
                   height={300}
@@ -918,8 +753,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         status
                       )} mt-1 sm:mt-0 flex-shrink-0`}
                     >
-                      {" "}
-                      {getStatusIcon(status)} {getStatusText(status)}{" "}
+                      {getStatusIcon(status)} {getStatusText(status)}
                     </span>
                   );
                 })()}{" "}
@@ -986,16 +820,13 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                     <p className="italic">Đang tải...</p>
                   ) : detailedOrganizers && detailedOrganizers.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 space-y-1">
-                      {" "}
                       {detailedOrganizers.map((org, index) => (
-                        <li
-                          key={`<span class="math-inline">\{org\.userId\}\-</span>{index}`}
-                        >
+                        <li key={`org-detail-${org.userId}-${index}`}>
                           {[org.fullName, org.positionName, org.roleName]
                             .filter(Boolean)
                             .join(" - ") || `Thành viên BTC ${index + 1}`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="italic">Chưa có thông tin.</p>
@@ -1021,34 +852,33 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   if (isCreated) {
                     return (
                       <>
-                        {" "}
                         <button
                           onClick={() => handleEditEvent(selectedEvent)}
                           disabled={isDeleting === selectedEvent.id}
                           className="px-4 py-2 cursor-pointer rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
                         >
-                          {" "}
-                          <Pencil1Icon className="w-4 h-4" /> Sửa{" "}
-                        </button>{" "}
+                          <Pencil1Icon className="w-4 h-4" /> Sửa
+                        </button>
                         <button
                           onClick={() => handleDeleteEvent(selectedEvent)}
                           disabled={isDeleting === selectedEvent.id}
                           className="px-4 py-2 cursor-pointer rounded-lg bg-red-500 text-white hover:bg-red-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-wait"
                         >
-                          {" "}
                           {isDeleting === selectedEvent.id ? (
                             <ReloadIcon className="w-4 h-4 animate-spin" />
                           ) : (
                             <TrashIcon className="w-4 h-4" />
-                          )}{" "}
+                          )}
                           {isDeleting === selectedEvent.id
                             ? "Đang xoá..."
-                            : "Xoá"}{" "}
+                            : "Xoá"}
                         </button>
                       </>
                     );
                   } else if (user && showRegisterBtn) {
                     const canClick = !isRegistered && !processing;
+                    const isDisabled =
+  !canClick || isLoadingRegisteredIds || isLoadingCreatedEventIds || isRegistered;
                     return (
                       <button
                         onClick={() => {
@@ -1056,21 +886,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             onRegister(selectedEvent);
                           }
                         }}
-                        className={`px-4 py-2 cursor-pointer rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center ${
+                        className={`px-4 py-2 rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center cursor-pointer ${
                           isRegistered
-                            ? "bg-green-500 cursor-not-allowed"
+                            ? "bg-green-500 "
                             : processing
                             ? "bg-indigo-300 cursor-wait"
                             : "bg-indigo-500 hover:bg-indigo-600"
                         }`}
-                        disabled={
-                          !canClick ||
-                          isLoadingRegisteredIds ||
-                          isLoadingCreatedEventIds ||
-                          isRegistered
-                        }
+                        disabled={isDisabled}
                       >
-                        {" "}
                         {isRegistered ? (
                           <>
                             <CheckCircledIcon className="mr-1.5" /> Đã đăng ký
@@ -1084,7 +908,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           <>
                             <Pencil1Icon className="mr-1.5" /> Đăng ký
                           </>
-                        )}{" "}
+                        )}
                       </button>
                     );
                   } else if (status === "ended") {
@@ -1093,8 +917,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
                         disabled
                       >
-                        {" "}
-                        Đã kết thúc{" "}
+                        Đã kết thúc
                       </button>
                     );
                   } else if (!user && status !== "ended") {
@@ -1106,8 +929,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         }}
                         className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
                       >
-                        {" "}
-                        Đăng nhập{" "}
+                        Đăng nhập
                       </button>
                     );
                   }
@@ -1140,15 +962,14 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                       key={event.id}
                       className="bg-white shadow-md rounded-xl overflow-hidden flex flex-col border"
                     >
-                      {" "}
                       <div
                         className="relative w-full h-40 bg-gray-200 cursor-pointer"
                         onClick={() => onEventClick(event)}
                       >
                         {" "}
-                        {event.image ? (
+                        {event.avatarUrl ? (
                           <Image
-                            src={event.image}
+                            src={event.avatarUrl}
                             alt={event.title}
                             layout="fill"
                             objectFit="cover"
@@ -1164,23 +985,21 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           )} shadow-sm`}
                         >
                           {getStatusIcon(status)} {getStatusText(status)}
-                        </span>{" "}
-                      </div>{" "}
+                        </span>
+                      </div>
                       <div className="p-4 flex flex-col flex-grow">
-                        {" "}
                         <div
                           className="mb-3 grow"
                           onClick={() => onEventClick(event)}
                           style={{ cursor: "pointer" }}
                         >
-                          {" "}
                           <h2 className="text-md font-semibold mb-1 line-clamp-2">
                             {event.title}
-                          </h2>{" "}
+                          </h2>
                           <p className="text-xs text-gray-500 flex items-center gap-1">
                             <CalendarIcon className="w-3.5 h-3.5" />{" "}
                             {new Date(event.date).toLocaleDateString("vi-VN")}
-                          </p>{" "}
+                          </p>
                           <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
@@ -1194,23 +1013,17 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                             {event.location}
-                          </p>{" "}
-                        </div>{" "}
+                          </p>
+                        </div>
                         <div className="text-xs flex items-center gap-x-3 mt-1">
-                          {" "}
-                          {event.organizers?.length > 0 && (
-                            <span>👥 BTC: {event.organizers.length}</span>
-                          )}{" "}
-                          {event.attendees?.length > 0 && (
-                            <span>✅ ĐK: {event.attendees.length}</span>
-                          )}{" "}
-                        </div>{" "}
+                          {event.attendees && event.attendees.length > 0 && (
+  <span>✅ Đã đăng ký: {event.attendees.length}</span>
+)}
+                        </div>
                         <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
-                          {" "}
                           {isCreatedByUser ? (
                             <div className="w-full px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium text-center">
-                              {" "}
-                              ✨ Của bạn{" "}
+                              ✨ Của bạn
                             </div>
                           ) : showRegisterButton ? (
                             <button
@@ -1231,10 +1044,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 isRegistered
                               }
                             >
-                              {" "}
                               {isRegistered ? (
                                 <>
-                                  <CheckCircledIcon className="mr-1" /> Đã ĐK
+                                  <CheckCircledIcon className="mr-1" /> Đã đăng
+                                  ký
                                 </>
                               ) : processing ? (
                                 <>
@@ -1246,7 +1059,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                   <Pencil1Icon className="mr-1" />
                                   Đăng ký
                                 </>
-                              )}{" "}
+                              )}
                             </button>
                           ) : status === "ended" ? (
                             <button
@@ -1265,7 +1078,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             >
                               Đăng nhập
                             </button>
-                          ) : null}{" "}
+                          ) : null}
                           {canEdit && (
                             <button
                               onClick={() => handleEditEvent(event)}
@@ -1274,7 +1087,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             >
                               <Pencil1Icon className="w-4 h-4" />
                             </button>
-                          )}{" "}
+                          )}
                           {canDelete && (
                             <button
                               onClick={() => handleDeleteEvent(event)}
@@ -1292,18 +1105,16 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 <TrashIcon className="w-4 h-4" />
                               )}
                             </button>
-                          )}{" "}
-                        </div>{" "}
-                      </div>{" "}
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
-                })}{" "}
+                })}
               </div>
             ) : (
               <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
-                {" "}
                 <ul className="divide-y divide-gray-200">
-                  {" "}
                   {paginatedEvents.map((event) => {
                     const isRegistered = registeredEventIds.has(event.id);
                     const isCreatedByUser = createdEventIds.has(event.id);
@@ -1321,16 +1132,14 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         key={event.id}
                         className="px-4 py-3 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors"
                       >
-                        {" "}
                         <div
                           className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
                           onClick={() => onEventClick(event)}
                         >
-                          {" "}
-                          {event.image ? (
+                          {event.avatarUrl ? (
                             <div className="relative w-16 h-12 rounded overflow-hidden flex-shrink-0 hidden sm:block bg-gray-100">
                               <Image
-                                src={event.image}
+                                src={event.avatarUrl}
                                 alt={event.title}
                                 layout="fill"
                                 objectFit="cover"
@@ -1340,20 +1149,18 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             <div className="relative w-16 h-12 rounded flex-shrink-0 hidden sm:block bg-gradient-to-br from-gray-100 to-gray-200 text-gray-400 items-center justify-center text-xl font-semibold">
                               {event.title?.charAt(0).toUpperCase() || "?"}
                             </div>
-                          )}{" "}
+                          )}
                           <div className="flex-1 min-w-0">
-                            {" "}
                             <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1">
                               {event.title}
-                            </p>{" "}
+                            </p>
                             <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                              {" "}
                               <span className="inline-flex items-center gap-1">
-                                <CalendarIcon className="w-3.5 h-3.5" />{" "}
+                                <CalendarIcon className="w-3.5 h-3.5" />
                                 {new Date(event.date).toLocaleDateString(
                                   "vi-VN"
                                 )}
-                              </span>{" "}
+                              </span>
                               <span className="inline-flex items-center gap-1">
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
@@ -1367,17 +1174,16 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                   <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
                                 {event.location}
-                              </span>{" "}
+                              </span>
                               <span
                                 className={`${getStatusBadgeClasses(status)}`}
                               >
                                 {getStatusIcon(status)} {getStatusText(status)}
-                              </span>{" "}
-                            </div>{" "}
-                          </div>{" "}
-                        </div>{" "}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                         <div className="mt-2 sm:mt-0 sm:ml-4 flex-shrink-0 flex items-center gap-2 justify-end">
-                          {" "}
                           {isCreatedByUser ? (
                             <div className="px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium">
                               ✨ Của bạn
@@ -1387,7 +1193,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               onClick={() => {
                                 if (canClickRegister) onRegister(event);
                               }}
-                              className={`px-3 py-1.5 rounded-md text-white text-xs font-medium flex items-center justify-center ${
+                              className={`px-3 py-1.5 cursor-pointer rounded-md text-white text-xs font-medium flex items-center justify-center ${
                                 isRegistered
                                   ? "bg-green-500 cursor-default"
                                   : processing
@@ -1401,7 +1207,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 isRegistered
                               }
                             >
-                              {" "}
                               {isRegistered ? (
                                 <>
                                   <CheckCircledIcon className="mr-1" /> Đã ĐK
@@ -1416,7 +1221,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                   <Pencil1Icon className="mr-1" />
                                   Đăng ký
                                 </>
-                              )}{" "}
+                              )}
                             </button>
                           ) : status === "ended" ? (
                             <button
@@ -1435,7 +1240,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             >
                               Đăng nhập
                             </button>
-                          ) : null}{" "}
+                          ) : null}
                           {canEdit && (
                             <button
                               onClick={() => handleEditEvent(event)}
@@ -1444,7 +1249,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             >
                               <Pencil1Icon className="w-4 h-4" />
                             </button>
-                          )}{" "}
+                          )}
                           {canDelete && (
                             <button
                               onClick={() => handleDeleteEvent(event)}
@@ -1462,12 +1267,12 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 <TrashIcon className="w-4 h-4" />
                               )}
                             </button>
-                          )}{" "}
-                        </div>{" "}
+                          )}
+                        </div>
                       </li>
                     );
-                  })}{" "}
-                </ul>{" "}
+                  })}
+                </ul>
               </div>
             )
           ) : (
@@ -1477,48 +1282,32 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           )}
           {processedEvents.length > 0 && totalPages > 1 && (
             <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
-              {" "}
               <span className="text-sm text-gray-600">
-                {" "}
-                Trang <span className="font-semibold">
-                  {currentPage}
-                </span> / <span className="font-semibold">{totalPages}</span>{" "}
-                (Tổng: <span className="font-semibold">{totalItems}</span>){" "}
-              </span>{" "}
+                Trang <span className="font-semibold">{currentPage}</span> /{" "}
+                <span className="font-semibold">{totalPages}</span> (Tổng:{" "}
+                <span className="font-semibold">{totalItems}</span>)
+              </span>
               <div className="flex items-center gap-2">
-                {" "}
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
                   className="px-3 py-1.5 rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
                 >
-                  {" "}
-                  <ChevronLeftIcon className="w-4 h-4" /> Trước{" "}
-                </button>{" "}
+                  <ChevronLeftIcon className="w-4 h-4" />
+                  Trước
+                </button>
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
                   className="px-3 py-1.5 rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
                 >
-                  {" "}
-                  Sau <ChevronRightIcon className="w-4 h-4" />{" "}
-                </button>{" "}
-              </div>{" "}
+                  Sau <ChevronRightIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           )}
         </div>
       )}
-
-      <UpdateEventModal
-        isOpen={isUpdateModalOpen}
-        onClose={() => {
-          setIsUpdateModalOpen(false);
-          setEventToEdit(null);
-        }}
-        eventToUpdate={eventToEdit}
-        onEventUpdated={handleEventUpdated}
-        currentUserId={user?.id || null}
-      />
       <ConfirmationDialog
         isOpen={confirmationDialogState.isOpen}
         title={confirmationDialogState.title}
@@ -1532,7 +1321,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         }}
         onCancel={handleCancelConfirmation}
       />
-      {/* <CreateNewsModal isOpen={isNewsModalOpen} onClose={handleCloseModal} onSubmit={handleNewsFormSubmit} isSubmitting={isSubmittingNews} editMode={!!editingNewsItem} initialData={editingNewsItem} /> */}
     </div>
   );
 };

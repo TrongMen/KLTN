@@ -752,7 +752,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         if (response.ok && result.code === 1000) {
             const checkInData = result.result;
             toast.success(
-               `${result.message || "Điểm danh thành công!"}\nSự kiện: ${checkInData.eventName}\n}`,
+               `${result.message || "Điểm danh thành công!"} Sự kiện: ${checkInData.eventName}\n}`,
                { id: toastId, duration: 5000 }
             );
             
@@ -993,7 +993,7 @@ useEffect(() => {
             <button
               onClick={() => handleUnregisterClick(displayEvent)}
               disabled={isProcessingSingle || !canPerformAction}
-              className={`w-full sm:w-auto px-6 py-2.5 rounded-md text-white shadow-md transition-colors text-sm font-medium ${
+              className={`w-full sm:w-auto px-6 py-2.5 rounded-md text-white shadow-md transition-colors text-sm font-medium cursor-pointer ${
                 isProcessingSingle || !canPerformAction
                   ? "bg-red-400 cursor-not-allowed"
                   : "bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
@@ -1005,7 +1005,7 @@ useEffect(() => {
             <button
               onClick={() => handleRegisterClick(displayEvent)}
               disabled={isProcessingSingle || !canPerformAction}
-              className={`w-full sm:w-auto px-6 py-2.5 rounded-md text-white shadow-md transition-colors text-sm font-medium ${
+              className={`w-full sm:w-auto px-6 py-2.5 rounded-md text-white shadow-md transition-colors text-sm font-medium cursor-pointer ${
                 isProcessingSingle || !canPerformAction
                   ? "bg-indigo-400 cursor-not-allowed"
                   : "bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
@@ -1018,7 +1018,7 @@ useEffect(() => {
             onClick={() => {
                 setViewingEventDetails(null);
             }}
-            className="w-full sm:w-auto px-6 py-2.5 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+            className="w-full sm:w-auto cursor-pointer px-6 py-2.5 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
           >
             Đóng
           </button>

@@ -418,7 +418,7 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
                       onClick={() => handleOpenDetailModal(item)}
                       className="text-sm text-gray-600 mb-3 line-clamp-3 flex-grow cursor-pointer"
                     >
-                      {item.summary || "Không có tóm tắt."}
+                      {/* {item.summary || "Không có tóm tắt."} */}
                     </p>
                     <div className="mt-auto pt-3 border-t border-gray-100">
                       <p className="text-xs text-gray-500 mb-1.5">

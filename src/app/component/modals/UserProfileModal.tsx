@@ -12,7 +12,9 @@ interface UserProfileModalProps {
   userProfile: ApiUser | null;
   currentUser: MainUserType | null;
   onTriggerLockAccount: (userToLock: ApiUser) => void;
+  onTriggerUnlockAccount: (userToUnlock: ApiUser) => void;
   isLockingTargetUser: boolean;
+  isUnlockingTargetUser: boolean;
 }
 
 const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -158,14 +160,7 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 {userProfile.position?.name || "Chưa có"}
               </p>
             </div>
-            <div>
-              <strong className="font-medium text-gray-600">
-                Vai trò tổ chức:
-              </strong>
-              <p className="text-gray-800">
-                {userProfile.organizerRole?.name || "Không có"}
-              </p>
-            </div>
+            
             <div>
               <strong className="font-medium text-gray-600">
                 Tài khoản bị khóa:

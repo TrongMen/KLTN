@@ -2391,7 +2391,7 @@ export default function HomeGuest() {
 
   const tabs = [
     { id: "home", label: "🎉 Trang chủ", requiresAuth: false },
-    { id: "news", label: "📰 Bảng tin CLB", requiresAuth: false },
+    { id: "news", label: "📰 Bảng tin ", requiresAuth: false },
     {
       id: "registeredEvents",
       label: "📋 Sự kiện tham gia",

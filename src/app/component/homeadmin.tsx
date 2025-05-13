@@ -19,7 +19,9 @@ import AttendeesTabContent from "../component/tabs/AttendeesTabContent";
 import MembersTabContent from "../component/tabs/MembersTabContent";
 import RolesTabContent from "../component/tabs/RolesTabContent";
 import ChatTabContent from "../component/tabs/ChatTabContent";
-import MyEventsTabContent from "./tabs/MyEventsTabContent";
+import MyEventsTabContent, {
+  EventType as MyEventType,
+} from "./tabs/MyEventsTabContent";
 
 import NewsTabContent from "../component/tabs/NewsTabContent";
 import CreateNewsModal, {
@@ -45,6 +47,8 @@ import {
   ApiGroupChatDetail,
   Participant as ChatParticipant,
 } from "./tabs/chat/ChatTabContentTypes";
+import { EventDataForForm } from "./types/typCreateEvent";
+
 import {
   Role,
   User,
@@ -53,8 +57,10 @@ import {
   Conversation,
   Participant,
 } from "./types/appTypes";
-import CreateEventTabContent from "./tabs/CreateEventTabContent";
+import CreateEventForm from "./tabs/CreateEventForm";
+
 import StatisticTabContent from "./tabs/StatisticTabContent";
+import ModalUpdateEvent from "./modals/ModalUpdateEvent";
 
 type ActiveTab =
   | "home"
@@ -161,6 +167,8 @@ export default function HomeAdmin() {
   const [errorChatMessages, setErrorChatMessages] = useState<string | null>(
     null
   );
+    const [eventToEditInModal, setEventToEditInModal] =
+      useState<EventDataForForm | null>(null);
   const [chatMediaMessages, setChatMediaMessages] = useState<Message[]>([]);
   const [chatFileMessages, setChatFileMessages] = useState<Message[]>([]);
   const [chatAudioMessages, setChatAudioMessages] = useState<Message[]>([]);
@@ -172,6 +180,8 @@ export default function HomeAdmin() {
   const [errorChatAudio, setErrorChatAudio] = useState<string | null>(null);
   const [isProcessingChatAction, setIsProcessingChatAction] =
     useState<boolean>(false);
+      const [isUpdateEventModalOpen, setIsUpdateEventModalOpen] =
+        useState<boolean>(false);
   const [downloadingChatFileId, setDownloadingChatFileId] = useState<
     string | null
   >(null);
@@ -2044,7 +2054,36 @@ export default function HomeAdmin() {
   const showNextButton =
     currentTabSetPage < totalOtherTabPages - 1 &&
     otherTabsList.length > TABS_PER_PAGE;
-
+  const openModalForEventUpdate = (eventData: MyEventType) => {
+    const eventForModal: EventDataForForm = {
+      id: eventData.id,
+      name: eventData.name || eventData.title || "",
+      purpose: eventData.purpose || "",
+      time: eventData.time || eventData.date || "",
+      location: eventData.location || "",
+      content: eventData.content || eventData.description || "",
+      organizers: (eventData.organizers || []).map((o) => ({
+        userId: o.userId,
+        roleId: (o as any).roleId || "",
+        positionId: (o as any).positionId || "",
+      })),
+      participants: (eventData.participants || []).map((p) => ({
+        userId: p.userId,
+        roleId: p.roleId || "",
+        positionId: (p as any).positionId || "",
+      })),
+      maxAttendees:
+        eventData.maxAttendees === undefined ? null : eventData.maxAttendees,
+      status: eventData.status as EventDataForForm["status"],
+      avatarUrl: eventData.avatarUrl || null,
+      createdBy:
+        typeof eventData.createdBy === "string"
+          ? eventData.createdBy
+          : undefined,
+    };
+    setEventToEditInModal(eventForModal);
+    setIsUpdateEventModalOpen(true);
+  };
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
           <Toaster toastOptions={{ duration: 4000 }} position="top-center" />
@@ -2163,6 +2202,7 @@ export default function HomeAdmin() {
           <>
             {activeTab === "home" && user && (
               <AdminHomeTabContent
+                currentUserId={user.id}
                 events={allEvents}
                 isLoading={isLoadingEvents}
                 error={errorEvents}
@@ -2195,17 +2235,11 @@ export default function HomeAdmin() {
               />
             )}
             {user && activeTab === "createEvent" && (
-              <CreateEventTabContent
+              <CreateEventForm
                 user={user}
-                onEventCreated={() => {
-                  fetchAllEvents();
-                  const t = localStorage.getItem("authToken");
-                  if (user?.id && t) {
-                    fetchUserCreatedEvents(user.id, t);
-                    fetchNotifications(user.id, t);
-                  }
+                onSuccess={() => {
+                  handleGlobalEventRefresh();
                   setActiveTab("myEvents");
-                  toast.success("Sự kiện đã được tạo và đang chờ duyệt!");
                 }}
               />
             )}
@@ -2220,6 +2254,8 @@ export default function HomeAdmin() {
                 createdEventIdsFromParent={createdEventIds}
                 onRegistrationChange={handleRegistrationChange}
                 onEventNeedsRefresh={handleGlobalEventRefresh}
+                onOpenUpdateModal={openModalForEventUpdate}
+
               />
             )}
             {activeTab === "attendees" && user && (
@@ -2371,6 +2407,26 @@ export default function HomeAdmin() {
         editMode={!!editingNewsItem}
         initialData={editingNewsItem}
       />
+      {user && eventToEditInModal && (
+              <ModalUpdateEvent
+                isOpen={isUpdateEventModalOpen}
+                onClose={() => {
+                  setIsUpdateEventModalOpen(false);
+                  setEventToEditInModal(null);
+                }}
+                user={user}
+                editingEvent={eventToEditInModal}
+                onSuccess={() => {
+                  handleGlobalEventRefresh();
+                  if (activeTab === "myEvents" && user?.id) {
+                    const token = localStorage.getItem("authToken");
+                    if (token) fetchUserCreatedEvents(user.id, token);
+                  }
+                  setIsUpdateEventModalOpen(false);
+                  setEventToEditInModal(null);
+                }}
+              />
+            )}
     </div>
   );
 }

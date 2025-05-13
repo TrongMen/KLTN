@@ -97,21 +97,20 @@ function SearchableUserDropdown({
       setFilteredUsers([]);
       return;
     }
-    // Show all non-disabled users, or the selected user even if disabled
     const filterLogic = (user: ApiUserWithDetails) => {
-        if (user.id === selectedUserId) return true; // Always show the selected user
-        if (disabledUserIds.has(user.id)) return false; // Hide other disabled users
-        if (!searchTerm) return true; // If no search term, show all non-disabled
+      if (user.id === selectedUserId) return true;
+      if (disabledUserIds.has(user.id)) return false;
+      if (!searchTerm) return true;
 
-        const lowerSearchTerm = searchTerm.toLowerCase();
-        const fullName = `${user?.lastName ?? ""} ${user?.firstName ?? ""}`
-          .trim()
-          .toLowerCase();
-        const username = (user?.username ?? "").toLowerCase();
-        return (
-          fullName.includes(lowerSearchTerm) ||
-          username.includes(lowerSearchTerm)
-        );
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      const fullName = `${user?.lastName ?? ""} ${user?.firstName ?? ""}`
+        .trim()
+        .toLowerCase();
+      const username = (user?.username ?? "").toLowerCase();
+      return (
+        fullName.includes(lowerSearchTerm) ||
+        username.includes(lowerSearchTerm)
+      );
     };
     setFilteredUsers(users.filter(filterLogic));
   }, [searchTerm, users, disabledUserIds, selectedUserId]);
@@ -198,22 +197,21 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
   ({ existingOrganizers, globallyBusyUserIds, onFormChange }, ref) => {
     const [organizerForms, setOrganizerForms] = useState<OrganizerFormRow[]>([]);
     const [detailedUsers, setDetailedUsers] = useState<ApiUserWithDetails[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [loadingUsers, setLoadingUsers] = useState(true);
+    const [errorUsers, setErrorUsers] = useState<string | null>(null);
 
-    const existingOrganizerIds = useMemo(
-      () => new Set(existingOrganizers?.map((o) => o.userId) ?? []),
-      [existingOrganizers]
-    );
-    
+    const [availableOrganizerRoles, setAvailableOrganizerRoles] = useState<ApiRole[]>([]);
+    const [loadingRoles, setLoadingRoles] = useState(true);
+    const [errorRoles, setErrorRoles] = useState<string | null>(null);
+
     useEffect(() => {
-        onFormChange();
+      onFormChange();
     }, [organizerForms, onFormChange]);
 
     useEffect(() => {
       const fetchDetailedUsers = async () => {
-        setLoading(true);
-        setError(null);
+        setLoadingUsers(true);
+        setErrorUsers(null);
         try {
           const token = localStorage.getItem("authToken");
           if (!token) throw new Error("Token không tồn tại.");
@@ -240,16 +238,73 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
           }
           setDetailedUsers(data?.result || []);
         } catch (err: any) {
-          const msg = `Lỗi tải dữ liệu BTC: ${err.message}`;
-          setError(msg);
+          const msg = `Lỗi tải dữ liệu User cho BTC: ${err.message}`;
+          setErrorUsers(msg);
           toast.error(msg);
-          console.error("Fetch error BTCSection:", err);
+          console.error("Fetch error BTCSection (Users):", err);
         } finally {
-          setLoading(false);
+          setLoadingUsers(false);
         }
       };
       fetchDetailedUsers();
     }, []);
+
+    useEffect(() => {
+      const fetchOrganizerRolesList = async () => {
+        setLoadingRoles(true);
+        setErrorRoles(null);
+        try {
+          const token = localStorage.getItem("authToken");
+          if (!token) throw new Error("Token không tồn tại.");
+          const headers = { Authorization: `Bearer ${token}` };
+          const rRes = await fetch(
+            "http://localhost:8080/identity/api/organizerrole",
+            { headers }
+          );
+          if (!rRes.ok) throw new Error(`Lỗi tải Vai trò tổ chức (${rRes.status})`);
+          const rData = await rRes.json();
+          if (rData?.code !== 1000) {
+            throw new Error(
+              `API Roles trả về lỗi: ${rData?.message || "Unknown API error"}`
+            );
+          }
+          setAvailableOrganizerRoles(rData?.result || []);
+        } catch (err: any) {
+          const msg = `Lỗi tải danh sách Vai trò tổ chức: ${err.message}`;
+          setErrorRoles(msg);
+          toast.error(msg);
+          console.error("Fetch error BTCSection (Organizer Roles):", err);
+        } finally {
+          setLoadingRoles(false);
+        }
+      };
+      fetchOrganizerRolesList();
+    }, []);
+
+    useEffect(() => {
+      if (loadingUsers || loadingRoles) return;
+
+      if (existingOrganizers && existingOrganizers.length > 0) {
+        const formsToSet = existingOrganizers.map((org, index) => {
+          const userDetail = detailedUsers.find(u => u.id === org.userId);
+          const positionNameFromProfile = userDetail?.position?.name || "—";
+          const roleNameFromList = availableOrganizerRoles.find(r => r.id === org.roleId)?.name || "—";
+
+          return {
+            id: Date.now() + index + Math.random(),
+            userId: org.userId,
+            positionId: org.positionId,
+            positionName: positionNameFromProfile,
+            roleId: org.roleId,
+            roleName: roleNameFromList,
+          };
+        });
+        setOrganizerForms(formsToSet);
+      } else if (!existingOrganizers || existingOrganizers.length === 0) {
+        setOrganizerForms([]);
+      }
+    }, [existingOrganizers, detailedUsers, availableOrganizerRoles, loadingUsers, loadingRoles]);
+
 
     const addOrganizerFormRow = () => {
       setOrganizerForms((prev) => [
@@ -258,9 +313,9 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
           id: Date.now(),
           userId: "",
           positionId: "",
-          positionName: "",
+          positionName: "—",
           roleId: "",
-          roleName: "",
+          roleName: "—",
         },
       ]);
     };
@@ -272,7 +327,7 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
     const handleOrganizerChange = useCallback(
       (
         id: number,
-        field: keyof Omit<OrganizerFormRow, "id" | "positionName" | "roleName">,
+        field: "userId" | "roleId",
         value: string
       ) => {
         setOrganizerForms((prev) =>
@@ -282,13 +337,23 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
                 const selectedDetailedUser = detailedUsers.find(
                   (u) => u.id === value
                 );
+                const positionId = selectedDetailedUser?.position?.id ?? "";
+                const positionName = selectedDetailedUser?.position?.name ?? "—";
+
                 return {
                   ...form,
                   userId: value,
-                  positionId: selectedDetailedUser?.position?.id ?? "",
-                  positionName: selectedDetailedUser?.position?.name ?? "—",
-                  roleId: selectedDetailedUser?.organizerRole?.id ?? "",
-                  roleName: selectedDetailedUser?.organizerRole?.name ?? "—",
+                  positionId,
+                  positionName,
+                  roleId: "",
+                  roleName: "—",
+                };
+              } else if (field === "roleId") {
+                const selectedRole = availableOrganizerRoles.find(r => r.id === value);
+                return {
+                  ...form,
+                  roleId: value,
+                  roleName: selectedRole?.name || "—"
                 };
               }
             }
@@ -296,39 +361,38 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
           })
         );
       },
-      [detailedUsers]
+      [detailedUsers, availableOrganizerRoles]
     );
 
     useImperativeHandle(
       ref,
       () => ({
         getMembersData: () => {
-          const newMembers = organizerForms
-            .filter((form) => 
-                form.userId && 
-                form.positionId && 
-                form.roleId && 
-                !existingOrganizerIds.has(form.userId) 
+          const members = organizerForms
+            .filter((form) =>
+                form.userId &&
+                form.positionId &&
+                form.roleId
             )
             .map((form) => ({
               userId: form.userId,
               positionId: form.positionId,
               roleId: form.roleId,
             }));
-          const uniqueNewMembersMap = new Map<string, OrganizerData>();
-          newMembers.forEach((member) => {
-            if (!uniqueNewMembersMap.has(member.userId)) {
-              uniqueNewMembersMap.set(member.userId, member);
+          const uniqueMembersMap = new Map<string, OrganizerData>();
+          members.forEach((member) => {
+            if (!uniqueMembersMap.has(member.userId)) {
+              uniqueMembersMap.set(member.userId, member);
             }
           });
-          return Array.from(uniqueNewMembersMap.values());
+          return Array.from(uniqueMembersMap.values());
         },
         resetForms: () => {
           setOrganizerForms([]);
         },
         getFormUserIds: () => organizerForms.map(form => form.userId).filter(Boolean),
       }),
-      [organizerForms, existingOrganizerIds, detailedUsers]
+      [organizerForms]
     );
 
     return (
@@ -336,18 +400,24 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
         <h3 className="text-md font-semibold mb-1 text-gray-600">
           Thêm Ban tổ chức
         </h3>
-        {loading && (
+        {loadingUsers && (
           <p className="text-sm text-gray-500">Đang tải danh sách user...</p>
         )}
-        {error && (
-          <p className="text-sm text-red-600 bg-red-100 p-2 rounded">{error}</p>
+        {errorUsers && (
+          <p className="text-sm text-red-600 bg-red-100 p-2 rounded">{errorUsers}</p>
+        )}
+        {loadingRoles && !errorUsers && (
+          <p className="text-sm text-gray-500 mt-1">Đang tải danh sách vai trò BTC...</p>
+        )}
+        {errorRoles && (
+          <p className="text-sm text-red-600 bg-red-100 p-2 rounded mt-1">{errorRoles}</p>
         )}
         <button
           type="button"
           onClick={addOrganizerFormRow}
           className="mt-1 mb-2 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xl hover:bg-blue-600 transition cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
           title="Thêm dòng nhập BTC"
-          disabled={loading || !!error}
+          disabled={loadingUsers || !!errorUsers || loadingRoles || !!errorRoles}
         >
           +
         </button>
@@ -357,7 +427,7 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
               key={form.id}
               className="flex flex-col sm:flex-row gap-2 items-center p-2 border rounded bg-gray-50"
             >
-              <div className="w-1/4 sm:flex-grow">
+              <div className="w-full sm:w-1/3 md:flex-grow">
                 <SearchableUserDropdown
                   users={detailedUsers}
                   selectedUserId={form.userId}
@@ -368,18 +438,44 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
                   placeholder="-- Tìm hoặc chọn user --"
                 />
               </div>
-              <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
+              <div className="w-full sm:w-1/4 md:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
                 <span className="font-medium mr-1">Vị trí:</span>{" "}
-                {form.positionName || (form.userId ? "Không có" : "—")}
+                <span className="truncate" title={form.positionName || ""}>
+                  {form.positionName || (form.userId ? "Không có" : "—")}
+                </span>
               </div>
-              <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
-                <span className="font-medium mr-1">Vai trò :</span>{" "}
-                {form.roleName || (form.userId ? "Không có" : "—")}
+              <div className="w-full sm:w-1/4 md:flex-1 min-h-[30px] flex items-center whitespace-nowrap">
+                {form.userId && !loadingRoles && !errorRoles ? (
+                  <select
+                    value={form.roleId}
+                    onChange={(e) =>
+                      handleOrganizerChange(form.id, "roleId", e.target.value)
+                    }
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white h-[30px]"
+                    disabled={!form.userId}
+                  >
+                    <option value="">-- Chọn vai trò BTC --</option>
+                    {availableOrganizerRoles?.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center">
+                    <span className="font-medium mr-1">Vai trò BTC:</span>
+                    {form.userId && loadingRoles && "Đang tải..."}
+                    {form.userId && errorRoles && "Lỗi tải vai trò"}
+                    {!form.userId && "—"}
+                    {form.userId && !loadingRoles && !errorRoles && !form.roleId && form.roleName === "—" && "—"}
+                    {form.userId && !loadingRoles && !errorRoles && form.roleId && form.roleName !== "—" && <span className="truncate" title={form.roleName}>{form.roleName}</span>}
+                  </div>
+                )}
               </div>
               <button
                 type="button"
                 onClick={() => removeOrganizerFormRow(form.id)}
-                className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 w-full sm:w-auto cursor-pointer text-sm flex-shrink-0"
+                className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 w-full sm:w-auto cursor-pointer text-sm flex-shrink-0 h-[30px]"
               >
                 Xóa
               </button>

@@ -10,6 +10,7 @@ export interface ConfirmationDialogProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
+ 
   confirmVariant?: "primary" | "danger" | "warning"; 
 }
 
@@ -19,6 +20,7 @@ export function ConfirmationDialog({
   message,
   onConfirm,
   onCancel,
+ 
   confirmText = "Xác nhận",
   cancelText = "Hủy bỏ",
   confirmVariant = "primary",

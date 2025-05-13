@@ -19,7 +19,6 @@ import { User as MainUserType } from "../types/appTypes";
 import type { OrganizerData } from "../../../sections/BTCSection";
 import type { ParticipantData } from "../../../sections/ParticipantSection";
 
-
 export type ApiUser = {
   id: string;
   firstName: string | null;
@@ -107,9 +106,8 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
   const [formChangeCounter, setFormChangeCounter] = useState(0);
 
   const handleChildFormChange = useCallback(() => {
-      setFormChangeCounter(prev => prev + 1);
+    setFormChangeCounter(prev => prev + 1);
   }, []);
-
 
   const getUserFullName = useCallback(
     (userId: string | undefined, usersList: ApiUser[]): string => {
@@ -128,10 +126,11 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
   );
 
   const transformToOrganizerDataArray = useCallback((members: EventMember[] | undefined): OrganizerData[] => {
-    if (!members) return [];
+    if (!members || members.length === 0) return [];
     return members
       .filter(
         (member): member is EventMember & { roleId: string; positionId: string } =>
+          typeof member.userId === 'string' && member.userId !== '' &&
           typeof member.roleId === 'string' && member.roleId !== '' &&
           typeof member.positionId === 'string' && member.positionId !== ''
       )
@@ -143,10 +142,11 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
   }, []);
 
   const transformToParticipantDataArray = useCallback((members: EventMember[] | undefined): ParticipantData[] => {
-    if (!members) return [];
+    if (!members || members.length === 0) return [];
     return members
       .filter(
         (member): member is EventMember & { roleId: string; positionId: string } =>
+          typeof member.userId === 'string' && member.userId !== '' &&
           typeof member.roleId === 'string' && member.roleId !== '' &&
           typeof member.positionId === 'string' && member.positionId !== ''
       )
@@ -157,25 +157,27 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       }));
   }, []);
 
+  const memoizedExistingOrganizers = useMemo(() => {
+    return transformToOrganizerDataArray(
+      editingEventId ? currentEventData.organizers : undefined
+    );
+  }, [editingEventId, currentEventData.organizers, transformToOrganizerDataArray]);
+
+  const memoizedExistingParticipants = useMemo(() => {
+    return transformToParticipantDataArray(
+      editingEventId ? currentEventData.participants : undefined
+    );
+  }, [editingEventId, currentEventData.participants, transformToParticipantDataArray]);
+
 
   const globallyBusyUserIds = useMemo((): Set<string> => {
-      const ids = new Set<string>();
-
-      const btcFormUserIds = btcSectionRef.current?.getFormUserIds?.() || [];
-      btcFormUserIds.forEach(id => { if (id) ids.add(id); });
-
-      const participantFormUserIds = participantSectionRef.current?.getFormUserIds?.() || [];
-      participantFormUserIds.forEach(id => { if (id) ids.add(id); });
-
-      if (editingEventId) {
-          const initialOrganizers = transformToOrganizerDataArray(currentEventData.organizers);
-          initialOrganizers.forEach(org => ids.add(org.userId));
-
-          const initialParticipants = transformToParticipantDataArray(currentEventData.participants);
-          initialParticipants.forEach(p => ids.add(p.userId));
-      }
-      return ids;
-  }, [formChangeCounter, editingEventId, currentEventData.organizers, currentEventData.participants, transformToOrganizerDataArray, transformToParticipantDataArray]);
+    const ids = new Set<string>();
+    const btcFormUserIds = btcSectionRef.current?.getFormUserIds?.() || [];
+    btcFormUserIds.forEach(id => { if (id) ids.add(id); });
+    const participantFormUserIds = participantSectionRef.current?.getFormUserIds?.() || [];
+    participantFormUserIds.forEach(id => { if (id) ids.add(id); });
+    return ids;
+  }, [formChangeCounter]);
 
 
   useEffect(() => {
@@ -238,7 +240,6 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       }
     } catch (error: any) {
       toast.error(`Lỗi tải danh sách sự kiện: ${error.message}`);
-      console.error("Fetch events error:", error);
       setEvents([]);
     } finally {
       setIsFetchingEvents(false);
@@ -278,11 +279,16 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     const file = e.target.files?.[0];
     if (file) {
       setAvatarFile(file);
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
       const previewUrl = URL.createObjectURL(file);
       setAvatarPreviewUrl(previewUrl);
     } else {
       setAvatarFile(null);
-      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
       setAvatarPreviewUrl(null);
     }
   };
@@ -290,7 +296,9 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
   useEffect(() => {
     const currentPreviewUrl = avatarPreviewUrl;
     return () => {
-      if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+      if (currentPreviewUrl) {
+        URL.revokeObjectURL(currentPreviewUrl);
+      }
     };
   }, [avatarPreviewUrl]);
 
@@ -298,40 +306,49 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     setCurrentEventData({ ...INITIAL_EVENT_STATE, createdBy: user?.id || "", maxAttendees: null });
     setEditingEventId(null);
     setAvatarFile(null);
-    if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+    if (avatarPreviewUrl) {
+      URL.revokeObjectURL(avatarPreviewUrl);
+    }
     setAvatarPreviewUrl(null);
     if (avatarInputRef.current) avatarInputRef.current.value = "";
+
     btcSectionRef.current?.resetForms();
     participantSectionRef.current?.resetForms();
-    handleChildFormChange(); 
+
+    handleChildFormChange();
   }, [user, avatarPreviewUrl, handleChildFormChange]);
 
   const handleSetEditingEvent = useCallback(
     (eventToEdit: Event | null) => {
-      if (avatarPreviewUrl) URL.revokeObjectURL(avatarPreviewUrl);
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
       setAvatarPreviewUrl(null);
+      setAvatarFile(null);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
 
       if (eventToEdit) {
         const timeForInput = eventToEdit.time
           ? eventToEdit.time.slice(0, 16)
           : "";
-        const eventDataForForm = {
+
+        const organizersForForm = eventToEdit.organizers ? eventToEdit.organizers.map(o => ({ ...o })) : [];
+        const participantsForForm = eventToEdit.participants ? eventToEdit.participants.map(p => ({ ...p })) : [];
+
+        setCurrentEventData({
           ...INITIAL_EVENT_STATE,
           ...eventToEdit,
           time: timeForInput,
-          organizers: eventToEdit.organizers || [],
-          participants: eventToEdit.participants || [],
+          organizers: organizersForForm,
+          participants: participantsForForm,
           avatarUrl: eventToEdit.avatarUrl || null,
           maxAttendees: eventToEdit.maxAttendees === undefined ? null : eventToEdit.maxAttendees,
-        };
-        setCurrentEventData(eventDataForForm);
+        });
         setEditingEventId(eventToEdit.id);
-        setAvatarFile(null);
-        if (avatarInputRef.current) avatarInputRef.current.value = "";
-        
-        btcSectionRef.current?.resetForms(); 
-        participantSectionRef.current?.resetForms();
-        handleChildFormChange(); 
+
+        handleChildFormChange();
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         resetFormState();
@@ -404,13 +421,11 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       return;
     }
 
-    const organizersFromSection: EventMemberInput[] =
-      btcSectionRef.current?.getMembersData() ?? [];
-    const participantsFromSection: EventMemberInput[] =
-      participantSectionRef.current?.getMembersData() ?? [];
+    const organizersPayload = btcSectionRef.current?.getMembersData() ?? [];
+    const participantsPayload = participantSectionRef.current?.getMembersData() ?? [];
 
-    const requiredFields: (keyof Omit<Event, "id" | "createdBy" | "status" | "image" | "avatarUrl" | "organizers" | "participants" | "attendees" | "rejectionReason" | "createdAt" | "deleted" | "deletedAt" | "deletedBy" | "progressStatus" | "qrCodeUrl" | "maxAttendees" >)[] = ["name", "purpose", "time", "location", "content"];
-    
+    const requiredFields: (keyof Omit<Event, "id" | "createdBy" | "status" | "image" | "avatarUrl" | "organizers" | "participants" | "attendees" | "rejectionReason" | "createdAt" | "deleted" | "deletedAt" | "deletedBy" | "progressStatus" | "qrCodeUrl" | "maxAttendees">)[] = ["name", "purpose", "time", "location", "content"];
+
     const missingFields = requiredFields.filter((field) => {
       const value = currentEventData[field as keyof typeof currentEventData];
       return value === null || value === undefined || String(value).trim() === "";
@@ -430,51 +445,17 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
       return;
     }
 
-    const effectiveOrganizers = editingEventId
-      ? transformToOrganizerDataArray(currentEventData.organizers) 
-      : [];
-    const allSubmittedOrganizers = [...effectiveOrganizers, ...organizersFromSection];
-    
-    if (allSubmittedOrganizers.length === 0 ) {
-        if (organizersFromSection.length === 0 && (!currentEventData.organizers || currentEventData.organizers.filter(org => org.roleId && org.positionId).length === 0)) {
-          toast.error("Vui lòng thêm ít nhất một người vào Ban Tổ Chức (với vai trò và vị trí hợp lệ).");
-          setIsLoading(false);
-          return;
-        }
+    if (organizersPayload.length === 0) {
+      toast.error("Vui lòng thêm ít nhất một người vào Ban Tổ Chức.");
+      setIsLoading(false);
+      return;
     }
-
 
     const isEditing = !!editingEventId;
     const method = isEditing ? "PUT" : "POST";
     let url = isEditing
       ? `http://localhost:8080/identity/api/events/${editingEventId}`
       : "http://localhost:8080/identity/api/events";
-
-    const finalOrganizersPayload = organizersFromSection.map(org => ({ userId: org.userId, roleId: org.roleId, positionId: org.positionId }));
- 
-    let orgPayload = finalOrganizersPayload;
-    if (isEditing) {
-        const existingValidOrganizers = transformToOrganizerDataArray(currentEventData.organizers);
-        const newOrgIds = new Set(organizersFromSection.map(o => o.userId));
-        const combined = [
-            ...organizersFromSection,
-            ...existingValidOrganizers.filter(eo => !newOrgIds.has(eo.userId))
-        ];
-        orgPayload = combined.map(o => ({userId: o.userId, roleId: o.roleId, positionId: o.positionId}));
-    }
-
-
-    let participantPayload = participantsFromSection.map(p => ({ userId: p.userId, roleId: p.roleId, positionId: p.positionId }));
-    if (isEditing) {
-        const existingValidParticipants = transformToParticipantDataArray(currentEventData.participants);
-        const newParticipantIds = new Set(participantsFromSection.map(p => p.userId));
-        const combined = [
-            ...participantsFromSection,
-            ...existingValidParticipants.filter(ep => !newParticipantIds.has(ep.userId))
-        ];
-        participantPayload = combined.map(p => ({userId: p.userId, roleId: p.roleId, positionId: p.positionId}));
-    }
-
 
     let requestBodyBase: any = {
       name: currentEventData.name,
@@ -484,17 +465,16 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         : null,
       location: currentEventData.location,
       content: currentEventData.content,
-      organizers: orgPayload,
-      participants: participantPayload,
+      organizers: organizersPayload,
+      participants: participantsPayload,
       maxAttendees: currentEventData.maxAttendees === null || currentEventData.maxAttendees === undefined || String(currentEventData.maxAttendees).trim() === "" ? null : Number(currentEventData.maxAttendees),
     };
 
     if (!isEditing) {
       requestBodyBase.createdBy = user?.id;
-      requestBodyBase.attendees = [];
     } else {
       requestBodyBase.id = editingEventId;
-      requestBodyBase.status = currentEventData.status || "PENDING"; 
+      requestBodyBase.status = currentEventData.status || "PENDING";
       if (user?.id) {
         url = `${url}?updatedByUserId=${user.id}`;
       } else {
@@ -539,8 +519,8 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
         if (eventIdForResult && avatarFile) {
           await uploadAvatar(eventIdForResult, token);
         }
-        
-        handleSetEditingEvent(null); 
+
+        handleSetEditingEvent(null);
         await fetchEvents();
         onEventCreated();
       } else {
@@ -597,10 +577,10 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                 <div className="mt-1 flex items-start space-x-4">
                   <div
                     className={`w-24 h-24 rounded-md border-2 flex items-center justify-center text-gray-400 overflow-hidden
-                    ${ (avatarPreviewUrl || (editingEventId && currentEventData.avatarUrl))
+                      ${ (avatarPreviewUrl || (editingEventId && currentEventData.avatarUrl))
                         ? 'border-gray-300'
                         : 'border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100'
-                    } cursor-pointer relative group`}
+                      } cursor-pointer relative group`}
                     onClick={() => avatarInputRef.current?.click()}
                     title="Nhấn để chọn hoặc thay đổi ảnh"
                   >
@@ -621,10 +601,10 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                       </div>
                     )}
                     <div className="absolute inset-0 bg-black bg-opacity-25 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="white" className="w-6 h-6">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.174C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.174 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
-                        </svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="white" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.174C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.174 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
+                      </svg>
                     </div>
                   </div>
                   <input
@@ -638,35 +618,34 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   />
                   {(avatarFile || (editingEventId && currentEventData.avatarUrl && !avatarPreviewUrl)) && (
                     <div className="flex flex-col justify-center h-24">
-                        {avatarFile && (
-                          <p className="text-xs text-gray-600 mb-1 max-w-[150px] truncate" title={avatarFile.name}>
-                              {avatarFile.name}
-                          </p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAvatarFile(null);
-                            if (avatarPreviewUrl) {
-                              URL.revokeObjectURL(avatarPreviewUrl);
-                              setAvatarPreviewUrl(null);
-                            }
-                            if (editingEventId) {
-                                setCurrentEventData(prev => ({...prev, avatarUrl: null}));
-                            }
-                            if (avatarInputRef.current) {
-                              avatarInputRef.current.value = "";
-                            }
-                          }}
-                          className="text-xs px-3 py-1.5 border border-red-400 text-red-600 rounded-md hover:bg-red-50 transition-colors"
-                        >
-                          Bỏ chọn
-                        </button>
+                      {avatarFile && (
+                        <p className="text-xs text-gray-600 mb-1 max-w-[150px] truncate" title={avatarFile.name}>
+                          {avatarFile.name}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAvatarFile(null);
+                          if (avatarPreviewUrl) {
+                            URL.revokeObjectURL(avatarPreviewUrl);
+                            setAvatarPreviewUrl(null);
+                          }
+                          if (editingEventId) {
+                            setCurrentEventData(prev => ({ ...prev, avatarUrl: null }));
+                          }
+                          if (avatarInputRef.current) {
+                            avatarInputRef.current.value = "";
+                          }
+                        }}
+                        className="text-xs px-3 py-1.5 border border-red-400 text-red-600 rounded-md hover:bg-red-50 transition-colors"
+                      >
+                        Bỏ chọn
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
-
               <div>
                 <label
                   htmlFor="time"
@@ -766,22 +745,18 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
                   required
                 />
               </div>
-              
+
             </div>
             <BTCSection
               ref={btcSectionRef}
-              existingOrganizers={transformToOrganizerDataArray(
-                editingEventId ? currentEventData.organizers : undefined
-              )}
+              existingOrganizers={memoizedExistingOrganizers}
               globallyBusyUserIds={globallyBusyUserIds}
               onFormChange={handleChildFormChange}
             />
             <ParticipantSection
               ref={participantSectionRef}
               allUsers={allUsers}
-              existingParticipants={transformToParticipantDataArray(
-                editingEventId ? currentEventData.participants : undefined
-              )}
+              existingParticipants={memoizedExistingParticipants}
               globallyBusyUserIds={globallyBusyUserIds}
               onFormChange={handleChildFormChange}
             />

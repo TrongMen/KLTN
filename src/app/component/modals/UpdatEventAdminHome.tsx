@@ -12,6 +12,7 @@ import React, {
 import { toast } from "react-hot-toast";
 import Image from "next/image";
 import { Cross1Icon, ReloadIcon, Cross2Icon } from "@radix-ui/react-icons";
+import { EventDisplayInfo as MainEvent } from "../types/appTypes";
 
 // --- Interfaces ---
 
@@ -799,7 +800,7 @@ interface UpdateEventModalProps {
   onClose: () => void;
   eventToUpdate: EventType | null; // Dữ liệu sự kiện cần cập nhật
   onEventUpdated: (updatedEvent: EventType) => void; // Callback khi cập nhật thành công
-  currentUserId: string | null; // ID của người dùng hiện tại (để gửi updatedByUserId)
+  currentUserId: string | null;
 }
 
 const UpdateEventModal: React.FC<UpdateEventModalProps> = ({

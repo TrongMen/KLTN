@@ -543,18 +543,7 @@ const ApprovalItemDetailModal: React.FC<ApprovalItemDetailModalProps> = ({
                     </span>
                   </p>
                 )}
-                {(detailedItem as EventType).qrCodeUrl && (
-                  <div className="mt-2">
-                    <strong className="text-gray-600 block mb-1">
-                      Mã QR Sự kiện:
-                    </strong>
-                    <img
-                      src={(detailedItem as EventType).qrCodeUrl!}
-                      alt="Event QR Code"
-                      className="w-32 h-32 border rounded"
-                    />
-                  </div>
-                )}
+               
               </div>
 
               {(detailedItem as EventType).content && (
@@ -621,43 +610,7 @@ const ApprovalItemDetailModal: React.FC<ApprovalItemDetailModalProps> = ({
                   </div>
                 )}
 
-              {/* {(detailedItem as EventType).attendees &&
-                (detailedItem as EventType).attendees!.length > 0 && (
-                  <div>
-                    <strong className="text-gray-600 block mb-2 text-sm">
-                      Danh sách người đăng ký:
-                    </strong>
-                    <div className="max-h-48 overflow-y-auto border rounded p-2 bg-gray-50">
-                      <ul className="space-y-1 text-xs">
-                        {(detailedItem as EventType).attendees!.map(
-                          (att, index) => (
-                            <li
-                              key={`att-${index}-${att.userId}`}
-                              className="text-gray-700 p-1 hover:bg-gray-100 rounded"
-                            >
-                              {att.resolvedName || `(ID: ${att.userId})`}
-                              {att.studentCode && ` (${att.studentCode})`}
-                              {att.checkedInAt && (
-                                <span className="ml-2 text-green-600 font-semibold">
-                                  (Đã điểm danh lúc{" "}
-                                  {formatDetailDate(att.checkedInAt)})
-                                </span>
-                              )}
-                              {!att.checkedInAt &&
-                                (typeof att.attending === "undefined" ||
-                                  att.attending === false ||
-                                  att.attending === null) && (
-                                  <span className="ml-2 text-orange-600">
-                                    (Chưa điểm danh)
-                                  </span>
-                                )}
-                            </li>
-                          )
-                        )}
-                      </ul>
-                    </div>
-                  </div>
-                )} */}
+              
             </>
           )}
 

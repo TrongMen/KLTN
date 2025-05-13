@@ -43,6 +43,7 @@ export type Event = {
   deletedBy?: string | null;
   progressStatus?: string;
   qrCodeUrl?: string | null;
+  maxAttendees?: number |null;
 };
 
 interface EventListProps {
@@ -55,7 +56,6 @@ interface EventListProps {
   getUserFullName: (userId: string | undefined, allUsers: ApiUser[]) => string;
 }
 
-// ... (Hàm getUserFullName, getMemberNames, ConfirmDialog giữ nguyên)
 const getUserFullName = (
   userId: string | undefined,
   allUsers: ApiUser[]
@@ -100,7 +100,7 @@ const EventList: React.FC<EventListProps> = ({
   currentUser,
   setEditingEvent,
   refreshEvents,
-  getUserFullName,
+  // getUserFullName prop is passed but the local one is used. This is fine.
 }) => {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null);
@@ -205,85 +205,7 @@ const EventList: React.FC<EventListProps> = ({
     setEditingEvent(event);
   };
 
-  const fetchQrCodeLink = useCallback(
-    async (eventId: string) => {
-      setIsLoadingQrLink(true);
-      setQrCodeError(null);
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        setQrCodeError("Vui lòng đăng nhập.");
-        setIsLoadingQrLink(false);
-        return;
-      }
-      try {
-        const response = await fetch(
-          `http://localhost:8080/identity/api/events/${eventId}/qr-code`,
-          { method: "GET", headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(
-            errorData.message || `Lỗi lấy link QR: ${response.status}`
-          );
-        }
-        const result = await response.json();
-        if (result.code === 1000 && result.result) {
-          setQrCodeLink(result.result);
-          if (!qrCodeImageSrc) setQrCodeImageSrc(result.result);
-        } else {
-          throw new Error(result.message || "Không thể lấy link QR.");
-        }
-      } catch (error: any) {
-        console.error("Error fetching QR code link:", error);
-        if (!qrCodeError)
-          setQrCodeError(error.message || "Lỗi khi lấy link QR.");
-      } finally {
-        setIsLoadingQrLink(false);
-      }
-    },
-    [qrCodeImageSrc, qrCodeError]
-  );
 
-  const fetchQrCodeImage = useCallback(
-    async (eventId: string) => {
-      setIsLoadingQrImage(true);
-      setQrCodeError(null);
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        setQrCodeError("Vui lòng đăng nhập.");
-        setIsLoadingQrImage(false);
-        return;
-      }
-      try {
-        const response = await fetch(
-          `http://localhost:8080/identity/api/events/${eventId}/qr-code-image`,
-          { method: "GET", headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (!response.ok) {
-          const errorText = await response
-            .text()
-            .catch(() => `Lỗi ${response.status}`);
-          throw new Error(`Lỗi lấy ảnh QR: ${errorText}`);
-        }
-        const blob = await response.blob();
-        if (blob.size === 0 || !blob.type.startsWith("image/")) {
-          throw new Error("Dữ liệu ảnh QR không hợp lệ.");
-        }
-        if (currentBlobUrlRef.current)
-          URL.revokeObjectURL(currentBlobUrlRef.current);
-        const newBlobUrl = URL.createObjectURL(blob);
-        setQrCodeImageSrc(newBlobUrl);
-        currentBlobUrlRef.current = newBlobUrl;
-      } catch (error: any) {
-        console.error("Error fetching QR code image:", error);
-        setQrCodeError(error.message || "Lỗi khi lấy ảnh QR.");
-        setQrCodeImageSrc(qrCodeLink);
-      } finally {
-        setIsLoadingQrImage(false);
-      }
-    },
-    [qrCodeLink]
-  );
 
   useEffect(() => {
     const blobUrl = currentBlobUrlRef.current;
@@ -296,25 +218,14 @@ const EventList: React.FC<EventListProps> = ({
   const handleViewDetails = useCallback(
     (event: Event) => {
       setViewingEventDetails(event);
-      setQrCodeLink(null);
-      setQrCodeImageSrc(null);
-      setIsLoadingQrLink(false);
-      setIsLoadingQrImage(false);
-      setQrCodeError(null);
+
       if (currentBlobUrlRef.current) {
         URL.revokeObjectURL(currentBlobUrlRef.current);
         currentBlobUrlRef.current = null;
       }
-      if (event.status === "APPROVED") {
-        fetchQrCodeLink(event.id);
-        fetchQrCodeImage(event.id);
-      } else if (event.status === "PENDING") {
-        setQrCodeError("Sự kiện đang chờ duyệt, chưa có mã QR.");
-      } else if (event.status === "REJECTED") {
-        setQrCodeError("Sự kiện đã bị từ chối, không có mã QR.");
-      }
+
     },
-    [fetchQrCodeLink, fetchQrCodeImage]
+    []
   );
 
   const handleBackToList = useCallback(() => {
@@ -417,12 +328,7 @@ const EventList: React.FC<EventListProps> = ({
                 </strong>{" "}
                 {viewingEventDetails.location || "N/A"}
               </p>
-              <p>
-                <strong className="font-medium text-gray-700 w-28 inline-block">
-                  Đối tượng:
-                </strong>{" "}
-                {(viewingEventDetails.permissions || []).join(", ") || "N/A"}
-              </p>
+
               <p>
                 <strong className="font-medium text-gray-700 w-28 inline-block">
                   Người tạo:
@@ -445,6 +351,14 @@ const EventList: React.FC<EventListProps> = ({
                   {viewingEventDetails.content || "N/A"}
                 </span>
               </p>
+              <p>
+                <strong className="font-medium text-gray-700 w-28  align-top">
+                  Số lượng tham dự:
+                </strong>{" "}
+                <span className="inline-block whitespace-pre-wrap max-w-[calc(100%-7rem)]">
+                  {viewingEventDetails.maxAttendees || "N/A"}
+                </span>
+              </p>
               <div>
                 <strong className="font-medium text-gray-700 mb-1 block">
                   Ban tổ chức:
@@ -453,7 +367,10 @@ const EventList: React.FC<EventListProps> = ({
                   <ul className="list-disc list-inside pl-4 text-gray-600">
                     {viewingEventDetails.organizers.map((org) => (
                       <li key={org.userId}>
-                        {getUserFullName(org.userId, users)}
+                        {getUserFullName(org.userId, users)} -
+                        {org.positionName && ` ${org.positionName}`}
+                        {org.roleName && ` - ${org.roleName}`}
+
                       </li>
                     ))}
                   </ul>
@@ -463,15 +380,16 @@ const EventList: React.FC<EventListProps> = ({
               </div>
               <div>
                 <strong className="font-medium text-gray-700 mb-1 block">
-                  Người tham gia (vai trò):
+                  Người tham gia :
                 </strong>
                 {viewingEventDetails.participants?.length > 0 ? (
                   <ul className="list-disc list-inside pl-4 text-gray-600">
                     {viewingEventDetails.participants.map((p) => (
                       <li key={p.userId}>
-                        {getUserFullName(p.userId, users)}
+                        {getUserFullName(p.userId, users)} -
+                        {p.positionName && ` ${p.positionName}`}
                         {p.roleName && ` - ${p.roleName}`}
-                        {p.positionName && ` (${p.positionName})`}
+                        
                       </li>
                     ))}
                   </ul>
@@ -479,20 +397,7 @@ const EventList: React.FC<EventListProps> = ({
                   <span className="text-gray-500 italic">Không có</span>
                 )}
               </div>
-              {/* {(viewingEventDetails.status === "APPROVED" || qrCodeError) && (
-                <div className="mt-4 pt-4 border-t">
-                  <h4 className="text-md font-semibold mb-2 text-gray-700">Mã QR Sự kiện</h4>
-                  {isLoadingQr && <p className="text-gray-500 italic">Đang tải mã QR...</p>}
-                  {qrCodeError && !isLoadingQr && <p className="text-red-500 italic">{qrCodeError}</p>}
-                  {!isLoadingQr && !qrCodeError && (qrCodeImageSrc || qrCodeLink) && (
-                    <div className="flex flex-col items-start gap-2">
-                      {qrCodeImageSrc && (<Image src={qrCodeImageSrc} alt={`Mã QR`} className="w-32 h-32 object-contain border p-1 bg-white shadow-sm" width={128} height={128} priority onError={(e) => { if(qrCodeLink && qrCodeImageSrc !== qrCodeLink) setQrCodeImageSrc(qrCodeLink); else { setQrCodeImageSrc(null); if(!qrCodeError) setQrCodeError("Không thể hiển thị ảnh QR."); }}} />)}
-                      {qrCodeLink && ( <a href={qrCodeLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 text-xs underline break-all">{qrCodeLink}</a> )}
-                    </div>
-                  )}
-                  {!isLoadingQr && !qrCodeError && !qrCodeImageSrc && !qrCodeLink && viewingEventDetails.status === "APPROVED" && (<p className="text-gray-500 italic">Không thể tải mã QR.</p> )}
-                </div>
-              )} */}
+
             </div>
           </div>
           <div className="p-4 border-t flex justify-end sticky bottom-0 bg-gray-50">
@@ -646,7 +551,7 @@ const EventList: React.FC<EventListProps> = ({
       {renderEventDetailsModal()}
       <ConfirmationDialog
         isOpen={isConfirmOpen}
-        onClose={closeConfirmDialog}
+        onCancel={closeConfirmDialog}
         onConfirm={confirmDelete}
         title="Xác nhận xóa sự kiện"
         message={

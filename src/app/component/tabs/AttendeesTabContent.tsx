@@ -5,11 +5,20 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
-import { toast } from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType } from "../types/appTypes";
-import QRScanner from "../modals/QRScanner"; 
+import {
+  User as MainUserType,
+  FullApiUser,
+  LockedByInfo,
+  Role,
+  Position,
+} from "../types/appTypeMember"; 
+import { ApiUser, User as ModalCurrentUserType } from "../types/appTypes"; 
+
+import QRScanner from "../modals/QRScanner";
 import ConfirmationDialog from "../../../utils/ConfirmationDialog";
 import { MdQrCodeScanner, MdQrCode } from "react-icons/md";
 
@@ -27,10 +36,11 @@ import {
   ListBulletIcon,
   DownloadIcon,
   ChevronLeftIcon,
+  LockOpen1Icon, // Giả sử bạn có icon này
 } from "@radix-ui/react-icons";
 
-import { useEventFilters } from "../../../hooks/useEventFIlter"; 
-import { useAttendeeFilters } from "../../../hooks/useAttendeeFilter"; 
+import { useEventFilters } from "../../../hooks/useEventFIlter";
+import { useAttendeeFilters } from "../../../hooks/useAttendeeFilter";
 
 interface ApprovedEvent {
   id: string;
@@ -121,6 +131,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     title: string;
     message: React.ReactNode;
     onConfirm: (() => void) | null;
+    onCancel?: () => void;
     confirmVariant?: "primary" | "danger";
     confirmText?: string;
     cancelText?: string;
@@ -246,7 +257,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             if (a.userId) initialAttendance[a.userId] = a.attending ?? false;
           });
           setOriginalAttendance(initialAttendance);
-          setAttendanceChanges(initialAttendance);
+          setAttendanceChanges(initialAttendance); 
           setSelectedForDelete(new Set());
           if (showToast) {
             toast.success("Đã làm mới danh sách người tham gia!");
@@ -308,7 +319,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         setQrCodeUrl(tempUrl);
       } else {
         try {
-          await blob.text();
+          await blob.text(); 
           throw new Error("API không trả về ảnh QR hợp lệ.");
         } catch (readError) {
           throw new Error("API không trả về ảnh QR hợp lệ.");
@@ -320,7 +331,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     } finally {
       setIsLoadingQrCode(false);
     }
-    return tempUrl;
+    return tempUrl; 
   }, []);
 
   useEffect(() => {
@@ -375,6 +386,11 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     try {
       if (selectedEventId) {
         await fetchAttendees(selectedEventId, true);
+        // Also refresh QR code if an event is selected
+        const newQrUrl = await fetchQrCodeImage(selectedEventId);
+        if (qrCodeUrl && qrCodeUrl !== newQrUrl) { // Revoke old if new one fetched
+            window.URL.revokeObjectURL(qrCodeUrl);
+        }
       } else {
         await fetchUserApprovedEvents(true);
       }
@@ -384,7 +400,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [selectedEventId, fetchAttendees, fetchUserApprovedEvents]);
+  }, [selectedEventId, fetchAttendees, fetchUserApprovedEvents, fetchQrCodeImage, qrCodeUrl]);
 
   const handleSelectEvent = (eventId: string) => {
     setSelectedEventId(eventId);
@@ -414,6 +430,22 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
 
   const isEventOngoing = selectedEventFullData?.progressStatus === "ONGOING";
 
+  const getStaticAttendanceDisplay = (
+    originalAttendeeStatus: boolean | undefined,
+    eventStatus?: ApprovedEvent['progressStatus']
+  ): { text: string; className: string } => {
+    if (eventStatus === "UPCOMING") {
+      return { text: "Chưa diễn ra", className: "bg-yellow-100 text-yellow-800 border border-yellow-300" };
+    }
+   
+
+    if (originalAttendeeStatus === true) {
+      return { text: "Có mặt", className: "bg-green-100 text-green-800 border border-green-300" };
+    } else{
+      return { text: "Vắng", className: "bg-red-100 text-red-800 border border-red-300" };
+    }
+  };
+
   const handleSetMode = (newMode: "view" | "attendance" | "delete") => {
     if (newMode === "attendance" && !isEventOngoing) {
       toast.error("Điểm danh chỉ khả dụng khi sự kiện đang diễn ra.");
@@ -424,10 +456,11 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setSelectedForDelete(new Set());
       setAttendanceChanges({ ...originalAttendance });
     } else if (newMode === "attendance") {
-      setAttendanceChanges({ ...originalAttendance });
+      // Khi chuyển sang chế độ điểm danh, giữ lại các thay đổi hiện tại nếu có
+      // setAttendanceChanges({ ...originalAttendance }); // Bỏ dòng này để giữ thay đổi đang có
       setSelectedForDelete(new Set());
     } else if (newMode === "delete") {
-      setAttendanceChanges({ ...originalAttendance });
+      setAttendanceChanges({ ...originalAttendance }); // Reset điểm danh khi sang chế độ xóa
       setSelectedForDelete(new Set());
     }
   };
@@ -478,9 +511,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         changes.push({ userId: id, status: attendanceChanges[id] });
       } else if (
         !(id in originalAttendance) &&
-        attendanceChanges[id] === true
+        attendanceChanges[id] === true 
       ) {
-        //
+        // Trường hợp người mới được thêm và điểm danh luôn (hiện tại logic này chưa hỗ trợ thêm mới từ client)
+        // changes.push({ userId: id, status: attendanceChanges[id] });
       }
     });
 
@@ -517,9 +551,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
           try {
             const updateResult = await res.json();
             if (updateResult.code === 1000) {
-               return { apiSuccess: true, value: { userId, status } };
+                 return { apiSuccess: true, value: { userId, status } };
             } else {
-               return { apiSuccess: false, reason: updateResult.message || 'Lỗi không rõ từ API', userId };
+                 return { apiSuccess: false, reason: updateResult.message || 'Lỗi không rõ từ API', userId };
             }
           } catch (e) {
             return { apiSuccess: false, reason: 'Lỗi phân tích phản hồi JSON', userId };
@@ -549,12 +583,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     } else if (ok === 0 && fail === 0 && changes.length > 0) {
         toast.error("Không thể xử lý yêu cầu lưu.", {id: loadId});
     }
-     else if (ok === 0 && fail === 0) {
+     else if (ok === 0 && fail === 0) { // No changes were attempted if changes.length was 0
       toast.dismiss(loadId);
     }
 
+
     if (selectedEventId) {
-      await fetchAttendees(selectedEventId);
+      await fetchAttendees(selectedEventId); 
     }
     setIsProcessing(false);
     setMode("view");
@@ -589,10 +624,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             return { success: false, reason: m, userId };
           }
 
-          if (res.status === 204) {
+          if (res.status === 204) { 
             return { success: true, userId };
           }
-
+          
           try {
             const deleteResult = await res.json();
             if (deleteResult.code === 1000) {
@@ -601,6 +636,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
               return { success: false, reason: deleteResult.message || 'Lỗi không xác định từ API', userId };
             }
           } catch (e) {
+            // If response is 204, res.json() will fail, this case is handled above.
+            // This catch is for other JSON parsing errors on non-204 success, which is unusual.
             return { success: false, reason: 'Phản hồi API không hợp lệ sau khi xóa', userId };
           }
         })
@@ -627,7 +664,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       toast.success(`Đã xóa ${ok} người, ${fail} thất bại.`, { id: loadId });
     } else if (fail > 0 && ok === 0) {
       toast.error(`Xóa thất bại ${fail} người.`, { id: loadId });
-    } else if (idsToDelete.length > 0 && ok === 0 && fail === 0) {
+    } else if (idsToDelete.length > 0 && ok === 0 && fail === 0) { 
       toast.error(`Không thể xử lý yêu cầu xóa.`, { id: loadId });
     } else {
       toast.dismiss(loadId);
@@ -711,7 +748,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         } catch (e) {
           try {
             const txt = await response.text();
-            errorMsg = `${errorMsg}: ${txt.slice(0, 100)}`;
+            errorMsg = `${errorMsg}: ${txt.slice(0,100)}`;
           } catch (_) {}
         }
         throw new Error(errorMsg);
@@ -741,7 +778,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const callCheckInApi = async (qrData: string) => {
     if (!selectedEventId) {
       toast.error("Vui lòng chọn một sự kiện trước khi điểm danh.");
-      // setIsScannerOpen(false); // Đã được xử lý ở handleScanSuccessCallback
       return;
     }
     if (isProcessingCheckIn) return;
@@ -785,7 +821,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       });
     } finally {
       setIsProcessingCheckIn(false);
-      // setIsScannerOpen(false); // Đã được xử lý ở handleScanSuccessCallback
     }
   };
   
@@ -826,6 +861,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
 
   return (
     <div className="flex flex-col h-full p-3 md:p-5 bg-gray-50">
+      <Toaster position="top-right" reverseOrder={false} />
       <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 flex-wrap gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-teal-600">
           {selectedEventId ? (
@@ -1070,10 +1106,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   })}`}
                             </p>
                           )}
-                          {event.maxAttendees && (
+                          {event.location && ( // Thay maxAttendees thành location
                             <p className="flex items-center gap-1">
                               <span className="opacity-70">📍</span>{" "}
-                              {event.maxAttendees}
+                              {event.location}
                             </p>
                           )}
                         </div>
@@ -1151,7 +1187,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                           onClick={() => handleSelectEvent(event.id)}
                           className="px-3 py-1.5 rounded-md bg-teal-500 hover:bg-teal-600 text-white text-xs font-medium transition"
                         >
-                          Quản lý điểm danh
+                          Điểm danh
                         </button>
                       </div>
                     </div>
@@ -1298,12 +1334,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                       );
                       const isCheckedForAttendance =
                         attendanceChanges[attendee.userId] ?? false;
-                      const isAttending =
-                        originalAttendance[attendee.userId] ?? false;
+                      const originalAttendeeStatus =
+                        originalAttendance[attendee.userId];
+                        
+                      const attendanceDisplay = getStaticAttendanceDisplay(originalAttendeeStatus, selectedEventFullData?.progressStatus);
+
                       const hasChanged =
                         mode === "attendance" &&
                         isEventOngoing &&
-                        isCheckedForAttendance !== isAttending;
+                        isCheckedForAttendance !== (originalAttendeeStatus ?? false);
                       const isRowProcessing = isProcessing;
                       return (
                         <li
@@ -1314,7 +1353,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                               : hasChanged
                               ? isCheckedForAttendance
                                 ? "bg-green-50"
-                                : "bg-gray-100"
+                                : "bg-gray-100" 
                               : "hover:bg-gray-50"
                           } ${isRowProcessing ? "opacity-70" : ""}`}
                         >
@@ -1394,19 +1433,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                               </div>{" "}
                             </div>{" "}
                           </div>{" "}
-                          {(mode === "view" ||
-                            (mode === "attendance" && !isEventOngoing)) &&
-                            !isRowProcessing && (
+                          {(mode === "view" || (mode === "attendance" && !isEventOngoing)) && !isRowProcessing && (
                               <span
-                                className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${
-                                  isAttending
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-gray-200 text-gray-600"
-                                }`}
+                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${attendanceDisplay.className}`}
                               >
-                                {isAttending ? "Có mặt" : "Vắng"}
+                                  {attendanceDisplay.text}
                               </span>
-                            )}{" "}
+                          )}
                           {mode === "attendance" &&
                             isEventOngoing &&
                             hasChanged && (
@@ -1436,12 +1469,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                       );
                       const isCheckedForAttendance =
                         attendanceChanges[attendee.userId] ?? false;
-                      const isAttending =
-                        originalAttendance[attendee.userId] ?? false;
+                      const originalAttendeeStatus =
+                        originalAttendance[attendee.userId];
+
+                      const attendanceDisplay = getStaticAttendanceDisplay(originalAttendeeStatus, selectedEventFullData?.progressStatus);
+                        
                       const hasChanged =
                         mode === "attendance" &&
                         isEventOngoing &&
-                        isCheckedForAttendance !== isAttending;
+                        isCheckedForAttendance !== (originalAttendeeStatus ?? false);
                       const isRowProcessing = isProcessing;
                       return (
                         <div
@@ -1515,19 +1551,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                 </p>
                               )}{" "}
                             </div>{" "}
-                            {(mode === "view" ||
-                              (mode === "attendance" && !isEventOngoing)) &&
-                              !isRowProcessing && (
+                            {(mode === "view" || (mode === "attendance" && !isEventOngoing)) && !isRowProcessing && (
                                 <span
-                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full self-start shrink-0 ${
-                                    isAttending
-                                      ? "bg-green-100 text-green-700"
-                                      : "bg-gray-200 text-gray-600"
-                                  }`}
+                                    className={`text-xs font-semibold px-2 py-0.5 rounded-full self-start shrink-0 ${attendanceDisplay.className}`}
                                 >
-                                  {isAttending ? "Có mặt" : "Vắng"}
+                                    {attendanceDisplay.text}
                                 </span>
-                              )}{" "}
+                            )}
                             {mode === "attendance" &&
                               isEventOngoing &&
                               hasChanged && (
@@ -1550,8 +1580,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             className={`space-y-1 text-xs text-gray-600 ${
                               mode === "view" ||
                               (mode === "attendance" && !isEventOngoing)
-                                ? "pl-[52px]"
-                                : "pl-3"
+                                ? "pl-[52px]" // Căn chỉnh với avatar khi không có checkbox
+                                : "pl-3" // Căn chỉnh khi có checkbox
                             }`}
                           >
                             {" "}
@@ -1637,7 +1667,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : ""
                         }
                       >
-                        <MdQrCode size={22}  />
+                        <MdQrCode size={16} />
                         QR điểm danh
                       </button>
                       <button
@@ -1658,7 +1688,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : ""
                         }
                       >
-                        <MdQrCodeScanner size={22}  />
+                        <MdQrCodeScanner size={16}  />
                         Quét QR
                       </button>
                       
@@ -1746,7 +1776,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   >
                     {" "}
                     <DownloadIcon className="w-3 h-3" />{" "}
-                    {isExporting ? "Đang xuất..." : "Xuất Excel"}{" "}
+                    {isExporting ? "Đang xuất..." : "Xuất danh sách người tham gia"}{" "}
                   </button>{" "}
                 </div>
               </div>
@@ -1819,7 +1849,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     </div>
                 </div>
             </div>
-         )}
+          )}
 
 
       <ConfirmationDialog
@@ -1830,13 +1860,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         confirmText={confirmationState.confirmText}
         cancelText={confirmationState.cancelText}
         onConfirm={confirmationState.onConfirm || (() => {})}
-        onCancel={() =>
+        onCancel={confirmationState.onCancel || (() =>
           setConfirmationState({
             isOpen: false,
             title: "",
             message: "",
             onConfirm: null,
-          })
+          }))
         }
       />
     </div>

@@ -27,7 +27,8 @@ import {
   Pie,
 } from "recharts";
 import { User } from "../types/appTypes";
-
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 export interface ApiUserDetail extends User {
   userCode?: string;
@@ -120,6 +121,9 @@ const StatCard: React.FC<StatCardProps> = ({
   isLoading,
   color = "bg-indigo-500",
 }) => {
+  // Ensure value is always a valid number
+  const displayValue = typeof value === 'number' && !isNaN(value) ? value : 0;
+
   return (
     <div className="bg-white shadow-lg rounded-xl p-5 transform transition-all hover:scale-105">
       <div className="flex items-center">
@@ -129,7 +133,9 @@ const StatCard: React.FC<StatCardProps> = ({
           {isLoading ? (
             <div className="h-8 bg-gray-200 rounded-md w-16 animate-pulse mt-1"></div>
           ) : (
-            <p className="text-3xl font-semibold text-gray-800">{value}</p>
+            <p className="text-3xl font-semibold text-gray-800">
+              {displayValue}
+            </p>
           )}
         </div>
       </div>
@@ -139,30 +145,26 @@ const StatCard: React.FC<StatCardProps> = ({
     </div>
   );
 };
-
-const MonthSelector: React.FC<{
-  value: number;
-  onChange: (value: number) => void;
-}> = ({ value, onChange }) => {
-  const options = [3, 6, 9, 12]; // Các tùy chọn số tháng
-
+const DateRangePicker: React.FC<{
+  startDate: Date | null;
+  endDate: Date | null;
+  onChange: (dates: [Date | null, Date | null]) => void;
+}> = ({ startDate, endDate, onChange }) => {
   return (
     <div className="flex items-center space-x-2">
-      <span className="text-sm font-medium text-gray-700">Hiển thị:</span>
-      <div className="flex space-x-1">
-        {options.map((option) => (
-          <button
-            key={option}
-            onClick={() => onChange(option)}
-            className={`px-3 py-1 text-sm rounded-md ${
-              value === option
-                ? "bg-indigo-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            {option} tháng
-          </button>
-        ))}
+      <span className="text-sm font-medium text-gray-700">Chọn khoảng thời gian:</span>
+      <div className="flex space-x-2">
+        <DatePicker
+          selected={startDate}
+          onChange={onChange}
+          startDate={startDate}
+          endDate={endDate}
+          selectsRange
+          className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          dateFormat="dd/MM/yyyy"
+          placeholderText="Từ ngày - đến ngày"
+          isClearable
+        />
       </div>
     </div>
   );
@@ -299,7 +301,11 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   const [eventStats, setEventStats] = useState<EventStats | null>(null);
   const [newsStats, setNewsStats] = useState<NewsStats | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryChartData[]>([]);
-  const [selectedMonthCount, setSelectedMonthCount] = useState<number>(6);
+  const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([
+    new Date(new Date().setMonth(new Date().getMonth() - 6)),
+    new Date(),
+  ]);
+  const [startDate, endDate] = dateRange;
 
   const [isLoadingUserStats, setIsLoadingUserStats] = useState(true);
   const [isLoadingEventStats, setIsLoadingEventStats] = useState(true);
@@ -355,40 +361,48 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   );
 
   const generateSummaryData = useCallback(() => {
-    if (!userStats || !eventStats || !newsStats) return [];
+  if (!userStats || !eventStats || !newsStats || !startDate || !endDate) return [];
 
-    const monthNames = [
-      "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", 
-      "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8",
-      "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"
-    ];
+  const monthNames = [
+    "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", 
+    "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8",
+    "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"
+  ];
 
-    // Lấy số tháng hiện tại (0-11)
-    const currentMonth = new Date().getMonth();
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const monthDiff = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
+  
+  // If dates are invalid or same month, return empty array
+  if (monthDiff < 0 || isNaN(monthDiff)) return [];
+
+  return Array.from({ length: monthDiff + 1 }, (_, i) => {
+    const currentMonth = new Date(start);
+    currentMonth.setMonth(start.getMonth() + i);
+    const monthLabel = monthNames[currentMonth.getMonth()] + " " + currentMonth.getFullYear();
     
-    // Tạo mảng tháng theo số lượng được chọn
-    const months = Array.from({ length: selectedMonthCount }, (_, i) => {
-      const monthIndex = (currentMonth - selectedMonthCount + 1 + i + 12) % 12;
-      return monthNames[monthIndex];
-    });
+    // Safely calculate values with fallbacks
+    const approvedEvents = eventStats.approvedEvents || 0;
+    const totalEvents = eventStats.totalEvents || 1; // Avoid division by zero
+    const approvedNews = newsStats.approvedNews || 0;
+    const totalNews = newsStats.totalNews || 1; // Avoid division by zero
+    
+    const progress = monthDiff > 0 ? i / monthDiff : 0;
+    const monthFactor = 0.5 + progress * 0.5;
+    const approvalRate = Math.round(
+      ((approvedEvents / totalEvents) * 50 + (approvedNews / totalNews) * 50) *
+      (0.7 + progress * 0.3)
+    );
 
-    return months.map((month, index) => {
-      const monthFactor = 0.5 + Math.random() * 0.5; // Random factor 0.5-1.0
-      const approvalRate =
-        ((eventStats.approvedEvents / eventStats.totalEvents || 0) * 50 +
-        (newsStats.approvedNews / newsStats.totalNews || 0) * 50) *
-        (0.7 + Math.random() * 0.3);
-
-      return {
-        name: month,
-        users: Math.round(userStats.totalUsers * monthFactor * (1 - index * 0.1)),
-        events: Math.round(eventStats.totalEvents * monthFactor * (1 - index * 0.05)),
-        news: Math.round(newsStats.totalNews * monthFactor * (1 - index * 0.03)),
-        approvalRate: Math.round(approvalRate),
-      };
-    });
-  }, [userStats, eventStats, newsStats, selectedMonthCount]);
-
+    return {
+      name: monthLabel,
+      users: Math.round((userStats.totalUsers || 0) * monthFactor),
+      events: Math.round((eventStats.totalEvents || 0) * monthFactor),
+      news: Math.round((newsStats.totalNews || 0) * monthFactor),
+      approvalRate: isNaN(approvalRate) ? 0 : approvalRate,
+    };
+  });
+}, [userStats, eventStats, newsStats, startDate, endDate]);
   useEffect(() => {
     const token = localStorage.getItem("authToken");
     if (user && token) {
@@ -467,7 +481,9 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
       !isLoadingNewsStats &&
       userStats &&
       eventStats &&
-      newsStats
+      newsStats &&
+      startDate &&
+      endDate
     ) {
       setIsLoadingSummary(true);
       try {
@@ -486,6 +502,8 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
     userStats,
     eventStats,
     newsStats,
+    startDate,
+    endDate,
     generateSummaryData,
   ]);
 
@@ -595,9 +613,10 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
             <UpdateIcon className="w-7 h-7 mr-3 text-indigo-600" />
             Tổng quan hệ thống
           </h2>
-          <MonthSelector 
-            value={selectedMonthCount} 
-            onChange={setSelectedMonthCount} 
+          <DateRangePicker 
+            startDate={startDate}
+            endDate={endDate}
+            onChange={setDateRange}
           />
         </div>
         <SummaryComboChart data={summaryData} isLoading={isLoadingSummary} />
@@ -632,11 +651,6 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
             color="bg-red-500"
           />
         </div>
-        {/* <CustomPieChart
-          title="Trạng thái người dùng"
-          data={userStatusData}
-          isLoading={isLoadingUserStats}
-        /> */}
       </section>
 
       {/* Events Section */}

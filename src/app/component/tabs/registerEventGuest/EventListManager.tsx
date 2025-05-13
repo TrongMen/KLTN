@@ -476,7 +476,7 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                           </span>
                         )}
                       </h3>
-                      <div className="flex flex-col sm:flex-row sm:gap-4 text-sm text-gray-600">
+                      <div className=" sm:flex-row sm:gap-4 text-sm text-gray-600">
                         {event.time && (
                           <span className="flex items-center">
                             <CalendarIcon className="w-3.5 h-3.5 mr-1.5 opacity-70 flex-shrink-0" />
@@ -487,8 +487,8 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                           </span>
                         )}
                         {event.location && (
-                          <span className="flex items-center mt-1 sm:mt-0">
-                            <span className="mr-1.5 opacity-70">📍</span>
+                          <span className="flex items-center mt-1 sm:mt-5">
+                            <span className="mr-1.4 opacity-70">📍</span>
                             {event.location}
                           </span>
                         )}

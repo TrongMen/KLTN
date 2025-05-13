@@ -10,12 +10,12 @@ import React, {
   useCallback,
 } from "react";
 import { toast } from "react-hot-toast";
-import type { ApiUser as MainApiUserType } from "../CreateEventTabContent";
+import type { ApiUser as MainApiUserType } from "../app/component/tabs/CreateEventTabContent";
 
 
 type ApiUser = MainApiUserType & {
-    position?: { id: string; name: string } | null;
-    organizerRole?: { id: string; name: string } | null;
+  position?: { id: string; name: string } | null;
+  organizerRole?: { id: string; name: string } | null;
 };
 
 
@@ -82,20 +82,20 @@ function SearchableUserDropdown({
       setFilteredUsers([]);
       return;
     }
-     const filterLogic = (user: ApiUser) => {
-        if (user.id === selectedUserId) return true;
-        if (disabledUserIds.has(user.id)) return false;
-        if (!searchTerm) return true;
+    const filterLogic = (user: ApiUser) => {
+      if (user.id === selectedUserId) return true;
+      if (disabledUserIds.has(user.id)) return false;
+      if (!searchTerm) return true;
 
-        const lowerSearchTerm = searchTerm.toLowerCase();
-        const fullName = `${user?.lastName ?? ""} ${user?.firstName ?? ""}`
-          .trim()
-          .toLowerCase();
-        const username = (user?.username ?? "").toLowerCase();
-        return (
-          fullName.includes(lowerSearchTerm) ||
-          username.includes(lowerSearchTerm)
-        );
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      const fullName = `${user?.lastName ?? ""} ${user?.firstName ?? ""}`
+        .trim()
+        .toLowerCase();
+      const username = (user?.username ?? "").toLowerCase();
+      return (
+        fullName.includes(lowerSearchTerm) ||
+        username.includes(lowerSearchTerm)
+      );
     };
     setFilteredUsers(users.filter(filterLogic));
   }, [searchTerm, users, disabledUserIds, selectedUserId]);
@@ -184,13 +184,8 @@ export const ParticipantSection = forwardRef<
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [errorRoles, setErrorRoles] = useState<string | null>(null);
 
-  const existingParticipantIds = useMemo(
-    () => new Set(existingParticipants?.map((p) => p.userId) ?? []),
-    [existingParticipants]
-  );
-
   const usersForDropdown: ApiUser[] = useMemo(() => {
-    return allUsers.filter((user) => user.position != null) as ApiUser[];
+    return allUsers.filter(user => user.position != null) as ApiUser[];
   }, [allUsers]);
 
   useEffect(() => {
@@ -229,6 +224,45 @@ export const ParticipantSection = forwardRef<
     fetchRoles();
   }, []);
 
+  useEffect(() => {
+    if (loadingRoles || !allUsers || allUsers.length === 0) return;
+
+    if (existingParticipants && existingParticipants.length > 0) {
+      const formsToSet = existingParticipants.map((p, index) => {
+        const userDetail = allUsers.find(u => u.id === p.userId) as ApiUser | undefined;
+        const positionNameFromProfile = userDetail?.position?.name || "—";
+
+        let effectiveRoleId = p.roleId || "";
+        let effectiveRoleName = roles.find(r => r.id === effectiveRoleId)?.name || "—";
+        let canSelect = true;
+
+        if (userDetail?.organizerRole) {
+          effectiveRoleId = userDetail.organizerRole.id;
+          effectiveRoleName = userDetail.organizerRole.name;
+          canSelect = false;
+        } else if (!p.roleId && userDetail) {
+          canSelect = true;
+          effectiveRoleId = "";
+          effectiveRoleName = "—";
+        }
+
+        return {
+          id: Date.now() + index + Math.random(),
+          userId: p.userId,
+          positionId: p.positionId || userDetail?.position?.id || "",
+          positionName: positionNameFromProfile,
+          roleId: effectiveRoleId,
+          roleName: effectiveRoleName,
+          canSelectRole: canSelect,
+        };
+      });
+      setParticipantForms(formsToSet);
+    } else if (!existingParticipants || existingParticipants.length === 0) {
+      setParticipantForms([]);
+    }
+  }, [existingParticipants, allUsers, roles, loadingRoles]);
+
+
   const addParticipantFormRow = () => {
     setParticipantForms((prev) => [
       ...prev,
@@ -236,9 +270,9 @@ export const ParticipantSection = forwardRef<
         id: Date.now(),
         userId: "",
         positionId: "",
-        positionName: "",
+        positionName: "—",
         roleId: "",
-        roleName: "",
+        roleName: "—",
         canSelectRole: false,
       },
     ]);
@@ -251,10 +285,7 @@ export const ParticipantSection = forwardRef<
   const handleParticipantChange = useCallback(
     (
       id: number,
-      field: keyof Omit<
-        ParticipantFormRow,
-        "id" | "positionName" | "roleName" | "canSelectRole" | "positionId"
-      >,
+      field: "userId" | "roleId",
       value: string
     ) => {
       setParticipantForms((prev) =>
@@ -266,22 +297,21 @@ export const ParticipantSection = forwardRef<
               const positionName = selectedUser?.position?.name ?? "—";
 
               let roleId = "";
-              let roleName = "";
+              let roleName = "—";
               let canSelectRole = false;
 
-              if (selectedUser?.organizerRole) {
-                roleId = selectedUser.organizerRole.id;
-                roleName = selectedUser.organizerRole.name;
-                canSelectRole = false;
-              } else if (selectedUser) {
-                roleId = "";
-                roleName = "";
-                canSelectRole = true;
-              } else {
-                roleId = "";
-                roleName = "";
-                canSelectRole = false;
+              if (selectedUser) {
+                if (selectedUser.organizerRole) {
+                  roleId = selectedUser.organizerRole.id;
+                  roleName = selectedUser.organizerRole.name;
+                  canSelectRole = false;
+                } else {
+                  roleId = "";
+                  roleName = "—";
+                  canSelectRole = true;
+                }
               }
+
               return {
                 ...form,
                 userId: value,
@@ -292,7 +322,7 @@ export const ParticipantSection = forwardRef<
                 canSelectRole,
               };
             } else if (field === "roleId" && form.canSelectRole) {
-                const selectedRole = roles.find(r => r.id === value);
+              const selectedRole = roles.find(r => r.id === value);
               return { ...form, roleId: value, roleName: selectedRole?.name || "" };
             }
           }
@@ -307,39 +337,38 @@ export const ParticipantSection = forwardRef<
     ref,
     () => ({
       getMembersData: () => {
-        const newMembers = participantForms
+        const members = participantForms
           .filter(
             (form) =>
               form.userId &&
               form.roleId &&
-              form.positionId &&
-              !existingParticipantIds.has(form.userId)
+              form.positionId
           )
           .map((form) => ({
             userId: form.userId,
             positionId: form.positionId,
             roleId: form.roleId,
           }));
-        const uniqueNewMembersMap = new Map<string, ParticipantData>();
-        newMembers.forEach((member) => {
-          if (!uniqueNewMembersMap.has(member.userId)) {
-            uniqueNewMembersMap.set(member.userId, member);
+        const uniqueMembersMap = new Map<string, ParticipantData>();
+        members.forEach((member) => {
+          if (!uniqueMembersMap.has(member.userId)) {
+            uniqueMembersMap.set(member.userId, member);
           }
         });
-        return Array.from(uniqueNewMembersMap.values());
+        return Array.from(uniqueMembersMap.values());
       },
       resetForms: () => {
         setParticipantForms([]);
       },
       getFormUserIds: () => participantForms.map(form => form.userId).filter(Boolean),
     }),
-    [participantForms, existingParticipantIds, roles]
+    [participantForms]
   );
 
   return (
     <div className="mt-6 border-t pt-4">
       <h3 className="text-md font-semibold mb-1 text-gray-600">
-        Thêm Người tham dự
+        Thêm Người tham dự (Yêu cầu có Vị trí trong CLB)
       </h3>
       {loadingRoles && (
         <p className="text-sm text-gray-500">Đang tải danh sách vai trò...</p>
@@ -352,17 +381,20 @@ export const ParticipantSection = forwardRef<
         onClick={addParticipantFormRow}
         className="mt-1 mb-2 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-xl hover:bg-blue-600 transition cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
         title="Thêm dòng nhập NTD"
-        disabled={loadingRoles || !!errorRoles}
+        disabled={loadingRoles || !!errorRoles || usersForDropdown.length === 0}
       >
         +
       </button>
+      {usersForDropdown.length === 0 && !loadingRoles && !errorRoles && (
+        <p className="text-sm text-orange-600 bg-orange-50 p-2 rounded">Không có người dùng nào có vị trí để thêm làm người tham dự.</p>
+      )}
       <div className="space-y-2">
         {participantForms.map((form) => (
           <div
             key={form.id}
             className="flex flex-col sm:flex-row gap-2 items-center p-2 border rounded bg-gray-50"
           >
-            <div className="w-1/4 sm:flex-grow">
+            <div className="w-full sm:w-1/3 md:flex-grow">
               <SearchableUserDropdown
                 users={usersForDropdown}
                 selectedUserId={form.userId}
@@ -373,13 +405,13 @@ export const ParticipantSection = forwardRef<
                 placeholder="-- Tìm user (có vị trí) --"
               />
             </div>
-            <div className="w-full sm:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
+            <div className="w-full sm:w-1/4 md:flex-1 border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center whitespace-nowrap">
               <span className="font-medium mr-1 ">Vị trí:</span>
-              <span className="font-medium mr-1 " title={form.positionName || ""}>
+              <span className="truncate" title={form.positionName || ""}>
                 {form.positionName || "—"}
               </span>
             </div>
-            <div className="w-full sm:flex-1 min-h-[30px] flex items-center whitespace-nowrap">
+            <div className="w-full sm:w-1/4 md:flex-1 min-h-[30px] flex items-center whitespace-nowrap">
               {form.userId ? (
                 form.canSelectRole ? (
                   <select
@@ -387,9 +419,10 @@ export const ParticipantSection = forwardRef<
                     onChange={(e) =>
                       handleParticipantChange(form.id, "roleId", e.target.value)
                     }
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white h-[30px]"
+                    disabled={!form.userId || loadingRoles || !!errorRoles}
                   >
-                    <option value=""> Chọn vai trò </option>
+                    <option value="">-- Chọn vai trò NTD --</option>
                     {roles?.map((r) => (
                       <option key={r.id} value={r.id}>
                         {r.name}
@@ -398,17 +431,15 @@ export const ParticipantSection = forwardRef<
                   </select>
                 ) : (
                   <div className="w-full border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center">
-                    <span className="font-medium mr-1 ">
-                      Vai trò:
-                    </span>
-                    <span className="font-medium mr-1 " title={form.roleName || ""}>
+                    <span className="font-medium mr-1 ">Vai trò NTD:</span>
+                    <span className="truncate" title={form.roleName || ""}>
                       {form.roleName || "Không có"}
                     </span>
                   </div>
                 )
               ) : (
                 <div className="w-full border border-gray-200 bg-gray-100 rounded px-2 py-1 text-sm text-gray-700 min-h-[30px] flex items-center">
-                  <span className="font-medium mr-1">Vai trò :</span> —
+                  <span className="font-medium mr-1">Vai trò NTD:</span> —
                 </div>
               )}
             </div>

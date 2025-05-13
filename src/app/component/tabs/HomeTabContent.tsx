@@ -233,7 +233,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     try {
       const organizerPromises = organizers.map(async (org) => {
         const response = await fetch(
-          `http://localhost:8080/identity/users/notoken/${org.userId}`
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${org.userId}`
         );
         if (!response.ok)
           return {
@@ -463,7 +463,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         });
         return;
       }
-      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}?deletedById=${user.id}`;
       try {
         let response = await fetch(apiUrl, {
           method: "DELETE",

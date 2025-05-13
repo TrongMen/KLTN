@@ -201,7 +201,7 @@ export const ParticipantSection = forwardRef<
         if (!token) throw new Error("Token không tồn tại.");
         const headers = { Authorization: `Bearer ${token}` };
         const rRes = await fetch(
-          "http://localhost:8080/identity/api/organizerrole",
+          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole",
           { headers }
         );
         if (!rRes.ok) throw new Error(`Lỗi tải vai trò (${rRes.status})`);

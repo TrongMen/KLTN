@@ -217,7 +217,7 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
           if (!token) throw new Error("Token không tồn tại.");
           const headers = { Authorization: `Bearer ${token}` };
           const res = await fetch(
-            "http://localhost:8080/identity/users/with-position-and-role",
+            "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role",
             { headers }
           );
           if (!res.ok) {
@@ -258,7 +258,7 @@ export const BTCSection = forwardRef<BTCSectionHandle, BTCSectionProps>(
           if (!token) throw new Error("Token không tồn tại.");
           const headers = { Authorization: `Bearer ${token}` };
           const rRes = await fetch(
-            "http://localhost:8080/identity/api/organizerrole",
+            "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole",
             { headers }
           );
           if (!rRes.ok) throw new Error(`Lỗi tải Vai trò tổ chức (${rRes.status})`);

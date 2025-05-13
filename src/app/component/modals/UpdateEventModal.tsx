@@ -512,7 +512,7 @@ const ParticipantSection = forwardRef<ParticipantSectionHandle, ParticipantSecti
                     if (!token) throw new Error("Token không tồn tại.");
                     const headers = { Authorization: `Bearer ${token}` };
                     const rRes = await fetch(
-                        "http://localhost:8080/identity/api/organizerrole", // API endpoint lấy danh sách vai trò
+                        "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole", // API endpoint lấy danh sách vai trò
                         { headers }
                     );
                     if (!rRes.ok)
@@ -852,7 +852,7 @@ const UpdateEventModal: React.FC<UpdateEventModalProps> = ({
         const headers = { Authorization: `Bearer ${token}` };
         // API endpoint để lấy users kèm position và organizerRole
         const res = await fetch(
-          "http://localhost:8080/identity/users/with-position-and-role",
+          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role",
           { headers }
         );
         if (!res.ok) {
@@ -1040,7 +1040,7 @@ const UpdateEventModal: React.FC<UpdateEventModalProps> = ({
    const uploadAvatar = async (eventId: string, file: File, token: string): Promise<string | null> => {
     const formData = new FormData();
     formData.append('avatar', file); // Key phải khớp với backend API
-    const apiUrl = `http://localhost:8080/identity/api/events/${eventId}/avatar`; // Endpoint upload avatar
+    const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/avatar`; // Endpoint upload avatar
 
     try {
         const response = await fetch(apiUrl, {
@@ -1215,7 +1215,7 @@ const UpdateEventModal: React.FC<UpdateEventModalProps> = ({
 
     // --- Gọi API cập nhật sự kiện ---
     try {
-      const apiUrl = `http://localhost:8080/identity/api/events/${eventToUpdate.id}?updatedByUserId=${currentUserId}`;
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToUpdate.id}?updatedByUserId=${currentUserId}`;
       const response = await fetch(apiUrl, {
         method: "PUT",
         headers: {

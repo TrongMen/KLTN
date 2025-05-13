@@ -139,7 +139,7 @@ const EventList: React.FC<EventListProps> = ({
     const loadingToastId = toast.loading("Đang xóa sự kiện...");
     try {
       const token = localStorage.getItem("authToken");
-      const url = `http://localhost:8080/identity/api/events/${eventId}?deletedById=${deletedById}`;
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}?deletedById=${deletedById}`;
       const response = await fetch(url, {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -175,7 +175,7 @@ const EventList: React.FC<EventListProps> = ({
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Token không lệ");
       const res = await fetch(
-        `http://localhost:8080/identity/api/events/${eventId}/status`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/status`,
         {
           method: "PUT",
           headers: {

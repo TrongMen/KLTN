@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:8080/identity/permissions";
+const API_BASE_URL = "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/permissions";
 
 export async function getPermissions(token: string) {
   const response = await fetch(API_BASE_URL, {

@@ -233,7 +233,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       setFetchUsersError(null);
       try {
         const res = await fetch(
-          "http://localhost:8080/identity/users/with-position-and-role",
+          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role",
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {
@@ -258,7 +258,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       setFetchRolesError(null);
       try {
         const res = await fetch(
-          "http://localhost:8080/identity/api/organizerrole",
+          "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole",
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {
@@ -466,7 +466,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
     if (!eventAvatarFile) return null; // Không upload nếu không có file
     const formData = new FormData();
     formData.append("file", eventAvatarFile);
-    const uploadUrl = `http://localhost:8080/identity/api/events/${eventId}/avatar`;
+    const uploadUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/avatar`;
     try {
       const response = await fetch(uploadUrl, {
         method: "PATCH", // Hoặc POST tùy theo API của bạn
@@ -547,12 +547,12 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       organizers: formData.organizers,
       participants: formData.participants,
     };
-    let url = "http://localhost:8080/identity/api/events";
+    let url = "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events";
     let method = "POST";
 
     if (isEditMode && formData.id) {
       method = "PUT";
-      url = `http://localhost:8080/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
+      url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
       payload.id = formData.id;
       payload.status = formData.status || "PENDING";
     } else {

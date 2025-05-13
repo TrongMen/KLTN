@@ -210,7 +210,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         setFetchUsersError(null);
         try {
           const res = await fetch(
-            "http://localhost:8080/identity/users/with-position-and-role",
+            "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role",
             { headers: { Authorization: `Bearer ${token}` } }
           );
           if (!res.ok) {
@@ -239,7 +239,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         setFetchRolesError(null);
         try {
           const res = await fetch(
-            "http://localhost:8080/identity/api/organizerrole",
+            "${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole",
             { headers: { Authorization: `Bearer ${token}` } }
           );
           if (!res.ok) {
@@ -438,7 +438,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
     if (!eventAvatarFile) return null;
     const formData = new FormData();
     formData.append("file", eventAvatarFile);
-    const uploadUrl = `http://localhost:8080/identity/api/events/${eventId}/avatar`;
+    const uploadUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/avatar`;
     try {
       const response = await fetch(uploadUrl, {
         method: "PATCH",
@@ -530,7 +530,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
       status: formData.status || "PENDING",
     };
 
-    const url = `http://localhost:8080/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
+    const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
     const method = "PUT";
 
     try {

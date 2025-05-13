@@ -16,7 +16,7 @@ import {
   Role,
   Position,
 } from "../types/appTypeMember";
-import { ApiUser, User as ModalCurrentUserType } from "../types/appTypes"; 
+import { ApiUser, User as ModalCurrentUserType } from "../types/appTypes";
 
 import {
   CheckCircledIcon,
@@ -28,6 +28,8 @@ import {
   ReloadIcon,
   LockClosedIcon,
   LockOpen1Icon,
+  PersonIcon, // Icon cho phân quyền
+  ChevronDownIcon, // Icon cho dropdown (ví dụ)
 } from "@radix-ui/react-icons";
 import UserProfileModal from "../modals/UserProfileModal";
 
@@ -155,6 +157,12 @@ const roleDisplayMap: Record<string, string> = {
   UNKNOWN: "Chưa xác định",
 };
 
+const availableRoles: Array<{ value: "ADMIN" | "USER" | "GUEST"; label: string }> = [
+  { value: "GUEST", label: "Thành viên vãng lai" },
+  { value: "USER", label: "Thành viên nòng cốt" },
+  { value: "ADMIN", label: "Quản trị viên" },
+];
+
 const MembersTabContent: React.FC<MembersTabContentProps> = ({
   user,
   userRole,
@@ -194,9 +202,12 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedUserProfile, setSelectedUserProfile] =
     useState<FullApiUser | null>(null);
-  // >>> CHỖ NÀY RẤT QUAN TRỌNG: Đảm bảo displayMode là state với kiểu đúng <<<
   const [displayMode, setDisplayMode] = useState<"list" | "card">("list");
   const [isRefreshingManual, setIsRefreshingManual] = useState<boolean>(false);
+  const [assigningRoleTo, setAssigningRoleTo] = useState<string | null>(null);
+  const [selectedRoleForAssignment, setSelectedRoleForAssignment] = useState<
+    "USER" | "GUEST" | "ADMIN" | ""
+  >("");
 
   const isCurrentUserAdmin = useMemo(
     () => user?.roles?.some((role) => role.name?.toUpperCase() === "ADMIN"),
@@ -223,7 +234,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   const transformApiUserToDisplayMember = (
     apiUser: FullApiUser
   ): DisplayMember => {
-    const roleName = apiUser.roles?.[0]?.name?.toUpperCase() || "UNKNOWN";
+    const roleName = (apiUser.roles?.[0]?.name?.toUpperCase() || "UNKNOWN") as "ADMIN" | "USER" | "GUEST" | "UNKNOWN";
     let displayName = [apiUser.lastName, apiUser.firstName]
       .filter(Boolean)
       .join(" ")
@@ -233,7 +244,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     return {
       id: apiUser.id,
       displayName,
-      roleName,
+      roleName: roleName === "UNKNOWN" ? "GUEST" : roleName,
       email: apiUser.email || null,
       avatar: apiUser.avatar || null,
       positionName: apiUser.position?.name || null,
@@ -473,7 +484,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     if (tab === "locked" && !loadingLocked && !isRefreshingManual) {
       fetchLockedUsers();
     }
-  }, [tab, fetchLockedUsers, loadingLocked, isRefreshingManual]);
+  }, [tab, fetchLockedUsers, isRefreshingManual]);
 
   const processedMembers = useMemo(() => {
     let membersToProcess: Array<DisplayMember | DisplayLockedMemberInfo> = [];
@@ -526,6 +537,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     setAssigningPositionTo(memberId);
     const currentUserData = allApiUsers.find((u) => u.id === memberId);
     setSelectedPositionId(currentUserData?.position?.id || "");
+    setAssigningRoleTo(null);
   };
 
   const handleAssignPosition = (memberId: string) => {
@@ -654,6 +666,111 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
       },
     });
     setIsConfirmOpen(true);
+  };
+
+  const handleAssignRoleClick = (memberId: string, currentRole: string) => {
+    setAssigningRoleTo(memberId);
+    setSelectedRoleForAssignment(currentRole as "USER" | "GUEST" | "ADMIN" || "");
+    setAssigningPositionTo(null);
+  };
+
+  const executeAssignRole = async (
+    memberId: string,
+    memberName: string,
+    newRole: "USER" | "GUEST" | "ADMIN"
+  ) => {
+    if (!newRole) {
+      toast.error("Vui lòng chọn vai trò để gán.");
+      return;
+    }
+    if (!isCurrentUserAdmin) {
+      toast.error("Bạn không có quyền thực hiện hành động này.");
+      return;
+    }
+    if (user?.id === memberId) {
+        toast.error("Không thể tự thay đổi vai trò của chính mình qua giao diện này.");
+        return;
+    }
+
+    const toastId = toast.loading(
+      `Đang phân quyền "${roleDisplayMap[newRole]}" cho ${memberName}...`
+    );
+
+    try {
+      let token = localStorage.getItem("authToken");
+      if (!token) {
+        toast.dismiss(toastId);
+        toast.error("Vui lòng đăng nhập lại.");
+        onSessionExpired();
+        return;
+      }
+
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/${memberId}`;
+      const body = {
+        roles: [newRole],
+      };
+
+      let response = await fetch(url, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        const newToken = await refreshToken();
+        if (newToken) {
+          token = newToken;
+          response = await fetch(url, {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+          });
+        } else {
+          throw new Error("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.");
+        }
+      }
+
+      const responseData = await response.json();
+
+      if (!response.ok || responseData.code !== 1000) {
+        throw new Error(
+          responseData.message || `Lỗi phân quyền (${response.status})`
+        );
+      }
+
+      toast.success(
+        responseData.message ||
+          `Đã phân quyền "${roleDisplayMap[newRole]}" cho ${memberName} thành công!`,
+        { id: toastId }
+      );
+      await fetchMembers(true);
+      if (tab === "locked") {
+        await fetchLockedUsers(true);
+      }
+      if (selectedUserProfile && selectedUserProfile.id === memberId) {
+          const updatedUser = responseData.result as FullApiUser;
+          if (updatedUser) setSelectedUserProfile(updatedUser);
+      }
+
+    } catch (err: any) {
+      toast.error(`Phân quyền thất bại: ${err.message}`, { id: toastId });
+      console.error("Lỗi phân quyền:", err);
+      if (
+        err.message.includes("hết hạn") ||
+        err.message.includes("Token không tồn tại")
+      ) {
+        onSessionExpired();
+      }
+    } finally {
+      setAssigningRoleTo(null);
+      setSelectedRoleForAssignment("");
+    }
   };
 
   const executeLockAccount = async (
@@ -925,6 +1042,9 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   };
 
   const handleViewProfile = (memberId: string) => {
+    if (assigningPositionTo === memberId || assigningRoleTo === memberId) {
+        return; // Không mở modal profile nếu đang trong quá trình gán vị trí/vai trò cho user này
+    }
     const userToView =
       allApiUsers.find((u) => u.id === memberId) ||
       rawLockedUsers.find((u) => u.id === memberId);
@@ -940,11 +1060,16 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     setIsRefreshingManual(true);
     setError(null);
     setErrorLocked(null);
+    setAssigningPositionTo(null);
+    setAssigningRoleTo(null);
     try {
       if (tab === "locked") {
         await fetchLockedUsers(true);
       } else {
         await fetchMembers(true);
+        if (positions.length === 0) {
+            await fetchPositions();
+        }
       }
       toast.success("Đã làm mới danh sách!");
     } catch (err) {
@@ -952,7 +1077,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
     } finally {
       setIsRefreshingManual(false);
     }
-  }, [tab, fetchMembers, fetchLockedUsers]);
+  }, [tab, fetchMembers, fetchLockedUsers, fetchPositions, positions.length]);
 
   const actionButtonBaseClasses =
     "p-1.5 rounded hover:bg-opacity-80 transition-colors duration-150 text-xs font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed";
@@ -960,6 +1085,8 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
   const removeButtonClasses = `${actionButtonBaseClasses} text-red-500 hover:text-red-700 hover:bg-red-100`;
   const lockButtonClasses = `${actionButtonBaseClasses} bg-red-50 text-red-600 hover:bg-red-100 border border-red-300`;
   const unlockButtonClasses = `${actionButtonBaseClasses} bg-green-50 text-green-600 hover:bg-green-100 border border-green-300`;
+  const assignRoleButtonClasses = `${actionButtonBaseClasses} bg-purple-50 text-purple-700 border border-purple-300 hover:bg-purple-100 hover:border-purple-400`;
+
 
   return (
     <div className="flex flex-col h-full p-4 md:p-5 bg-gray-50 relative">
@@ -1133,7 +1260,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
             const member = memberItem as DisplayMember &
               Partial<DisplayLockedMemberInfo>;
             if (
-              displayMode === "list" 
+              displayMode === "list"
             ) {
               return (
                 <div
@@ -1227,7 +1354,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                     </div>
                   </div>
                   <div className="flex flex-col items-stretch sm:items-end gap-2 flex-shrink-0 w-full sm:w-auto sm:max-w-xs md:max-w-sm">
-                    {!isLockedTabActive && isCurrentUserAdmin && (
+                    {!isLockedTabActive && isCurrentUserAdmin && user && user.id !== member.id && (
                       <>
                         {assigningPositionTo === member.id ? (
                           <div className="flex items-center gap-1 w-full">
@@ -1237,6 +1364,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                                 setSelectedPositionId(e.target.value)
                               }
                               className="flex-grow p-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm bg-white"
+                              onClick={(e) => e.stopPropagation()}
                             >
                               <option value="">Chọn vị trí...</option>
                               {positions.map((pos) => (
@@ -1299,6 +1427,66 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                         )}
                       </>
                     )}
+                    {!isLockedTabActive && isCurrentUserAdmin && user && user.id !== member.id && (
+                      <>
+                        {assigningRoleTo === member.id ? (
+                          <div className="flex items-center gap-1 w-full mt-1">
+                             <select
+                                value={selectedRoleForAssignment}
+                                onChange={(e) =>
+                                    setSelectedRoleForAssignment(
+                                    e.target.value as "USER" | "GUEST" | "ADMIN" | ""
+                                    )
+                                }
+                                className="flex-grow p-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm bg-white"
+                                onClick={(e) => e.stopPropagation()}
+                                >
+                                <option value="">Chọn vai trò...</option>
+                                {availableRoles.map((roleOpt) => (
+                                    <option key={roleOpt.value} value={roleOpt.value}>
+                                    {roleOpt.label}
+                                    </option>
+                                ))}
+                                </select>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (selectedRoleForAssignment) {
+                                    executeAssignRole(member.id, member.displayName, selectedRoleForAssignment);
+                                } else {
+                                    toast.error("Vui lòng chọn một vai trò.");
+                                }
+                              }}
+                              disabled={!selectedRoleForAssignment || selectedRoleForAssignment === member.roleName}
+                              className="p-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+                            >
+                              <CheckCircledIcon />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAssigningRoleTo(null);
+                                setSelectedRoleForAssignment("");
+                              }}
+                              className="p-1.5 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-xs"
+                            >
+                              <CrossCircledIcon />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAssignRoleClick(member.id, member.roleName);
+                            }}
+                            className={`${assignRoleButtonClasses} w-full justify-center mt-1 cursor-pointer`}
+                            disabled={member.locked}
+                          >
+                            <PersonIcon className="mr-1"/> Phân quyền
+                          </button>
+                        )}
+                      </>
+                    )}
                     {isCurrentUserAdmin && user && user.id !== member.id && (
                       <button
                         onClick={(e) => {
@@ -1311,7 +1499,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                           member.locked
                             ? unlockButtonClasses
                             : lockButtonClasses
-                        } w-full justify-center`}
+                        } w-full justify-center mt-1`}
                         disabled={
                           lockingMemberId === member.id ||
                           unlockingMemberId === member.id
@@ -1323,7 +1511,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                           </>
                         ) : (
                           <>
-                            <LockClosedIcon className="mr-1" /> Khóa TK
+                            <LockClosedIcon className="mr-1" /> Khóa tài khoản
                           </>
                         )}
                       </button>
@@ -1336,7 +1524,7 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
               return (
                 <div
                   key={member.id}
-                  className={`p-4 bg-white rounded-lg shadow-lg border border-gray-200 flex flex-col items-center text-center hover:shadow-xl transition-all duration-200 ease-in-out hover:scale-105 cursor-pointer min-h-[290px] ${
+                  className={`p-4 bg-white rounded-lg shadow-lg border border-gray-200 flex flex-col items-center text-center hover:shadow-xl transition-all duration-200 ease-in-out hover:scale-105 cursor-pointer min-h-[340px] ${
                     member.locked ? "opacity-60 border-l-4 border-red-400" : ""
                   }`}
                   onClick={() => handleViewProfile(member.id)}
@@ -1388,7 +1576,108 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                       {member.positionName}
                     </div>
                   )}
-                  <div className="mt-auto pt-3 w-full max-w-[180px] mx-auto">
+                  <div className="mt-auto pt-3 w-full max-w-[200px] mx-auto space-y-2">
+                    {!member.locked && isCurrentUserAdmin && user && user.id !== member.id && (
+                         <>
+                         {assigningPositionTo === member.id ? (
+                           <div className="flex items-center gap-1 w-full bg-white p-1 rounded border border-gray-200 shadow-sm" onClick={(e) => e.stopPropagation()}>
+                             <select
+                               value={selectedPositionId}
+                               onChange={(e) => setSelectedPositionId(e.target.value)}
+                               className="flex-grow p-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm bg-white"
+                             >
+                               <option value="">Chọn vị trí...</option>
+                               {positions.map((pos) => (
+                                 <option key={pos.id} value={pos.id}>
+                                   {pos.name}
+                                 </option>
+                               ))}
+                             </select>
+                             <button
+                               onClick={(e) => { e.stopPropagation(); handleAssignPosition(member.id);}}
+                               disabled={!selectedPositionId}
+                               className="p-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+                             >
+                               <CheckCircledIcon />
+                             </button>
+                             <button
+                               onClick={(e) => {e.stopPropagation(); setAssigningPositionTo(null);}}
+                               className="p-1.5 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-xs"
+                             >
+                               <CrossCircledIcon />
+                             </button>
+                           </div>
+                         ) : (
+                           <div className="flex items-center gap-1 w-full">
+                             <button
+                               onClick={(e) => { e.stopPropagation(); handleAssignPositionClick(member.id);}}
+                               className={`${assignButtonClasses} flex-grow justify-center cursor-pointer`}
+                             >
+                               {member.positionName ? `Đổi: ${member.positionName.substring(0,15)}${member.positionName.length > 15 ? '...' : ''}` : "Gán vị trí"}
+                             </button>
+                             {member.positionName && (
+                               <button
+                                 onClick={(e) => {e.stopPropagation(); handleRemovePosition(member.id, member.displayName);}}
+                                 className={`${removeButtonClasses} cursor-pointer`}
+                                 title={`Xóa vị trí: ${member.positionName}`}
+                               >
+                                 <TrashIcon />
+                               </button>
+                             )}
+                           </div>
+                         )}
+                       </>
+                    )}
+                    {!member.locked && isCurrentUserAdmin && user && user.id !== member.id && (
+                        <>
+                         <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAssignRoleClick(member.id, member.roleName);
+                            }}
+                            className={`${assignRoleButtonClasses} w-full justify-center cursor-pointer`}
+                            >
+                             <PersonIcon className="mr-1"/> Phân quyền
+                         </button>
+                         {assigningRoleTo === member.id && (
+                             <div className="flex items-center gap-1 w-full mt-1 bg-white p-2 rounded border border-gray-300 shadow" onClick={(e) => e.stopPropagation()}>
+                                 <select
+                                     value={selectedRoleForAssignment}
+                                     onChange={(e) => setSelectedRoleForAssignment(e.target.value as "USER" | "GUEST" | "ADMIN" | "")}
+                                     className="flex-grow p-1.5 border border-gray-300 rounded-md text-xs focus:ring-1 focus:ring-purple-500 focus:border-purple-500 shadow-sm bg-white"
+                                 >
+                                     <option value="">Chọn vai trò...</option>
+                                     {availableRoles.map(roleOpt => (
+                                         <option key={roleOpt.value} value={roleOpt.value}>{roleOpt.label}</option>
+                                     ))}
+                                 </select>
+                                 <button
+                                     onClick={(e) => {
+                                         e.stopPropagation();
+                                         if (selectedRoleForAssignment) {
+                                             executeAssignRole(member.id, member.displayName, selectedRoleForAssignment);
+                                         } else {
+                                             toast.error("Vui lòng chọn một vai trò.");
+                                         }
+                                     }}
+                                     disabled={!selectedRoleForAssignment || selectedRoleForAssignment === member.roleName}
+                                     className="p-1.5 bg-green-500 text-white rounded hover:bg-green-600 text-xs"
+                                 >
+                                     <CheckCircledIcon />
+                                 </button>
+                                 <button
+                                     onClick={(e) => {
+                                         e.stopPropagation();
+                                         setAssigningRoleTo(null); setSelectedRoleForAssignment("");
+                                     }}
+                                     className="p-1.5 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-xs"
+                                 >
+                                     <CrossCircledIcon />
+                                 </button>
+                             </div>
+                         )}
+                        </>
+                      )}
                     {isCurrentUserAdmin &&
                       user &&
                       user.id !== member.id &&
@@ -1398,10 +1687,10 @@ const MembersTabContent: React.FC<MembersTabContentProps> = ({
                             e.stopPropagation();
                             handleLockAccountTrigger(member);
                           }}
-                          className={`${lockButtonClasses} w-full justify-center`}
+                          className={`${lockButtonClasses} w-full justify-center cursor-pointer`}
                           disabled={lockingMemberId === member.id}
                         >
-                          <LockClosedIcon className="mr-1" /> Khóa TK
+                          <LockClosedIcon className="mr-1" /> Khóa tài khoản
                         </button>
                       )}
                   </div>

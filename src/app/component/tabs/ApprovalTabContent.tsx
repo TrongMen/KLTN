@@ -764,7 +764,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
         <button
           onClick={() => fetchDataAndUpdateLists(true)}
           disabled={isLoading}
-          className="p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-auto sm:ml-4"
+          className="p-2 border border-gray-300 cursor-pointer rounded-lg text-sm focus:ring-2 focus:ring-yellow-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center ml-auto sm:ml-4"
           title="Làm mới danh sách phê duyệt"
         >
           {isLoading ? (

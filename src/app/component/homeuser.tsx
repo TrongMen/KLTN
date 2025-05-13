@@ -2025,7 +2025,7 @@ export default function UserHome() {
               {showPrevButton && (
                 <button
                   onClick={handlePrevTabs}
-                  className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0"
+                  className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0 cursor-pointer"
                   aria-label="Các tab trước"
                 >
                   <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
@@ -2075,7 +2075,7 @@ export default function UserHome() {
               {showNextButton && (
                 <button
                   onClick={handleNextTabs}
-                  className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0"
+                  className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0 cursor-pointer"
                   aria-label="Các tab kế tiếp"
                 >
                   <ChevronRightIcon className="h-5 w-5 text-gray-600" />

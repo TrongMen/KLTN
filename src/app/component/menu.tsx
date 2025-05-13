@@ -62,6 +62,12 @@ const capitalizeEachWord = (str: string = ""): string => {
     .join(" ");
 };
 
+const roleDisplayMap: Record<string, string> = {
+  ADMIN: "Quản trị viên",
+  USER: "Thành viên nòng cốt",
+  GUEST: "Thành viên vãng lai",
+};
+
 interface UserMenuProps {
   user: User | null;
   onLogout: () => void;
@@ -370,7 +376,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
     { label: "Mã số", name: "username", type: "text", readOnly: true },
     { label: "Ngày sinh", name: "dob", type: "date" },
     { label: "Vị trí", name: "position.name", type: "text", readOnly: true },
-    { label: "Vai trò", name: "roles.description", type: "text", readOnly: true },
+    { label: "Vai trò", name: "roles.name", type: "text", readOnly: true },
   ];
 
   return (
@@ -472,8 +478,11 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
                 let displayValue;
                 if (field.name === "position.name") {
                   displayValue = updatedUser.position?.name || "";
-                } else if (field.name === "roles.description") {
-                  displayValue = updatedUser.roles?.[0]?.description || updatedUser.roles?.[0]?.name || "";
+                } else if (field.name === "roles.name") {
+                  const roleNameFromUser = updatedUser.roles?.[0]?.name?.toUpperCase();
+                  displayValue = roleNameFromUser 
+                    ? (roleDisplayMap[roleNameFromUser] || updatedUser.roles?.[0]?.name || "Chưa xác định") 
+                    : "Chưa có vai trò";
                 } else {
                   displayValue = (updatedUser as any)[field.name];
                 }

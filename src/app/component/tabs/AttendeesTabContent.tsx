@@ -3,21 +3,20 @@
 import React, {
   useState,
   useEffect,
-  useMemo,
   useCallback,
+  useMemo,
   useRef,
 } from "react";
 import { toast, Toaster } from "react-hot-toast";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
-import type {
+import {
   User as MainUserType,
   FullApiUser,
   LockedByInfo,
   Role,
   Position,
-} from "../types/appTypeMember";
-import { ApiUser, User as ModalCurrentUserType } from "../types/appTypes";
+} from "../types/appTypeMember"; 
+import { ApiUser, User as ModalCurrentUserType } from "../types/appTypes"; 
 
 import QRScanner from "../modals/QRScanner";
 import ConfirmationDialog from "../../../utils/ConfirmationDialog";
@@ -37,10 +36,7 @@ import {
   ListBulletIcon,
   DownloadIcon,
   ChevronLeftIcon,
-  LockOpen1Icon,
-  ClockIcon,
-  CheckCircledIcon,
-  ArchiveIcon,
+  LockOpen1Icon, // Giả sử bạn có icon này
 } from "@radix-ui/react-icons";
 
 import { useEventFilters } from "../../../hooks/useEventFIlter";
@@ -71,7 +67,7 @@ interface Attendee {
   avatar?: string | null;
 }
 
-interface AttendeesTabContentProps {
+interface TestProps {
   user: MainUserType | null;
 }
 
@@ -88,7 +84,9 @@ const getFilenameFromHeader = (header: string | null): string => {
       } else {
         filename = decodeURIComponent(filename);
       }
-    } catch (e) {}
+    } catch (e) {
+      // console.error("Error decoding filename:", e);
+    }
     if (!filename.toLowerCase().endsWith(".xlsx")) {
       const nameWithoutExt = filename.includes(".")
         ? filename.substring(0, filename.lastIndexOf("."))
@@ -100,17 +98,20 @@ const getFilenameFromHeader = (header: string | null): string => {
   return defaultFilename;
 };
 
-const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
+
+const Test: React.FC<TestProps> = ({ user }) => {
   const [userApprovedEvents, setUserApprovedEvents] = useState<ApprovedEvent[]>(
     []
   );
   const [isLoadingEvents, setIsLoadingEvents] = useState<boolean>(true);
   const [eventError, setEventError] = useState<string | null>(null);
+  
   const [eventViewMode, setEventViewMode] = useState<"list" | "card">("list");
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [isLoadingAttendees, setIsLoadingAttendees] = useState<boolean>(false);
   const [attendeeError, setAttendeeError] = useState<string | null>(null);
+  
   const [attendeeViewMode, setAttendeeViewMode] = useState<"list" | "card">(
     "list"
   );
@@ -165,12 +166,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     setAttendeeSortOrder,
     processedAttendees,
     getAttendeeName,
-  } = useAttendeeFilters(
-    attendees,
-    originalAttendance,
-    attendanceChanges,
-    mode
-  );
+  } = useAttendeeFilters(attendees, originalAttendance, attendanceChanges, mode);
+
 
   const fetchUserApprovedEvents = useCallback(
     async (showToast = false) => {
@@ -210,15 +207,20 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
               maxAttendees: e.maxAttendees,
             }));
           setUserApprovedEvents(approved);
-          if (showToast) toast.success("Đã làm mới danh sách sự kiện!");
+          if (showToast) {
+            toast.success("Đã làm mới danh sách sự kiện!");
+          }
         } else {
           setUserApprovedEvents([]);
-          if (showToast) toast.error("Làm mới thất bại: Dữ liệu không hợp lệ.");
+          if (showToast) {
+            toast.error("Làm mới thất bại: Dữ liệu không hợp lệ.");
+          }
         }
       } catch (e: any) {
         setEventError(e.message || "Lỗi không xác định khi tải sự kiện");
-        if (showToast)
+        if (showToast) {
           toast.error(`Làm mới thất bại: ${e.message || "Lỗi không xác định"}`);
+        }
       } finally {
         setIsLoadingEvents(false);
       }
@@ -244,9 +246,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             const d = await res.json();
             m = d.message || m;
           } catch (_) {}
-          throw new Error(
-            `<span class="math-inline">\{m\} \(</span>{res.status})`
-          );
+          throw new Error(`${m} (${res.status})`);
         }
         const data = await res.json();
         if (data.code === 1000 && Array.isArray(data.result)) {
@@ -257,9 +257,11 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             if (a.userId) initialAttendance[a.userId] = a.attending ?? false;
           });
           setOriginalAttendance(initialAttendance);
-          setAttendanceChanges(initialAttendance);
+          setAttendanceChanges(initialAttendance); 
           setSelectedForDelete(new Set());
-          if (showToast) toast.success("Đã làm mới danh sách người tham gia!");
+          if (showToast) {
+            toast.success("Đã làm mới danh sách người tham gia!");
+          }
         } else {
           setAttendees([]);
           setOriginalAttendance({});
@@ -275,10 +277,11 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         setAttendees([]);
         setOriginalAttendance({});
         setAttendanceChanges({});
-        if (showToast)
+        if (showToast) {
           toast.error(
             `Làm mới thất bại: ${err.message || "Lỗi không xác định"}`
           );
+        }
       } finally {
         setIsLoadingAttendees(false);
       }
@@ -308,9 +311,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             m = `${m}: ${txt.slice(0, 100)}`;
           } catch (_) {}
         }
-        throw new Error(
-          `<span class="math-inline">\{m\} \(</span>{res.status})`
-        );
+        throw new Error(`${m} (${res.status})`);
       }
       const blob = await res.blob();
       if (blob.type.startsWith("image/")) {
@@ -318,7 +319,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         setQrCodeUrl(tempUrl);
       } else {
         try {
-          await blob.text();
+          await blob.text(); 
           throw new Error("API không trả về ảnh QR hợp lệ.");
         } catch (readError) {
           throw new Error("API không trả về ảnh QR hợp lệ.");
@@ -330,7 +331,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     } finally {
       setIsLoadingQrCode(false);
     }
-    return tempUrl;
+    return tempUrl; 
   }, []);
 
   useEffect(() => {
@@ -385,9 +386,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     try {
       if (selectedEventId) {
         await fetchAttendees(selectedEventId, true);
+        // Also refresh QR code if an event is selected
         const newQrUrl = await fetchQrCodeImage(selectedEventId);
-        if (qrCodeUrl && qrCodeUrl !== newQrUrl) {
-          window.URL.revokeObjectURL(qrCodeUrl);
+        if (qrCodeUrl && qrCodeUrl !== newQrUrl) { // Revoke old if new one fetched
+            window.URL.revokeObjectURL(qrCodeUrl);
         }
       } else {
         await fetchUserApprovedEvents(true);
@@ -398,13 +400,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [
-    selectedEventId,
-    fetchAttendees,
-    fetchUserApprovedEvents,
-    fetchQrCodeImage,
-    qrCodeUrl,
-  ]);
+  }, [selectedEventId, fetchAttendees, fetchUserApprovedEvents, fetchQrCodeImage, qrCodeUrl]);
 
   const handleSelectEvent = (eventId: string) => {
     setSelectedEventId(eventId);
@@ -415,6 +411,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
     setIsQrModalOpen(false);
     setIsScannerOpen(false);
   };
+
   const handleBackToEventList = () => {
     setSelectedEventId(null);
   };
@@ -434,33 +431,17 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const isEventOngoing = selectedEventFullData?.progressStatus === "ONGOING";
 
   const getStaticAttendanceDisplay = (
-    attendeeAttendingStatus: boolean | undefined,
-    eventProgressStatus?: ApprovedEvent["progressStatus"]
+    originalAttendeeStatus: boolean ,
+    eventStatus?: ApprovedEvent['progressStatus']
   ): { text: string; className: string } => {
-    const defaultClasses = {
-      present: "bg-green-100 text-green-800 border border-green-300",
-      absent: "bg-red-100 text-red-800 border border-red-300",
-      notCheckedIn: "bg-gray-100 text-gray-700 border border-gray-300",
-      notStarted: "bg-yellow-100 text-yellow-800 border border-yellow-300",
-      unknown: "bg-gray-100 text-gray-500 border border-gray-200",
-    };
-
-    if (eventProgressStatus === "UPCOMING") {
-      return { text: "Chưa diễn ra", className: defaultClasses.notStarted };
+    if (eventStatus === "UPCOMING") {
+      return { text: "Chưa diễn ra", className: "bg-yellow-100 text-yellow-800 border border-yellow-300" };
     }
-    if (eventProgressStatus === "ONGOING") {
-      return attendeeAttendingStatus === true
-        ? { text: "Có mặt", className: defaultClasses.present }
-        : { text: "Chưa điểm danh", className: defaultClasses.notCheckedIn };
+    if (originalAttendeeStatus === true) {
+      return { text: "Có mặt", className: "bg-green-100 text-green-800 border border-green-300" };
+    } else {
+      return { text: "Vắng", className: "bg-red-100 text-red-800 border border-red-300" };
     }
-    if (eventProgressStatus === "ENDED") {
-      return attendeeAttendingStatus === true
-        ? { text: "Có mặt", className: defaultClasses.present }
-        : { text: "Vắng", className: defaultClasses.absent };
-    }
-    return attendeeAttendingStatus === true
-      ? { text: "Có mặt", className: defaultClasses.present }
-      : { text: "Không rõ", className: defaultClasses.unknown };
   };
 
   const handleSetMode = (newMode: "view" | "attendance" | "delete") => {
@@ -473,9 +454,11 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setSelectedForDelete(new Set());
       setAttendanceChanges({ ...originalAttendance });
     } else if (newMode === "attendance") {
+      // Khi chuyển sang chế độ điểm danh, giữ lại các thay đổi hiện tại nếu có
+      setAttendanceChanges({ ...originalAttendance }); // Bỏ dòng này để giữ thay đổi đang có
       setSelectedForDelete(new Set());
     } else if (newMode === "delete") {
-      setAttendanceChanges({ ...originalAttendance });
+      setAttendanceChanges({ ...originalAttendance }); // Reset điểm danh khi sang chế độ xóa
       setSelectedForDelete(new Set());
     }
   };
@@ -483,12 +466,14 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const handleCancelMode = () => {
     handleSetMode("view");
   };
+
   const handleAttendanceCheckboxChange = (
     userId: string,
     isChecked: boolean
   ) => {
     setAttendanceChanges((prev) => ({ ...prev, [userId]: isChecked }));
   };
+
   const handleDeleteCheckboxChange = (userId: string, isChecked: boolean) => {
     setSelectedForDelete((prev) => {
       const next = new Set(prev);
@@ -500,6 +485,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       return next;
     });
   };
+
   const handleSelectAllForDelete = (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -521,13 +507,21 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         attendanceChanges[id] !== originalAttendance[id]
       ) {
         changes.push({ userId: id, status: attendanceChanges[id] });
+      } else if (
+        !(id in originalAttendance) &&
+        attendanceChanges[id] === true 
+      ) {
+        // Trường hợp người mới được thêm và điểm danh luôn (hiện tại logic này chưa hỗ trợ thêm mới từ client)
+        // changes.push({ userId: id, status: attendanceChanges[id] });
       }
     });
+
     if (changes.length === 0) {
       toast("Không có thay đổi để lưu.", { icon: "ℹ️" });
       setMode("view");
       return;
     }
+
     setIsProcessing(true);
     const loadId = toast.loading(`Đang lưu ${changes.length} thay đổi...`);
     const token = localStorage.getItem("authToken");
@@ -536,8 +530,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setIsProcessing(false);
       return;
     }
+
     const promises = changes.map(({ userId, status }) => {
-      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}?isAttending=${status}`;
+      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}?isAttending=${status}`;
       return fetch(url, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
@@ -554,24 +549,17 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
           try {
             const updateResult = await res.json();
             if (updateResult.code === 1000) {
-              return { apiSuccess: true, value: { userId, status } };
+                 return { apiSuccess: true, value: { userId, status } };
             } else {
-              return {
-                apiSuccess: false,
-                reason: updateResult.message || "Lỗi không rõ từ API",
-                userId,
-              };
+                 return { apiSuccess: false, reason: updateResult.message || 'Lỗi không rõ từ API', userId };
             }
           } catch (e) {
-            return {
-              apiSuccess: false,
-              reason: "Lỗi phân tích phản hồi JSON",
-              userId,
-            };
+            return { apiSuccess: false, reason: 'Lỗi phân tích phản hồi JSON', userId };
           }
         })
         .catch((err) => ({ apiSuccess: false, reason: err.message, userId }));
     });
+
     const results = await Promise.allSettled(promises);
     let ok = 0,
       fail = 0;
@@ -582,6 +570,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         fail++;
       }
     });
+
     if (ok > 0) {
       toast.success(`Đã lưu ${ok} thay đổi.`, { id: loadId });
     }
@@ -590,12 +579,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         id: ok === 0 ? loadId : undefined,
       });
     } else if (ok === 0 && fail === 0 && changes.length > 0) {
-      toast.error("Không thể xử lý yêu cầu lưu.", { id: loadId });
-    } else if (ok === 0 && fail === 0) {
+        toast.error("Không thể xử lý yêu cầu lưu.", {id: loadId});
+    }
+     else if (ok === 0 && fail === 0) { // No changes were attempted if changes.length was 0
       toast.dismiss(loadId);
     }
+
+
     if (selectedEventId) {
-      await fetchAttendees(selectedEventId);
+      await fetchAttendees(selectedEventId); 
     }
     setIsProcessing(false);
     setMode("view");
@@ -604,6 +596,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
   const executeBatchDelete = async () => {
     const idsToDelete = Array.from(selectedForDelete);
     if (!selectedEventId || idsToDelete.length === 0 || isProcessing) return;
+
     setIsProcessing(true);
     const loadId = toast.loading(`Đang xóa ${idsToDelete.length} người...`);
     const token = localStorage.getItem("authToken");
@@ -612,8 +605,9 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setIsProcessing(false);
       return;
     }
+
     const promises = idsToDelete.map((userId) => {
-      const url = `http://localhost:8080/identity/api/events/<span class="math-inline">\{selectedEventId\}/attendees/</span>{userId}`;
+      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}`;
       return fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -624,42 +618,36 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
             try {
               const d = await res.json();
               m = d.message || m;
-            } catch (_) {}
+            } catch (_) { }
             return { success: false, reason: m, userId };
           }
-          if (res.status === 204) {
+
+          if (res.status === 204) { 
             return { success: true, userId };
           }
+          
           try {
             const deleteResult = await res.json();
             if (deleteResult.code === 1000) {
               return { success: true, userId, data: deleteResult };
             } else {
-              return {
-                success: false,
-                reason: deleteResult.message || "Lỗi không xác định từ API",
-                userId,
-              };
+              return { success: false, reason: deleteResult.message || 'Lỗi không xác định từ API', userId };
             }
           } catch (e) {
-            return {
-              success: false,
-              reason: "Phản hồi API không hợp lệ sau khi xóa",
-              userId,
-            };
+            // If response is 204, res.json() will fail, this case is handled above.
+            // This catch is for other JSON parsing errors on non-204 success, which is unusual.
+            return { success: false, reason: 'Phản hồi API không hợp lệ sau khi xóa', userId };
           }
         })
         .catch((err) => {
-          return {
-            success: false,
-            reason: err.message || "Lỗi mạng hoặc không thể kết nối",
-            userId,
-          };
+            return { success: false, reason: err.message || 'Lỗi mạng hoặc không thể kết nối', userId };
         });
     });
+
     const results = await Promise.allSettled(promises);
     let ok = 0;
     let fail = 0;
+
     results.forEach((r) => {
       if (r.status === "fulfilled" && r.value.success) {
         ok++;
@@ -667,17 +655,19 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         fail++;
       }
     });
+    
     if (ok > 0 && fail === 0) {
       toast.success(`Đã xóa ${ok} người.`, { id: loadId });
     } else if (ok > 0 && fail > 0) {
       toast.success(`Đã xóa ${ok} người, ${fail} thất bại.`, { id: loadId });
     } else if (fail > 0 && ok === 0) {
       toast.error(`Xóa thất bại ${fail} người.`, { id: loadId });
-    } else if (idsToDelete.length > 0 && ok === 0 && fail === 0) {
+    } else if (idsToDelete.length > 0 && ok === 0 && fail === 0) { 
       toast.error(`Không thể xử lý yêu cầu xóa.`, { id: loadId });
     } else {
       toast.dismiss(loadId);
     }
+
     if (selectedEventId) {
       await fetchAttendees(selectedEventId);
     }
@@ -701,7 +691,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       title: "Xác nhận xóa",
       message: (
         <>
-          {" "}
           Bạn chắc chắn muốn xóa{" "}
           <strong className="text-red-600">{ids.length} người</strong> đã chọn?
         </>
@@ -748,6 +737,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
           "Content-Type": "application/json",
         },
       });
+
       if (!response.ok) {
         let errorMsg = `Lỗi export (${response.status})`;
         try {
@@ -756,11 +746,12 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         } catch (e) {
           try {
             const txt = await response.text();
-            errorMsg = `${errorMsg}: ${txt.slice(0, 100)}`;
+            errorMsg = `${errorMsg}: ${txt.slice(0,100)}`;
           } catch (_) {}
         }
         throw new Error(errorMsg);
       }
+
       const contentDisposition = response.headers.get("Content-Disposition");
       const filename = getFilenameFromHeader(contentDisposition);
       const blob = await response.blob();
@@ -788,28 +779,34 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       return;
     }
     if (isProcessingCheckIn) return;
+
     setIsProcessingCheckIn(true);
     const loadingToastId = toast.loading("Đang xử lý điểm danh...");
+    
     try {
       const token = localStorage.getItem("authToken");
       if (!token) {
         throw new Error("Chưa đăng nhập hoặc token không hợp lệ.");
       }
+
       const apiUrl = `http://localhost:8080/identity/api/events/${selectedEventId}/check-in`;
       const formData = new FormData();
       formData.append("qrCodeData", qrData);
+
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
+
       const result = await response.json();
+
       if (response.ok && result.code === 1000) {
         toast.success(result.message || "Điểm danh thành công!", {
           id: loadingToastId,
         });
-        if (selectedEventId) {
-          fetchAttendees(selectedEventId, true);
+        if(selectedEventId) {
+            fetchAttendees(selectedEventId, true); 
         }
       } else {
         throw new Error(
@@ -824,58 +821,45 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
       setIsProcessingCheckIn(false);
     }
   };
+  
   const selectedEventName = selectedEventFullData?.name;
+
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [errorScanner, setErrorScanner] = useState<string | null>(null);
 
   const handleScanSuccessCallback = (decodedText: string) => {
-    setScanResult(decodedText);
+    setScanResult(decodedText); 
     setErrorScanner(null);
-    setIsScannerOpen(false);
+    
+    setIsScannerOpen(false); 
+
     setTimeout(() => {
-      callCheckInApi(decodedText);
-    }, 100);
+        callCheckInApi(decodedText);
+    }, 100); 
   };
 
   const handleScanErrorCallback = (errorMessage: string) => {
     if (
       !errorMessage.includes("NotFoundException") &&
-      !errorMessage.includes("NotAllowedError")
+      !errorMessage.includes("NotAllowedError") 
     ) {
       setErrorScanner(errorMessage);
-      toast.error(
-        `Lỗi máy quét: ${
-          errorMessage.length > 50
-            ? errorMessage.substring(0, 50) + "..."
-            : errorMessage
-        }`
-      );
+       toast.error(`Lỗi máy quét: ${errorMessage.length > 50 ? errorMessage.substring(0,50)+'...' : errorMessage }`);
     }
-    if (errorMessage.includes("Requested device not found")) {
-      setErrorScanner("Không tìm thấy camera. Vui lòng kiểm tra và chọn lại.");
-      toast.error("Không tìm thấy camera. Vui lòng kiểm tra và chọn lại.");
+     if (errorMessage.includes("Requested device not found")) {
+        setErrorScanner("Không tìm thấy camera. Vui lòng kiểm tra và chọn lại.");
+        toast.error("Không tìm thấy camera. Vui lòng kiểm tra và chọn lại.");
     }
-    if (
-      errorMessage.toLowerCase().includes("permission denied") ||
-      errorMessage.toLowerCase().includes("notallowederror")
-    ) {
-      setErrorScanner(
-        "Quyền truy cập camera bị từ chối. Vui lòng cấp quyền trong cài đặt trình duyệt."
-      );
-      toast.error(
-        "Quyền truy cập camera bị từ chối. Vui lòng cấp quyền trong cài đặt trình duyệt."
-      );
+    if (errorMessage.toLowerCase().includes("permission denied") || errorMessage.toLowerCase().includes("notallowederror")) {
+        setErrorScanner("Quyền truy cập camera bị từ chối. Vui lòng cấp quyền trong cài đặt trình duyệt.");
+        toast.error("Quyền truy cập camera bị từ chối. Vui lòng cấp quyền trong cài đặt trình duyệt.");
     }
   };
 
-  // JSX rendering logic follows...
-  // Ensure getStaticAttendanceDisplay is called with selectedEventFullData?.progressStatus
-  // and originalAttendance[attendee.userId] within the map functions.
-
   return (
     <div className="flex flex-col h-full p-3 md:p-5 bg-gray-50">
-      <Toaster position="top-right" reverseOrder={false} />
+      <Toaster  reverseOrder={false} />
       <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200 flex-shrink-0 flex-wrap gap-2">
         <h2 className="text-xl md:text-2xl font-bold text-teal-600">
           {selectedEventId ? (
@@ -885,8 +869,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                 onClick={handleBackToEventList}
                 className="mr-1 p-1 rounded hover:bg-gray-200 align-middle cursor-pointer"
               >
-                {" "}
-                <ChevronLeftIcon className="w-6 h-6" />{" "}
+                <ChevronLeftIcon className="w-6 h-6" />
               </button>{" "}
               {`Quản lý điểm danh: ${selectedEventName || "..."}`}{" "}
             </>
@@ -924,12 +907,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   htmlFor="searchEvents"
                   className="block text-xs font-medium text-gray-600 mb-1"
                 >
-                  {" "}
-                  Tìm sự kiện{" "}
+                  Tìm sự kiện
                 </label>
                 <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                  {" "}
-                  <MagnifyingGlassIcon />{" "}
+                  <MagnifyingGlassIcon />
                 </span>
                 <input
                   type="text"
@@ -945,8 +926,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   htmlFor="sortEvents"
                   className="block text-xs font-medium text-gray-600 mb-1"
                 >
-                  {" "}
-                  Sắp xếp{" "}
+                  Sắp xếp
                 </label>
                 <select
                   id="sortEvents"
@@ -962,9 +942,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     backgroundSize: "1.5em 1.5em",
                   }}
                 >
-                  {" "}
                   <option value="az">A - Z</option>{" "}
-                  <option value="za">Z - A</option>{" "}
+                  <option value="za">Z - A</option>
                 </select>
               </div>
               <div>
@@ -972,8 +951,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   htmlFor="eventStatusFilter"
                   className="block text-xs font-medium text-gray-600 mb-1"
                 >
-                  {" "}
-                  Lọc trạng thái{" "}
+                  Lọc trạng thái
                 </label>
                 <select
                   id="eventStatusFilter"
@@ -989,57 +967,49 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     backgroundSize: "1.5em 1.5em",
                   }}
                 >
-                  {" "}
-                  <option value="all">♾️ Tất cả</option>{" "}
-                  <option value="upcoming">☀️ Sắp diễn ra</option>{" "}
-                  <option value="ongoing">🟢 Đang diễn ra</option>{" "}
-                  <option value="ended">🏁 Đã kết thúc</option>{" "}
-                  <option value="dateRange">🔢 Khoảng ngày</option>{" "}
+                  <option value="all">♾️ Tất cả</option>
+                  <option value="upcoming">☀️ Sắp diễn ra</option>
+                  <option value="ongoing">🟢 Đang diễn ra</option>
+                  <option value="ended">🏁 Đã kết thúc</option>
+                  <option value="dateRange">🔢 Khoảng ngày</option>
                 </select>
               </div>
               <div className="flex items-end justify-start md:justify-end gap-2">
-                {" "}
                 <div className="flex w-full sm:w-auto">
-                  {" "}
                   <button
                     onClick={() => setEventViewMode("list")}
                     title="Danh sách"
-                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out cursor-pointer ${
+                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition cursor-pointer ${
                       eventViewMode === "list"
                         ? "bg-teal-600 text-white z-10"
                         : "bg-white text-gray-500 hover:bg-gray-50"
                     }`}
                   >
-                    {" "}
-                    <ListBulletIcon className="h-5 w-5" />{" "}
-                  </button>{" "}
+                    <ListBulletIcon className="h-5 w-5" />
+                  </button>
                   <button
                     onClick={() => setEventViewMode("card")}
                     title="Thẻ"
-                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transition duration-150 ease-in-out cursor-pointer  ${
+                    className={`flex-1 sm:flex-none p-2 rounded-r-md border transition cursor-pointer  ${
                       eventViewMode === "card"
                         ? "bg-teal-600 text-white z-10"
                         : "bg-white text-gray-500 hover:bg-gray-50"
                     }`}
                   >
-                    {" "}
-                    <Component1Icon className="h-5 w-5" />{" "}
-                  </button>{" "}
-                </div>{" "}
+                    <Component1Icon className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
             </div>
             {eventStatusFilterOption === "dateRange" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
-                {" "}
                 <div>
-                  {" "}
                   <label
                     htmlFor="startDateFilterEvents"
                     className="block text-xs font-medium mb-1"
                   >
-                    {" "}
-                    Từ ngày{" "}
-                  </label>{" "}
+                    Từ ngày
+                  </label>
                   <input
                     type="date"
                     id="startDateFilterEvents"
@@ -1047,17 +1017,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     onChange={handleEventStartDateChange}
                     max={eventEndDateFilter || undefined}
                     className="w-full p-2 border rounded text-sm"
-                  />{" "}
-                </div>{" "}
+                  />
+                </div>
                 <div>
-                  {" "}
                   <label
                     htmlFor="endDateFilterEvents"
                     className="block text-xs font-medium mb-1"
                   >
-                    {" "}
-                    Đến ngày{" "}
-                  </label>{" "}
+                    Đến ngày
+                  </label>
                   <input
                     type="date"
                     id="endDateFilterEvents"
@@ -1065,43 +1033,38 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     onChange={handleEventEndDateChange}
                     min={eventStartDateFilter || undefined}
                     className="w-full p-2 border rounded text-sm"
-                  />{" "}
-                </div>{" "}
+                  />
+                </div>
               </div>
             )}
           </div>
           <div className="overflow-y-auto flex-grow mb-4 pr-1 scrollbar-thin scrollbar-thumb-gray-300">
             {isLoadingEvents ? (
               <p className="text-center text-gray-500 italic py-5">
-                {" "}
                 Đang tải...
               </p>
             ) : eventError ? (
               <p className="text-center text-red-600 p-3">{eventError}</p>
             ) : processedEvents.length === 0 ? (
               <p className="text-center text-gray-500 italic py-5">
-                {" "}
                 {eventSearchTerm ||
                 eventStatusFilterOption !== "all" ||
                 eventStartDateFilter ||
                 eventEndDateFilter
                   ? "Không tìm thấy sự kiện."
-                  : "Bạn không có sự kiện đã duyệt."}{" "}
+                  : "Bạn không có sự kiện đã duyệt."}
               </p>
             ) : eventViewMode === "list" ? (
               <ul className="space-y-3">
-                {" "}
                 {processedEvents.map((event) => (
                   <li
                     key={event.id}
                     className="bg-white shadow-lg rounded-xl overflow-hidden transition transform hover:scale-[1.01] hover:shadow-xl flex flex-col md:flex-row border border-gray-200 hover:border-teal-300"
                   >
-                    {" "}
                     <div
                       className="relative w-full md:w-48 xl:w-56 flex-shrink-0 h-48 md:h-auto cursor-pointer"
                       onClick={() => handleSelectEvent(event.id)}
                     >
-                      {" "}
                       {event.avatarUrl ? (
                         <Image
                           src={event.avatarUrl}
@@ -1115,7 +1078,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                           {event.name?.charAt(0).toUpperCase() || "?"}
                         </div>
                       )}
-                    </div>{" "}
+                    </div>
                     <div className="p-3 flex flex-col justify-between flex-grow md:pl-4">
                       <div
                         onClick={() => handleSelectEvent(event.id)}
@@ -1141,7 +1104,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   })}`}
                             </p>
                           )}
-                          {event.location && (
+                          {event.location && ( // Thay maxAttendees thành location
                             <p className="flex items-center gap-1">
                               <span className="opacity-70">📍</span>{" "}
                               {event.location}
@@ -1163,18 +1126,15 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
               </ul>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {" "}
                 {processedEvents.map((event) => (
                   <div
                     key={event.id}
                     className="bg-white shadow-lg rounded-xl overflow-hidden flex flex-col border border-gray-200 transition transform hover:scale-[1.02] hover:shadow-xl"
                   >
-                    {" "}
                     <div
                       className="w-full h-36 bg-gray-200 relative cursor-pointer"
                       onClick={() => handleSelectEvent(event.id)}
                     >
-                      {" "}
                       {event.avatarUrl ? (
                         <Image
                           src={event.avatarUrl}
@@ -1244,12 +1204,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   htmlFor="searchAttendees"
                   className="block text-xs font-medium text-gray-600 mb-1"
                 >
-                  {" "}
-                  Tìm kiếm{" "}
+                  Tìm kiếm
                 </label>
                 <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                  {" "}
-                  <MagnifyingGlassIcon />{" "}
+                  <MagnifyingGlassIcon />
                 </span>
                 <input
                   type="text"
@@ -1265,8 +1223,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   htmlFor="sortAttendees"
                   className="block text-xs font-medium text-gray-600 mb-1"
                 >
-                  {" "}
-                  Sắp xếp{" "}
+                  Sắp xếp
                 </label>
                 <select
                   id="sortAttendees"
@@ -1280,28 +1237,24 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     backgroundSize: "1.5em 1.5em",
                   }}
                 >
-                  {" "}
                   <option value="az">A - Z</option>{" "}
                   <option value="za">Z - A</option>{" "}
-                  <option value="status">Trạng thái</option>{" "}
+                  <option value="status">Trạng thái</option>
                 </select>
               </div>
               <div className="flex items-end justify-start sm:justify-end gap-2">
-                {" "}
                 <div className="flex w-full sm:w-auto">
-                  {" "}
                   <button
                     onClick={() => setAttendeeViewMode("list")}
                     title="Danh sách"
-                    className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition cursor-pointer ${
+                    className={`flex-1 sm:flex-none p-2 cursor-pointer rounded-l-md border border-r-0 transition ${
                       attendeeViewMode === "list"
                         ? "bg-teal-600 text-white z-10"
                         : "bg-white text-gray-500 hover:bg-gray-50"
                     }`}
                   >
-                    {" "}
-                    <ListBulletIcon className="h-5 w-5" />{" "}
-                  </button>{" "}
+                    <ListBulletIcon className="h-5 w-5" />
+                  </button>
                   <button
                     onClick={() => setAttendeeViewMode("card")}
                     title="Thẻ"
@@ -1311,32 +1264,28 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         : "bg-white text-gray-500 hover:bg-gray-50"
                     }`}
                   >
-                    {" "}
-                    <Component1Icon className="h-5 w-5" />{" "}
-                  </button>{" "}
-                </div>{" "}
+                    <Component1Icon className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
           <div className="overflow-y-auto flex-grow mb-4 pr-1 scrollbar-thin scrollbar-thumb-gray-300">
             {isLoadingAttendees ? (
               <p className="text-center text-gray-500 italic py-5">
-                {" "}
-                Đang tải danh sách...{" "}
+                Đang tải danh sách...
               </p>
             ) : attendeeError ? (
               <p className="text-center text-red-600 p-3">{attendeeError}</p>
             ) : !selectedEventId ? (
               <p className="text-center text-gray-400 italic py-5">
-                {" "}
-                Vui lòng chọn sự kiện.{" "}
+                Vui lòng chọn sự kiện.
               </p>
             ) : processedAttendees.length === 0 ? (
               <p className="text-center text-gray-500 italic py-5">
-                {" "}
                 {attendeeSearchTerm
                   ? "Không tìm thấy."
-                  : "Chưa có người tham gia."}{" "}
+                  : "Chưa có người tham gia."}
               </p>
             ) : (
               <div className="space-y-0">
@@ -1344,7 +1293,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   <div className="flex items-center justify-between border-b pb-2 mb-2 sticky top-0 bg-gray-50 py-2 z-10 px-3 -mx-1 rounded-t-md">
                     {" "}
                     <div className="flex items-center">
-                      {" "}
                       <input
                         type="checkbox"
                         id={`select-all-delete`}
@@ -1359,11 +1307,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         }
                         onChange={handleSelectAllForDelete}
                         disabled={isProcessing}
-                      />{" "}
+                      />
                       <label htmlFor={`select-all-delete`} className="text-sm">
-                        {" "}
-                        Chọn tất cả ({selectedForDelete.size}){" "}
-                      </label>{" "}
+                        Chọn tất cả ({selectedForDelete.size})
+                      </label>
                     </div>{" "}
                   </div>
                 )}
@@ -1373,14 +1320,12 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                     <div className="text-right border-b pb-2 mb-2 sticky top-0 bg-gray-50 py-2 z-10 px-3 -mx-1 rounded-t-md">
                       {" "}
                       <p className="text-sm text-gray-500 italic">
-                        {" "}
-                        Đánh dấu vào ô để xác nhận có mặt.{" "}
+                        Đánh dấu vào ô để xác nhận có mặt.
                       </p>{" "}
                     </div>
                   )}
                 {attendeeViewMode === "list" ? (
                   <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
-                    {" "}
                     {processedAttendees.map((attendee) => {
                       const isSelectedForDelete = selectedForDelete.has(
                         attendee.userId
@@ -1389,15 +1334,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         attendanceChanges[attendee.userId] ?? false;
                       const originalAttendeeStatus =
                         originalAttendance[attendee.userId];
-                      const attendanceDisplay = getStaticAttendanceDisplay(
-                        originalAttendeeStatus,
-                        selectedEventFullData?.progressStatus
-                      );
+                        
+                      const attendanceDisplay = getStaticAttendanceDisplay(originalAttendeeStatus, selectedEventFullData?.progressStatus);
+
                       const hasChanged =
                         mode === "attendance" &&
                         isEventOngoing &&
-                        isCheckedForAttendance !==
-                          (originalAttendeeStatus ?? false);
+                        isCheckedForAttendance !== (originalAttendeeStatus ?? false);
                       const isRowProcessing = isProcessing;
                       return (
                         <li
@@ -1408,7 +1351,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                               : hasChanged
                               ? isCheckedForAttendance
                                 ? "bg-green-50"
-                                : "bg-gray-100"
+                                : "bg-gray-100" 
                               : "hover:bg-gray-50"
                           } ${isRowProcessing ? "opacity-70" : ""}`}
                         >
@@ -1488,15 +1431,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                               </div>{" "}
                             </div>{" "}
                           </div>{" "}
-                          {(mode === "view" ||
-                            (mode === "attendance" && !isEventOngoing)) &&
-                            !isRowProcessing && (
+                          {(mode === "view" || (mode === "attendance" && !isEventOngoing)) && !isRowProcessing && (
                               <span
-                                className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${attendanceDisplay.className}`}
+                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${attendanceDisplay.className}`}
                               >
-                                {attendanceDisplay.text}
+                                  {attendanceDisplay.text}
                               </span>
-                            )}{" "}
+                          )}
                           {mode === "attendance" &&
                             isEventOngoing &&
                             hasChanged && (
@@ -1513,14 +1454,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                   <Cross2Icon className="w-3 h-3" />
                                 )}
                               </span>
-                            )}
+                            )}{" "}
                         </li>
                       );
-                    })}{" "}
+                    })}
                   </ul>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {" "}
                     {processedAttendees.map((attendee) => {
                       const isSelectedForDelete = selectedForDelete.has(
                         attendee.userId
@@ -1529,15 +1469,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         attendanceChanges[attendee.userId] ?? false;
                       const originalAttendeeStatus =
                         originalAttendance[attendee.userId];
-                      const attendanceDisplay = getStaticAttendanceDisplay(
-                        originalAttendeeStatus,
-                        selectedEventFullData?.progressStatus
-                      );
+
+                      const attendanceDisplay = getStaticAttendanceDisplay(originalAttendeeStatus, selectedEventFullData?.progressStatus);
+                        
                       const hasChanged =
                         mode === "attendance" &&
                         isEventOngoing &&
-                        isCheckedForAttendance !==
-                          (originalAttendeeStatus ?? false);
+                        isCheckedForAttendance !== (originalAttendeeStatus ?? false);
                       const isRowProcessing = isProcessing;
                       return (
                         <div
@@ -1611,15 +1549,13 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                 </p>
                               )}{" "}
                             </div>{" "}
-                            {(mode === "view" ||
-                              (mode === "attendance" && !isEventOngoing)) &&
-                              !isRowProcessing && (
+                            {(mode === "view" || (mode === "attendance" && !isEventOngoing)) && !isRowProcessing && (
                                 <span
-                                  className={`text-xs font-semibold px-2 py-0.5 rounded-full self-start shrink-0 ${attendanceDisplay.className}`}
+                                    className={`text-xs font-semibold px-2 py-0.5 rounded-full self-start shrink-0 ${attendanceDisplay.className}`}
                                 >
-                                  {attendanceDisplay.text}
+                                    {attendanceDisplay.text}
                                 </span>
-                              )}{" "}
+                            )}
                             {mode === "attendance" &&
                               isEventOngoing &&
                               hasChanged && (
@@ -1642,8 +1578,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             className={`space-y-1 text-xs text-gray-600 ${
                               mode === "view" ||
                               (mode === "attendance" && !isEventOngoing)
-                                ? "pl-[52px]"
-                                : "pl-3"
+                                ? "pl-[52px]" // Căn chỉnh với avatar khi không có checkbox
+                                : "pl-3" // Căn chỉnh khi có checkbox
                             }`}
                           >
                             {" "}
@@ -1671,10 +1607,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                                 </span>
                               </p>
                             )}{" "}
-                          </div>
+                          </div>{" "}
                         </div>
                       );
-                    })}{" "}
+                    })}
                   </div>
                 )}
               </div>
@@ -1707,8 +1643,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : "Chuyển sang chế độ điểm danh"
                         }
                       >
-                        {" "}
-                        <CheckIcon /> Điểm danh{" "}
+                        <CheckIcon /> Điểm danh
                       </button>
                       <button
                         onClick={() => setIsQrModalOpen(true)}
@@ -1730,18 +1665,16 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : ""
                         }
                       >
-                        {" "}
-                        <MdQrCode size={16} /> QR điểm danh{" "}
+                        <MdQrCode size={16} />
+                        QR điểm danh
                       </button>
                       <button
                         onClick={() => {
-                          setErrorScanner(null);
-                          setScanResult(null);
-                          setIsScannerOpen(true);
+                            setErrorScanner(null); 
+                            setScanResult(null);
+                            setIsScannerOpen(true);
                         }}
-                        disabled={
-                          !isEventOngoing || isProcessing || isProcessingCheckIn
-                        }
+                        disabled={!isEventOngoing || isProcessing || isProcessingCheckIn}
                         className={`px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer inline-flex items-center gap-1 shadow-sm border ${
                           !isEventOngoing
                             ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
@@ -1753,16 +1686,16 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : ""
                         }
                       >
-                        {" "}
-                        <MdQrCodeScanner size={16} /> Quét QR{" "}
+                        <MdQrCodeScanner size={16}  />
+                        Quét QR
                       </button>
+                      
                       <button
                         onClick={() => handleSetMode("delete")}
                         disabled={isProcessing || attendees.length === 0}
                         className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 inline-flex items-center gap-1 border border-red-200"
                       >
-                        {" "}
-                        <TrashIcon /> Xóa người{" "}
+                        <TrashIcon /> Xóa người
                       </button>
                     </div>
                   )}
@@ -1774,8 +1707,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         disabled={isProcessing}
                         className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 border"
                       >
-                        {" "}
-                        Hủy{" "}
+                        Hủy
                       </button>{" "}
                       <button
                         onClick={handleSaveChanges}
@@ -1798,8 +1730,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : "bg-blue-600 hover:bg-blue-700"
                         }`}
                       >
-                        {" "}
-                        {isProcessing ? "Đang lưu..." : "Lưu điểm danh"}{" "}
+                        {isProcessing ? "Đang lưu..." : "Lưu điểm danh"}
                       </button>{" "}
                     </div>
                   )}
@@ -1811,8 +1742,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                         disabled={isProcessing}
                         className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-md text-xs font-medium cursor-pointer disabled:opacity-50 border"
                       >
-                        {" "}
-                        Hủy{" "}
+                        Hủy
                       </button>{" "}
                       <button
                         onClick={handleConfirmBatchDelete}
@@ -1823,8 +1753,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                             : "bg-red-600 hover:bg-red-700"
                         }`}
                       >
-                        {" "}
-                        <TrashIcon /> Xóa ({selectedForDelete.size}){" "}
+                        <TrashIcon /> Xóa ({selectedForDelete.size})
                       </button>{" "}
                     </div>
                   )}
@@ -1845,7 +1774,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
                   >
                     {" "}
                     <DownloadIcon className="w-3 h-3" />{" "}
-                    {isExporting ? "Đang xuất..." : "Xuất danh sách"}{" "}
+                    {isExporting ? "Đang xuất..." : "Xuất danh sách người tham gia"}{" "}
                   </button>{" "}
                 </div>
               </div>
@@ -1853,95 +1782,74 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         </>
       )}
 
-      {isQrModalOpen && selectedEventId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl p-5 max-w-sm w-full text-center relative">
-            <button
-              onClick={() => setIsQrModalOpen(false)}
-              className="absolute top-2 right-2 p-1 text-gray-500 hover:text-gray-700"
-            >
-              {" "}
-              <Cross2Icon className="w-5 h-5" />{" "}
-            </button>
-            <h3 className="text-lg font-semibold mb-3 text-gray-800">
-              {" "}
-              QR Code Điểm Danh{" "}
-            </h3>
-            {isLoadingQrCode && (
-              <p className="text-gray-500">Đang tải QR code...</p>
-            )}
-            {qrCodeError && <p className="text-red-500">{qrCodeError}</p>}
-            {qrCodeUrl && !qrCodeError && (
-              <div className="my-4 flex justify-center">
-                {" "}
-                <Image
-                  src={qrCodeUrl}
-                  alt="QR Code Điểm Danh"
-                  width={256}
-                  height={256}
-                  className="border rounded"
-                />{" "}
-              </div>
-            )}
-            {selectedEventFullData?.name && (
-              <p className="text-sm text-gray-600 mt-1">
-                Sự kiện: {selectedEventFullData.name}
-              </p>
-            )}
-            <button
-              onClick={() => setIsQrModalOpen(false)}
-              className="mt-4 px-4 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-600 text-sm"
-            >
-              {" "}
-              Đóng{" "}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isScannerOpen && selectedEventId && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[60] p-2">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200">
-              {" "}
-              <h3 className="text-lg font-semibold text-gray-800">
-                {" "}
-                Quét mã QR để điểm danh{" "}
-              </h3>{" "}
-              <button
-                onClick={() => setIsScannerOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                {" "}
-                <Cross2Icon className="w-5 h-5" />{" "}
-              </button>{" "}
-            </div>
-            <div className="p-4">
-              {" "}
-              <QRScanner
-                onScanSuccess={handleScanSuccessCallback}
-                onScanError={handleScanErrorCallback}
-              />{" "}
-              {errorScanner && (
-                <div className="mt-3 p-3 bg-red-50 text-red-700 rounded-md text-sm text-center">
-                  {" "}
-                  <p>{errorScanner}</p>{" "}
+        {isQrModalOpen && selectedEventId && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl p-5 max-w-sm w-full text-center relative">
+                <button 
+                onClick={() => setIsQrModalOpen(false)}
+                className="absolute top-2 right-2 p-1 text-gray-500 hover:text-gray-700"
+                >
+                <Cross2Icon className="w-5 h-5" />
+                </button>
+                <h3 className="text-lg font-semibold mb-3 text-gray-800">
+                QR Code Điểm Danh
+                </h3>
+                {isLoadingQrCode && <p className="text-gray-500">Đang tải QR code...</p>}
+                {qrCodeError && <p className="text-red-500">{qrCodeError}</p>}
+                {qrCodeUrl && !qrCodeError && (
+                <div className="my-4 flex justify-center">
+                    <Image src={qrCodeUrl} alt="QR Code Điểm Danh" width={256} height={256} className="border rounded" />
                 </div>
-              )}{" "}
+                )}
+                {selectedEventFullData?.name && <p className="text-sm text-gray-600 mt-1">Sự kiện: {selectedEventFullData.name}</p>}
+                <button
+                    onClick={() => setIsQrModalOpen(false)}
+                    className="mt-4 px-4 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-600 text-sm"
+                >
+                    Đóng
+                </button>
             </div>
-            <div className="p-4 border-t border-gray-200 flex justify-end">
-              {" "}
-              <button
-                onClick={() => setIsScannerOpen(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
-              >
-                {" "}
-                Đóng{" "}
-              </button>{" "}
             </div>
-          </div>
-        </div>
-      )}
+        )}
+
+        {isScannerOpen && selectedEventId && (
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[60] p-2">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                    <div className="flex justify-between items-center p-4 border-b border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-800">
+                        Quét mã QR để điểm danh
+                        </h3>
+                        <button
+                        onClick={() => setIsScannerOpen(false)} 
+                        className="text-gray-400 hover:text-gray-600"
+                        >
+                        <Cross2Icon className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-4">
+                        <QRScanner
+                            onScanSuccess={handleScanSuccessCallback}
+                            onScanError={handleScanErrorCallback}
+                        />
+                        {errorScanner && (
+                        <div className="mt-3 p-3 bg-red-50 text-red-700 rounded-md text-sm text-center">
+                            <p>{errorScanner}</p>
+                        </div>
+                        )}
+                    </div>
+                     <div className="p-4 border-t border-gray-200 flex justify-end">
+                        <button
+                            onClick={() => setIsScannerOpen(false)}
+                            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
+                        >
+                            Đóng
+                        </button>
+                    </div>
+                </div>
+            </div>
+          )}
+
+
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
         title={confirmationState.title}
@@ -1950,19 +1858,17 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({ user }) => {
         confirmText={confirmationState.confirmText}
         cancelText={confirmationState.cancelText}
         onConfirm={confirmationState.onConfirm || (() => {})}
-        onCancel={
-          confirmationState.onCancel ||
-          (() =>
-            setConfirmationState({
-              isOpen: false,
-              title: "",
-              message: "",
-              onConfirm: null,
-            }))
+        onCancel={confirmationState.onCancel || (() =>
+          setConfirmationState({
+            isOpen: false,
+            title: "",
+            message: "",
+            onConfirm: null,
+          }))
         }
       />
     </div>
   );
 };
 
-export default AttendeesTabContent;
+export default Test;

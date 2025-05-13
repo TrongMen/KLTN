@@ -16,7 +16,9 @@ import HomeTabContent from "./tabs/HomeTabContent";
 import MyEventsTabContent, {
   EventType as MyEventType,
 } from "./tabs/MyEventsTabContent";
-import AttendeesTabContent from "./tabs/AttendeesTabContent";
+// import AttendeesTabContent from "./tabs/AttendeesTabContent";
+import AttendeesTabContent from "./tabs/AttendeesTabContentUser";
+
 import MembersTabContent from "./tabs/MembersTabContent";
 import ChatTabContent from "./tabs/ChatTabContent";
 import MyNewsTabContent from "./tabs/MyNewsTabContent";
@@ -2167,7 +2169,11 @@ export default function UserHome() {
               />
             )}
             {user && activeTab === "attendees" && (
-              <AttendeesTabContent user={user} />
+               <AttendeesTabContent
+    user={user}                             // Truyền thông tin người dùng hiện tại
+    refreshToken={refreshToken}             // Truyền hàm làm mới token
+    onSessionExpired={handleSessionExpired} // Truyền hàm xử lý khi phiên hết hạn
+  />
             )}
             {user && activeTab === "members" && (
               <MembersTabContent

@@ -15,7 +15,8 @@ import ContactModal from "../component/modals/ContactModal";
 import AboutModal from "../component/modals/AboutModal";
 import AdminHomeTabContent from "../component/tabs/AdminHomeTabContent";
 import ApprovalTabContent from "../component/tabs/ApprovalTabContent";
-import AttendeesTabContent from "../component/tabs/AttendeesTabContent";
+// import AttendeesTabContent from "../component/tabs/AttendeesTabContent";
+import AttendeesTabContent from "../component/tabs/AttendeesTabContentUser";
 import MembersTabContent from "../component/tabs/MembersTabContent";
 import RolesTabContent from "../component/tabs/RolesTabContent";
 import ChatTabContent from "../component/tabs/ChatTabContent";
@@ -2259,7 +2260,11 @@ export default function HomeAdmin() {
               />
             )}
             {activeTab === "attendees" && user && (
-              <AttendeesTabContent user={user} />
+              <AttendeesTabContent  user={user}                             // Truyền thông tin người dùng hiện tại
+    refreshToken={refreshToken}             // Truyền hàm làm mới token
+    onSessionExpired={handleSessionExpired}
+    
+    />
             )}
             {activeTab === "members" && user && (
               <MembersTabContent

@@ -410,6 +410,40 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
     }
   };
 
+  const regenerateEventQrCode = async (eventId: string, token: string) => {
+    const apiUrl = `http://localhost:8080/identity/api/events/${eventId}/regenerate-qrcode`;
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        let errorMsg = `Lỗi tạo lại QR code (${response.status})`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.message || errorMsg;
+        } catch (e) {
+          const textError = await response.text().catch(()=>"");
+          if (textError) errorMsg = `${errorMsg}: ${textError.slice(0,100)}`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const result = await response.json();
+
+      if (result.code === 1000) {
+        toast.success(result.message || "Tạo lại mã QR cho sự kiện thành công!");
+      } else {
+        throw new Error(result.message || "Tạo lại mã QR thất bại từ API.");
+      }
+    } catch (error: any) {
+      console.error("Lỗi khi tạo lại QR code:", error);
+      toast.error(`Lỗi tạo lại QR: ${error.message}`);
+    }
+  };
 
   const handleSubmitEvent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -516,8 +550,11 @@ const CreateEventTabContent: React.FC<CreateEventTabContentProps> = ({
             `${isEditing ? "Cập nhật" : "Thêm"} sự kiện thành công!`
         );
 
-        if (eventIdForResult && avatarFile) {
-          await uploadAvatar(eventIdForResult, token);
+        if (eventIdForResult) {
+          if (avatarFile) {
+            await uploadAvatar(eventIdForResult, token);
+          }
+          await regenerateEventQrCode(eventIdForResult, token);
         }
 
         handleSetEditingEvent(null);

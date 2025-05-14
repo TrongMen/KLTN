@@ -14,9 +14,30 @@ import type {
   User,
   EventDataForForm,
   OrganizerParticipantInput,
-  DetailedApiUser,
+  DetailedApiUser, // Giả định DetailedApiUser đã được cập nhật để có trường 'roles' đúng cấu trúc
   ApiRole,
 } from "../types/typCreateEvent";
+
+// Giả định UserRole (nếu chưa có trong types của bạn)
+// interface UserRoleInDetailedApiUser {
+//   name: string;
+//   description?: string;
+//   permissions?: any[];
+// }
+
+// Giả định DetailedApiUser có cấu trúc như sau (để code rõ ràng hơn):
+// interface DetailedApiUser {
+//   id: string;
+//   username: string;
+//   firstName: string | null;
+//   lastName: string | null;
+//   // ... các trường khác từ ví dụ của bạn
+//   roles: UserRoleInDetailedApiUser[]; // Quan trọng: roles là một mảng các object
+//   position: { id: string; name: string } | null;
+//   organizerRole: ApiRole | null;
+//   // ...
+// }
+
 
 interface SearchableDropdownOption {
   id: string;
@@ -95,7 +116,6 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
             searchTerm !== selectedOptionName &&
             selectedValue
           ) {
-            // Behavior for when user types something different from selected
           } else if (!selectedValue) {
             setSearchTerm("");
           }
@@ -209,10 +229,8 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
   >(null);
   const avatarImageInputRef = useRef<HTMLInputElement>(null);
 
-  // Hàm để lấy thời gian hiện tại theo định dạng YYYY-MM-DDTHH:mm cho thuộc tính min
   const getCurrentDateTimeLocalString = useCallback(() => {
     const now = new Date();
-    // Điều chỉnh múi giờ của client
     const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
     return localNow.toISOString().slice(0, 16);
   }, []);
@@ -233,7 +251,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       setFetchUsersError(null);
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/with-position-and-role`,
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {
@@ -304,6 +322,19 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
     }));
   }, [internalAllUsers]);
 
+  const organizerCandidateUserOptions = useMemo(() => {
+    if (!internalAllUsers) return [];
+    return internalAllUsers
+      .filter(u => u.roles && Array.isArray(u.roles) && u.roles.some(role => role.name === "USER"))
+      .map((u) => ({
+        id: u.id,
+        name:
+          `${u.lastName || ""} ${u.firstName || ""}`.trim() ||
+          u.username ||
+          u.id,
+      }));
+  }, [internalAllUsers]);
+
   const roleOptions = useMemo(() => {
     if (!internalRoles) return [];
     return internalRoles.map((r) => ({ id: r.id, name: r.name }));
@@ -327,7 +358,6 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
         if (editingEvent.time) {
           const date = new Date(editingEvent.time);
           if (!isNaN(date.getTime())) {
-             // Định dạng YYYY-MM-DDTHH:mm cho input datetime-local
             const year = date.getFullYear();
             const month = (date.getMonth() + 1).toString().padStart(2, "0");
             const day = date.getDate().toString().padStart(2, "0");
@@ -335,12 +365,12 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
             const minutes = date.getMinutes().toString().padStart(2, "0");
             formattedTime = `${year}-${month}-${day}T${hours}:${minutes}`;
           } else {
-            formattedTime = ""; // Nếu thời gian không hợp lệ, đặt là rỗng
+            formattedTime = "";
           }
         }
       } catch (e) {
         console.error("Error formatting date for editingEvent:", e);
-        formattedTime = ""; // Fallback nếu có lỗi
+        formattedTime = "";
       }
       setFormData({
         id: editingEvent.id,
@@ -364,16 +394,13 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       } else {
         setEventAvatarPreviewUrl(null);
       }
-      setEventAvatarFile(null); // Reset file đã chọn khi load event mới
+      setEventAvatarFile(null);
     } else {
-      // Khi tạo mới, đặt thời gian mặc định là thời gian hiện tại nếu muốn
-      // Hoặc để trống để người dùng tự chọn
-      const defaultTime = getCurrentDateTimeLocalString(); // Có thể đặt làm giá trị mặc định khi tạo mới
-      setFormData({...INITIAL_FORM_STATE, time: "" }); // Hoặc time: defaultTime
+      setFormData({...INITIAL_FORM_STATE, time: "" });
       setEventAvatarPreviewUrl(null);
       setEventAvatarFile(null);
     }
-  }, [editingEvent, getCurrentDateTimeLocalString]); // Thêm getCurrentDateTimeLocalString nếu dùng làm default
+  }, [editingEvent]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -382,7 +409,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
     if (name === "maxAttendees")
       setFormData((prev) => ({
         ...prev,
-        [name]: value === "" ? "" : parseInt(value, 10), // Giữ là string rỗng nếu người dùng xóa
+        [name]: value === "" ? "" : parseInt(value, 10),
       }));
     else setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -402,13 +429,10 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
           const selectedUser =
             internalAllUsers && internalAllUsers.find((u) => u.id === value);
           member.positionId = selectedUser?.position?.id || "";
-          // Tự động gán vai trò cho người tham gia nếu user đó có organizerRole
           if (type === "participants" && selectedUser?.organizerRole) {
             member.roleId = selectedUser.organizerRole.id;
           } else if (type === "participants" && !selectedUser?.organizerRole) {
-            // Nếu user không có organizerRole, và đang thêm vào NTG, có thể reset roleId
-            // hoặc để người dùng tự chọn (hiện tại đang reset)
-             member.roleId = "";
+              member.roleId = "";
           }
         } else if (field === "roleId") {
           member.roleId = value;
@@ -443,7 +467,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       setEventAvatarFile(file);
       if (eventAvatarPreviewUrl) URL.revokeObjectURL(eventAvatarPreviewUrl);
       setEventAvatarPreviewUrl(URL.createObjectURL(file));
-      setFormData((prev) => ({ ...prev, avatarUrl: null })); // Xóa avatarUrl cũ khi chọn file mới
+      setFormData((prev) => ({ ...prev, avatarUrl: null }));
     }
   };
   const handleRemoveAvatarImage = () => {
@@ -463,13 +487,13 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
   }, [eventAvatarPreviewUrl]);
 
   const uploadEventAvatar = async (eventId: string, token: string) => {
-    if (!eventAvatarFile) return null; // Không upload nếu không có file
+    if (!eventAvatarFile) return null;
     const formData = new FormData();
     formData.append("file", eventAvatarFile);
     const uploadUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/avatar`;
     try {
       const response = await fetch(uploadUrl, {
-        method: "PATCH", // Hoặc POST tùy theo API của bạn
+        method: "PATCH",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
@@ -521,9 +545,6 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       return;
     }
 
-    // Kiểm tra thời gian đã được chuyển sang `min` attribute của input
-    // Không cần kiểm tra 7 ngày nữa
-
     setIsSubmitting(true);
     const token = localStorage.getItem("authToken");
     if (!token) {
@@ -540,7 +561,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
     let payload: any = {
       name: formData.name,
       purpose: formData.purpose,
-      time: new Date(formData.time).toISOString(), // Gửi đi dạng ISO string
+      time: new Date(formData.time).toISOString(),
       location: formData.location,
       content: formData.content,
       maxAttendees: finalMaxAttendees,
@@ -578,21 +599,18 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
         let successMessage =
           result?.message || `${isEditMode ? "Cập nhật" : "Tạo"} thành công!`;
 
-        if (eventIdForResult && eventAvatarFile) { // Chỉ upload nếu có file mới
+        if (eventIdForResult && eventAvatarFile) {
           await uploadEventAvatar(eventIdForResult, token);
         } else if ( isEditMode && formData.avatarUrl === null && editingEvent?.avatarUrl ) {
-          // Logic để gọi API xóa avatar trên server nếu có file cũ và người dùng đã bỏ chọn (formData.avatarUrl là null)
-          // Ví dụ: await deleteEventAvatarOnServer(eventIdForResult, token);
-          // Hiện tại chưa có API này, chỉ để trống hoặc log
-           console.log("Avatar was removed by user, consider API call to delete on server if event had one.");
+            console.log("Avatar was removed by user, consider API call to delete on server if event had one.");
         }
         toast.success(successMessage);
         if (!isEditMode) {
-          setFormData(INITIAL_FORM_STATE); // Reset form cho tạo mới
+          setFormData(INITIAL_FORM_STATE);
           setEventAvatarFile(null);
           setEventAvatarPreviewUrl(null);
         }
-        onSuccess(); // Gọi callback onSuccess (ví dụ: để refresh list, chuyển tab)
+        onSuccess();
       }
     } catch (error: any) {
       toast.error(`Lỗi ${isEditMode ? "cập nhật" : "tạo"} sự kiện: ${error.message}`);
@@ -722,7 +740,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
               name="time"
               value={formData.time}
               onChange={handleChange}
-              min={getCurrentDateTimeLocalString()} // Đặt giá trị min
+              min={getCurrentDateTimeLocalString()}
               className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               required
             />
@@ -798,7 +816,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5"> Họ tên BTC </label>
                     <SearchableDropdown
-                      options={allUserOptions}
+                      options={organizerCandidateUserOptions}
                       selectedValue={organizer.userId}
                       onChange={(selectedId) => handleMemberChange( "organizers", index, "userId", selectedId )}
                       placeholder="-- Chọn hoặc tìm User --"
@@ -840,19 +858,16 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
             Người Tham Gia (Chỉ định)
           </h3>
           {formData.participants.map((participant, index) => {
-             const selectedUser = internalAllUsers.find( (u) => u.id === participant.userId );
-             const positionName = selectedUser?.position?.name || " (Chọn User)";
-             const isRoleFixedByProfile = !!selectedUser?.organizerRole && selectedUser.id === participant.userId;
-            //  const roleForDisplayOrEdit = isRoleFixedByProfile ? selectedUser.organizerRole!.id : participant.roleId;
-            //  const roleNameDisplay = isRoleFixedByProfile ? selectedUser.organizerRole!.name : roleOptions.find(r => r.id === participant.roleId)?.name || "N/A";
-
+              const selectedUser = internalAllUsers.find( (u) => u.id === participant.userId );
+              const positionName = selectedUser?.position?.name || " (Chọn User)";
+              const isRoleFixedByProfile = !!selectedUser?.organizerRole && selectedUser.id === participant.userId;
             return (
               <div key={index} className="p-3 border rounded-md bg-gray-50 mb-3 space-y-2" >
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5"> Họ tên NTG </label>
                     <SearchableDropdown
-                      options={usersWithPositionOptions} // Chỉ những user có position
+                      options={usersWithPositionOptions}
                       selectedValue={participant.userId}
                       onChange={(selectedId) => handleMemberChange( "participants", index, "userId", selectedId )}
                       placeholder="-- Chọn User (có vị trí) --"
@@ -867,13 +882,13 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-0.5"> Vai trò NTG </label>
-                     <SearchableDropdown
+                      <SearchableDropdown
                         options={roleOptions}
-                        selectedValue={participant.roleId} // Luôn lấy từ state
+                        selectedValue={participant.roleId}
                         onChange={(selectedId) => handleMemberChange("participants", index, "roleId", selectedId) }
                         placeholder="-- Chọn hoặc tìm Vai trò --"
                         isLoading={isLoadingRoles}
-                        disabled={isDataLoading || !participant.userId || isRoleFixedByProfile} // Vô hiệu hóa nếu vai trò đã cố định bởi profile
+                        disabled={isDataLoading || !participant.userId || isRoleFixedByProfile}
                       />
                   </div>
                 </div>

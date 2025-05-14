@@ -312,7 +312,7 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
   return (
     <div className="flex flex-col h-full">
       <h2 className="text-xl md:text-2xl font-bold text-orange-600 mb-4 pb-3 border-b flex-shrink-0">
-        📌 Quản lý Chức vụ & Vai trò
+        📌 Quản lý Chức vụ và Vai trò
       </h2>
 
       {/* Tabs */}
@@ -325,7 +325,7 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
               : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          📌 Vị trí ({positions.length})
+          📌 Chức vụ  ({positions.length})
         </button>
         <button
           onClick={() => setActiveTab("role")}
@@ -335,7 +335,7 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
               : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          🧩 Vai trò ({roles.length})
+          🧩 Vai trò sự kiện ({roles.length})
         </button>
       </div>
 

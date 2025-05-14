@@ -9,7 +9,11 @@ export type User = {
   role?: string; // Example: 'ADMIN', 'USER'
 };
 
-// Comprehensive API User type used across features
+export interface UserRoleDetail { // Hoặc một tên phù hợp khác
+  name: string;
+  description?: string;
+
+}
 export type ApiUser = {
   id: string;
   firstName: string | null;
@@ -19,7 +23,7 @@ export type ApiUser = {
   role?: string; // User's general role in the system
   position?: { id: string; name: string } | null; // User's position in a club/org
   organizerRole?: { id: string; name: string } | null; // User's predefined role for event organization (from profile)
-  // Add other user details fetched from API if needed by various components
+ 
   dob?: string;
   avatar?: string;
   gender?: boolean;
@@ -85,7 +89,8 @@ export interface DetailedApiUser extends User {
   lastName?: string | null;
   username?: string | null;
   position?: ApiPosition | null;
-  organizerRole?: ApiRole | null; // Có thể có sẵn vai trò mặc định
+  organizerRole?: ApiRole | null; 
+  roles?: UserRoleDetail[];
 }
 
 

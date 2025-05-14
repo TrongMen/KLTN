@@ -138,7 +138,7 @@ const fetchUserFullNameById = async (userId: string): Promise<string> => {
   }
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`
+      `http://localhost:8080/identity/users/notoken/${userId}`
     );
     if (!response.ok) {
       try {
@@ -593,7 +593,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     const deletedById = actualCurrentUserId;
 
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToDelete.id}?deletedById=${deletedById}`;
+      const url = `http://localhost:8080/identity/api/events/${eventToDelete.id}?deletedById=${deletedById}`;
       const response = await fetch(url, {
         method: "DELETE",
         headers: {
@@ -664,7 +664,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     const toastId = toast.loading("Đang xử lý đăng ký...");
 
     try {
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/attendees?userId=${currentUserId}`;
+      const apiUrl = `http://localhost:8080/identity/api/events/${selectedEvent.id}/attendees?userId=${currentUserId}`;
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {

@@ -14,30 +14,9 @@ import type {
   User,
   EventDataForForm,
   OrganizerParticipantInput,
-  DetailedApiUser, // Giả định DetailedApiUser đã được cập nhật để có trường 'roles' đúng cấu trúc
+  DetailedApiUser,
   ApiRole,
 } from "../types/typCreateEvent";
-
-// Giả định UserRole (nếu chưa có trong types của bạn)
-// interface UserRoleInDetailedApiUser {
-//   name: string;
-//   description?: string;
-//   permissions?: any[];
-// }
-
-// Giả định DetailedApiUser có cấu trúc như sau (để code rõ ràng hơn):
-// interface DetailedApiUser {
-//   id: string;
-//   username: string;
-//   firstName: string | null;
-//   lastName: string | null;
-//   // ... các trường khác từ ví dụ của bạn
-//   roles: UserRoleInDetailedApiUser[]; // Quan trọng: roles là một mảng các object
-//   position: { id: string; name: string } | null;
-//   organizerRole: ApiRole | null;
-//   // ...
-// }
-
 
 interface SearchableDropdownOption {
   id: string;
@@ -251,7 +230,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       setFetchUsersError(null);
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`,
+          `http://localhost:8080/identity/users`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {
@@ -276,7 +255,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       setFetchRolesError(null);
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`,
+          `http://localhost:8080/identity/api/organizerrole`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {
@@ -490,7 +469,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
     if (!eventAvatarFile) return null;
     const formData = new FormData();
     formData.append("file", eventAvatarFile);
-    const uploadUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/avatar`;
+    const uploadUrl = `http://localhost:8080/identity/api/events/${eventId}/avatar`;
     try {
       const response = await fetch(uploadUrl, {
         method: "PATCH",
@@ -568,12 +547,12 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       organizers: formData.organizers,
       participants: formData.participants,
     };
-    let url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events`;
+    let url = `http://localhost:8080/identity/api/events`;
     let method = "POST";
 
     if (isEditMode && formData.id) {
       method = "PUT";
-      url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
+      url = `http://localhost:8080/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
       payload.id = formData.id;
       payload.status = formData.status || "PENDING";
     } else {

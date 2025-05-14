@@ -195,22 +195,22 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
           rejectedN,
         ] = await Promise.all([
           fetchApiData<EventType>(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=PENDING`
+            `http://localhost:8080/identity/api/events/status?status=PENDING`
           ),
           fetchApiData<EventType>(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=APPROVED`
+            `http://localhost:8080/identity/api/events/status?status=APPROVED`
           ),
           fetchApiData<EventType>(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=REJECTED`
+            `http://localhost:8080/identity/api/events/status?status=REJECTED`
           ),
           fetchApiData<NewsItemType>(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status?status=PENDING`
+            `http://localhost:8080/identity/api/news/status?status=PENDING`
           ),
           fetchApiData<NewsItemType>(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status?status=APPROVED`
+            `http://localhost:8080/identity/api/news/status?status=APPROVED`
           ),
           fetchApiData<NewsItemType>(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status?status=REJECTED`
+            `http://localhost:8080/identity/api/news/status?status=REJECTED`
           ),
         ]);
         setPendingEvents(pendingEv);
@@ -247,8 +247,8 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
   ) => {
     const endpoint =
       itemType === "event"
-        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${item.id}/approve`
-        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${item.id}/approve`;
+        ? `http://localhost:8080/identity/api/events/${item.id}/approve`
+        : `http://localhost:8080/identity/api/news/${item.id}/approve`;
     const typeText = itemType === "event" ? "sự kiện" : "tin tức";
     const loadingToastId = toast.loading(`Đang phê duyệt ${typeText}...`);
     try {
@@ -310,10 +310,10 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
     }
     const endpoint =
       itemType === "event"
-        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${
+        ? `http://localhost:8080/identity/api/events/${
             currentItemToReject.id
           }/reject?reason=${encodeURIComponent(trimmedReason)}`
-        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${
+        : `http://localhost:8080/identity/api/news/${
             currentItemToReject.id
           }/reject?reason=${encodeURIComponent(trimmedReason)}`;
     const loadingToastId = toast.loading(`Đang từ chối ${typeText}...`);

@@ -185,7 +185,7 @@ const Test: React.FC<TestProps> = ({ user }) => {
         if (!tk) throw new Error("Chưa đăng nhập.");
         const h = { Authorization: `Bearer ${tk}` };
         const cId = user.id;
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${cId}`;
+        const url = `http://localhost:8080/identity/api/events/creator/${cId}`;
         const evRes = await fetch(url, { headers: h, cache: "no-store" });
         if (!evRes.ok) {
           const d = await evRes.json().catch(() => ({}));
@@ -237,7 +237,7 @@ const Test: React.FC<TestProps> = ({ user }) => {
         if (!token) throw new Error("Chưa đăng nhập.");
         const h = { Authorization: `Bearer ${token}` };
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/attendees`,
+          `http://localhost:8080/identity/api/events/${eventId}/attendees`,
           { headers: h, cache: "no-store" }
         );
         if (!res.ok) {
@@ -298,7 +298,7 @@ const Test: React.FC<TestProps> = ({ user }) => {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Chưa đăng nhập để lấy mã QR.");
       const h = { Authorization: `Bearer ${token}` };
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/qr-code-image`;
+      const url = `http://localhost:8080/identity/api/events/${eventId}/qr-code-image`;
       const res = await fetch(url, { headers: h });
       if (!res.ok) {
         let m = `Lỗi tải mã QR`;
@@ -532,7 +532,7 @@ const Test: React.FC<TestProps> = ({ user }) => {
     }
 
     const promises = changes.map(({ userId, status }) => {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEventId}/attendees/${userId}?isAttending=${status}`;
+      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}?isAttending=${status}`;
       return fetch(url, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
@@ -607,7 +607,7 @@ const Test: React.FC<TestProps> = ({ user }) => {
     }
 
     const promises = idsToDelete.map((userId) => {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEventId}/attendees/${userId}`;
+      const url = `http://localhost:8080/identity/api/events/${selectedEventId}/attendees/${userId}`;
       return fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -727,7 +727,7 @@ const Test: React.FC<TestProps> = ({ user }) => {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Token không hợp lệ.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/attendees/export`;
+      const url = `http://localhost:8080/identity/api/events/${eventId}/attendees/export`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -789,7 +789,7 @@ const Test: React.FC<TestProps> = ({ user }) => {
         throw new Error("Chưa đăng nhập hoặc token không hợp lệ.");
       }
 
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEventId}/check-in`;
+      const apiUrl = `http://localhost:8080/identity/api/events/${selectedEventId}/check-in`;
       const formData = new FormData();
       formData.append("qrCodeData", qrData);
 

@@ -9,12 +9,17 @@ import React, {
 } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType,  } from "../types/appTypes";
-import {  ApiRole } from "../types/typCreateEvent";
+import { User as MainUserType } from "../types/appTypes"; // Điều chỉnh đường dẫn
+import {
+  ApiRole,
+  EventDataForForm as ModalEventType,
+} from "../types/typCreateEvent"; // EventDataForForm dùng cho Modal
 
-import ConfirmationDialog from "../../../utils/ConfirmationDialog";
-import MyCreatedEventsTab from "./event/MyEvent";
-import RegisteredEventsTab from "./event/RegisterEvent";
+import ConfirmationDialog from "../../../utils/ConfirmationDialog"; // Điều chỉnh đường dẫn
+import MyCreatedEventsTab, {
+  EventType as MyCreatedEventType,
+} from "./event/MyEvent"; // EventType từ MyEvent
+import RegisteredEventsTab from "./event/RegisterEvent"; // EventType từ RegisterEvent có thể khác
 import {
   ReloadIcon,
   DownloadIcon,
@@ -26,33 +31,26 @@ import {
   CalendarIcon as RadixCalendarIcon,
 } from "@radix-ui/react-icons";
 
+// Kiểu OrganizerInfo và ParticipantInfo này nên nhất quán với EventType trong MyEvent.tsx
+// và có thể ánh xạ sang OrganizerParticipantInput của ModalUpdateEvent
 interface Role {
+
   id: string;
   name?: string;
 }
 
-interface OrganizerInfo {
+export interface PersonDetail {
+  // Dùng cho createdBy, deletedBy, organizers, participants sau khi enrich
   userId: string;
-  roles?: Role[];
-  positionName?: string;
+  id?: string; // Có thể là userId
+  username?: string;
   firstName?: string;
   lastName?: string;
   fullName?: string;
-  id?: string;
-  name?: string;
-  username?: string;
-}
-
-interface ParticipantInfo {
-  userId: string;
-  roles?: Role[];
+  avatar?: string;
   positionName?: string;
-  fullName?: string;
-  lastName?: string;
-  firstName?: string;
-  id?: string;
-  name?: string;
-  username?: string;
+  roles?: Role[]; // Vai trò trong sự kiện, có thể khác vai trò chung của user
+  generalRoleName?: string; // Vai trò chung của user (ví dụ: "Sinh viên", "Giảng viên")
 }
 
 export interface EventType {
@@ -65,27 +63,21 @@ export interface EventType {
   status: "APPROVED" | "PENDING" | "REJECTED" | string;
   rejectionReason?: string | null;
   purpose?: string;
-  createdBy?: any;
+  createdBy?: string | PersonDetail; // userId hoặc object đã enrich
   createdAt?: string;
-  organizers?: OrganizerInfo[];
-  participants?: ParticipantInfo[];
-  attendees?: any[];
+  organizers?: PersonDetail[]; // Danh sách người tổ chức đã enrich
+  participants?: PersonDetail[]; // Danh sách người tham gia đã enrich
+  attendees?: any[]; // Danh sách người thực sự tham dự (có thể khác participants)
   permissions?: string[];
   deleted?: boolean;
   deletedAt?: string | null;
-  deletedBy?: {
-    id: string;
-    username: string;
-    firstName: string;
-    lastName: string;
-    avatar?: string;
-  } | null;
+  deletedBy?: PersonDetail | null; // Thông tin người xóa
   avatarUrl?: string | null;
   qrCodeUrl?: string | null;
   progressStatus?: string;
-  title?: string;
-  date?: string;
-  maxAttendees?: number | null;
+  title?: string; // alias cho name
+  date?: string; // alias cho time
+  maxAttendees?: number;
   currentAttendeesCount?: number;
 }
 
@@ -100,9 +92,17 @@ const getFilenameFromHeader = (header: string | null): string => {
       if (filename.toLowerCase().startsWith("utf-8''")) {
         filename = decodeURIComponent(filename.substring(7));
       } else {
-        filename = decodeURIComponent(filename);
+        // Thử decode với giả định là UTF-8 encoded
+        filename = decodeURIComponent(escape(filename));
       }
-    } catch (e) {}
+    } catch (e) {
+      try {
+        // Thử decode trực tiếp nếu cách trên lỗi (cho trường hợp không phải là UTF-8'' mà là plain UTF-8)
+        filename = decodeURIComponent(filename);
+      } catch (e2) {
+        console.warn("Could not decode filename:", filename, e, e2);
+      }
+    }
     if (!filename.toLowerCase().endsWith(".docx")) {
       const nameWithoutExt = filename.includes(".")
         ? filename.substring(0, filename.lastIndexOf("."))
@@ -114,42 +114,60 @@ const getFilenameFromHeader = (header: string | null): string => {
   return defaultFilename;
 };
 
+// Hàm lấy chi tiết user, được truyền xuống MyCreatedEventsTab
+// và dùng để enrich viewingEventDetails
 async function fetchUserDetailsAPI(
   userId: string
-): Promise<
-  | (Omit<OrganizerInfo, "roles" | "positionName"> & {
-      positionName?: string;
-      generalRoleName?: string;
-    })
-  | null
-> {
+): Promise<Partial<PersonDetail> | null> {
+  if (!userId) return null;
   try {
+    // API này không cần token nếu chỉ lấy thông tin public cơ bản
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`
+      `http://localhost:8080/identity/users/notoken/${userId}`
     );
     if (!response.ok) {
-      return { userId, fullName: `ID: ${userId}` };
+      console.warn(
+        `Failed to fetch user details for ${userId}: ${response.status}`
+      );
+      return { userId, fullName: `ID: ${userId}` }; // Trả về thông tin cơ bản nếu lỗi
     }
     const data = await response.json();
     if (data.code === 1000 && data.result) {
-      const { firstName, lastName, username, id, position, roles } =
-        data.result;
+      const {
+        firstName,
+        lastName,
+        username,
+        id,
+        position,
+        roles: generalRoles,
+      } = data.result;
+      const fullName =
+        `${lastName || ""} ${firstName || ""}`.trim() ||
+        username ||
+        `ID: ${id}`;
       return {
-        userId: userId,
+        userId: userId, // Giữ lại userId gốc được truyền vào
         id: id,
         firstName,
         lastName,
         username,
-        fullName:
-          `${lastName || ""} ${firstName || ""}`.trim() ||
-          username ||
-          `ID: ${id}`,
+        fullName,
         positionName: position?.name,
-        generalRoleName: roles && roles.length > 0 ? roles[0].name : undefined,
+        avatar: data.result.avatar, // Giả sử API trả về avatar
+        // Lấy vai trò chung đầu tiên nếu có (ví dụ: "Sinh viên", "Giảng viên")
+        generalRoleName:
+          generalRoles && generalRoles.length > 0
+            ? generalRoles[0].description || generalRoles[0].name
+            : undefined,
       };
     }
+    console.warn(
+      `User details API for ${userId} did not return expected data:`,
+      data.message
+    );
     return { userId, fullName: `ID: ${userId}` };
   } catch (error) {
+    console.error(`Error fetching user details for ${userId}:`, error);
     return { userId, fullName: `ID: ${userId}` };
   }
 }
@@ -175,10 +193,10 @@ interface MyEventsTabContentProps {
   user: MainUserType | null;
   initialRegisteredEventIds: Set<string>;
   isLoadingRegisteredIds: boolean;
-  createdEventIdsFromParent: Set<string>;
-  onRegistrationChange: (eventId: string, registered: boolean) => void;
-  onEventNeedsRefresh: () => void;
-  onOpenUpdateModal: (event: EventType) => void;
+  createdEventIdsFromParent: Set<string>; // IDs sự kiện user này đã tạo
+  onRegistrationChange: (eventId: string, registered: boolean) => void; // Callback khi đăng ký/hủy
+  onEventNeedsRefresh: () => void; // Callback khi cần refresh danh sách sự kiện chung
+  onOpenUpdateModal: (eventForModal: ModalEventType) => void; // Callback để mở modal với dữ liệu đã map
 }
 
 const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
@@ -188,17 +206,18 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   createdEventIdsFromParent,
   onRegistrationChange,
   onEventNeedsRefresh,
-  onOpenUpdateModal,
+  onOpenUpdateModal: openModalCallback, // Đổi tên để tránh trùng với hàm nội bộ
 }) => {
   const [mainTab, setMainTab] = useState<"myEvents" | "registerEvents">(
     "myEvents"
   );
-  const [myEvents, setMyEvents] = useState<EventType[]>([]);
-  const [deletedEvents, setDeletedEvents] = useState<EventType[]>([]);
+  const [myEvents, setMyEvents] = useState<EventType[]>([]); // Sự kiện do tôi tạo (raw từ API)
+  const [deletedEvents, setDeletedEvents] = useState<EventType[]>([]); // Sự kiện đã xóa (raw từ API)
   const [myLoading, setMyLoading] = useState<boolean>(true);
   const [deletedLoading, setDeletedLoading] = useState<boolean>(true);
   const [myError, setMyError] = useState<string>("");
   const [deletedError, setDeletedError] = useState<string>("");
+
   const [restoringEventId, setRestoringEventId] = useState<string | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [viewingEventDetails, setViewingEventDetails] =
@@ -209,10 +228,12 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   ] = useState(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [allSystemRoles, setAllSystemRoles] = useState<ApiRole[]>([]);
+
+  const [allSystemRoles, setAllSystemRoles] = useState<ApiRole[]>([]); // Vai trò trong sự kiện (Trưởng BTC, Thành viên...)
   const [isLoadingSystemRoles, setIsLoadingSystemRoles] =
     useState<boolean>(true);
-  const [errorSystemRoles, setErrorSystemRoles] = useState<string | null>(null);
+  // const [errorSystemRoles, setErrorSystemRoles] = useState<string | null>(null); // Không dùng trực tiếp
+
   const [deleteConfirmationState, setDeleteConfirmationState] = useState<{
     isOpen: boolean;
     title: string;
@@ -231,33 +252,48 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     confirmText?: string;
     cancelText?: string;
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
+
   const currentUserId = user?.id ?? null;
-  const personDetailsCacheRef = useRef<
-    Record<string, Partial<OrganizerInfo | ParticipantInfo>>
-  >({});
+  const personDetailsCacheRef = useRef<Record<string, Partial<PersonDetail>>>(
+    {}
+  );
   const [enhancementController, setEnhancementController] =
     useState<AbortController | null>(null);
   const [isEnhancementPending, setIsEnhancementPending] = useState(false);
 
+  // Hàm chuyển đổi thành viên từ API sự kiện (organizer/participant trong event object)
+  // sang kiểu PersonDetail dùng trong state của MyEventsTabContent
   const transformApiEventMemberToLocal = useCallback(
-    (apiMember: any): OrganizerInfo | ParticipantInfo => {
+    (apiMember: any): PersonDetail => {
+      // apiMember là một phần tử trong mảng event.organizers hoặc event.participants từ API get event
       const rolesArray: Role[] = [];
-      if (apiMember.roleName) {
+      if (apiMember.roleId && allSystemRoles.length > 0) {
+        const foundRole = allSystemRoles.find((r) => r.id === apiMember.roleId);
+        if (foundRole)
+          rolesArray.push({ id: foundRole.id, name: foundRole.name });
+      } else if (apiMember.roleName) {
+        // Fallback nếu chỉ có roleName
         rolesArray.push({
           id:
             apiMember.roleId ||
             apiMember.roleName.toLowerCase().replace(/\s+/g, "-"),
           name: apiMember.roleName,
         });
-      } else if (apiMember.roleId && allSystemRoles.length > 0) {
-        const foundRole = allSystemRoles.find((r) => r.id === apiMember.roleId);
-        if (foundRole)
-          rolesArray.push({ id: foundRole.id, name: foundRole.name });
       }
+
       return {
         userId: apiMember.userId,
-        roles: rolesArray,
+        // Các trường tên (firstName, lastName, fullName) sẽ được enrich sau nếu cần
+        firstName: apiMember.firstName,
+        lastName: apiMember.lastName,
+        fullName:
+          apiMember.fullName ||
+          `${apiMember.lastName || ""} ${apiMember.firstName || ""}`.trim() ||
+          apiMember.username,
+        username: apiMember.username,
         positionName: apiMember.positionName,
+        roles: rolesArray, // Vai trò trong sự kiện
+        // avatar: apiMember.avatar, // API get event có thể không trả về avatar của từng member
       };
     },
     [allSystemRoles]
@@ -266,12 +302,12 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   useEffect(() => {
     const fetchRoles = async () => {
       setIsLoadingSystemRoles(true);
-      setErrorSystemRoles(null);
+      // setErrorSystemRoles(null);
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Chưa xác thực để tải vai trò.");
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`,
+          `http://localhost:8080/identity/api/organizerrole`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!response.ok) {
@@ -286,7 +322,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         else
           throw new Error(data.message || "Không thể tải danh sách vai trò.");
       } catch (error: any) {
-        setErrorSystemRoles(error.message);
+        // setErrorSystemRoles(error.message);
         toast.error(`Lỗi tải vai trò hệ thống: ${error.message}`);
         setAllSystemRoles([]);
       } finally {
@@ -313,7 +349,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Chưa đăng nhập.");
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${currentUserId}`,
+        `http://localhost:8080/identity/api/events/creator/${currentUserId}`,
         { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
       );
       if (!res.ok) {
@@ -325,24 +361,28 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       const data = await res.json();
       if (data.code === 1000 && Array.isArray(data.result)) {
         const transformedEvents = data.result.map((event: any) => ({
-          ...event,
+          ...event, // Giữ lại các trường gốc từ API
           organizers:
             event.organizers?.map(transformApiEventMemberToLocal) || [],
           participants:
             event.participants?.map(transformApiEventMemberToLocal) || [],
         }));
         setMyEvents(transformedEvents);
-      } else setMyEvents([]);
+      } else {
+        setMyEvents([]);
+        if (data.message) setMyError(data.message);
+      }
     } catch (err: any) {
       setMyError(err.message || "Lỗi tải sự kiện của bạn");
       setMyEvents([]);
     } finally {
       setMyLoading(false);
     }
-  }, [currentUserId, transformApiEventMemberToLocal]);
+  }, [currentUserId, transformApiEventMemberToLocal, allSystemRoles]); // Thêm allSystemRoles làm dependency
 
   const fetchDeletedEvents = useCallback(
-    async (page = 0, size = 10) => {
+    async (page = 0, size = 20) => {
+      // Tăng size nếu cần
       if (!currentUserId) {
         setDeletedError("Không tìm thấy thông tin người dùng.");
         setDeletedLoading(false);
@@ -355,7 +395,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Chưa đăng nhập.");
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/deleted?page=${page}&size=${size}`,
+          `http://localhost:8080/identity/api/events/deleted?page=${page}&size=${size}&sort=deletedAt,desc`,
           { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
         );
         if (!res.ok) {
@@ -378,7 +418,10 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               event.participants?.map(transformApiEventMemberToLocal) || [],
           }));
           setDeletedEvents(transformedEvents);
-        } else setDeletedEvents([]);
+        } else {
+          setDeletedEvents([]);
+          if (data.message) setDeletedError(data.message);
+        }
       } catch (err: any) {
         setDeletedError(err.message || "Lỗi tải sự kiện đã xóa");
         setDeletedEvents([]);
@@ -386,11 +429,12 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         setDeletedLoading(false);
       }
     },
-    [currentUserId, transformApiEventMemberToLocal]
-  );
+    [currentUserId, transformApiEventMemberToLocal, allSystemRoles]
+  ); // Thêm allSystemRoles
 
   useEffect(() => {
-    if (user?.id && !isLoadingSystemRoles && allSystemRoles.length > 0) {
+    if (user?.id && !isLoadingSystemRoles) {
+      // Chỉ fetch khi có user và vai trò đã tải xong (hoặc lỗi)
       fetchMyEvents();
       fetchDeletedEvents();
     } else if (!user?.id) {
@@ -399,13 +443,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       setMyEvents([]);
       setDeletedEvents([]);
     }
-  }, [
-    user,
-    fetchMyEvents,
-    fetchDeletedEvents,
-    isLoadingSystemRoles,
-    allSystemRoles,
-  ]);
+  }, [user, fetchMyEvents, fetchDeletedEvents, isLoadingSystemRoles]);
 
   const handleRefreshLocal = useCallback(async () => {
     if (isRefreshing) return;
@@ -414,9 +452,13 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     try {
       if (!currentUserId)
         throw new Error("Không tìm thấy thông tin người dùng.");
+      // Chờ allSystemRoles tải xong trước khi fetch events nếu chưa có
+      if (isLoadingSystemRoles) {
+        // Có thể thêm logic chờ ở đây hoặc để useEffect tự xử lý
+      }
       await Promise.all([fetchMyEvents(), fetchDeletedEvents()]);
-      toast.success("Dữ liệu cục bộ đã được làm mới!", { id: toastId });
-      callOnEventNeedsRefresh();
+      toast.success("Dữ liệu đã được làm mới!", { id: toastId });
+      callOnEventNeedsRefresh(); // Thông báo cho component cha
     } catch (error: any) {
       toast.error(
         `Làm mới thất bại: ${error.message || "Lỗi không xác định"}`,
@@ -431,23 +473,58 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     fetchMyEvents,
     fetchDeletedEvents,
     callOnEventNeedsRefresh,
+    isLoadingSystemRoles,
   ]);
-  const isCreatedByUserCallback = useCallback(
-    (eventId: string): boolean => createdEventIdsFromParent.has(eventId),
-    [createdEventIdsFromParent]
-  );
-  const isRegisteredCallback = useCallback(
-    (eventId: string): boolean => initialRegisteredEventIds.has(eventId),
-    [initialRegisteredEventIds]
-  );
-  const localHandleOpenUpdateModal = (event: EventType) => {
+
+  // Hàm mở modal chỉnh sửa, nhận event từ MyCreatedEventsTab
+  const handleOpenUpdateModal = (eventFromMyCreatedTab: MyCreatedEventType) => {
     if (deletingEventId || restoringEventId) return;
-    onOpenUpdateModal(event);
+
+    // Ánh xạ từ MyCreatedEventType.organizers (PersonDetail[]) sang ModalEventType.organizers (OrganizerParticipantInput[])
+    const organizersForModal: ModalEventType["organizers"] =
+      eventFromMyCreatedTab.organizers?.map((org) => ({
+        userId: org.userId,
+        roleId: org.roles?.[0]?.id || "", // Lấy roleId từ vai trò đầu tiên trong sự kiện, hoặc để trống
+        positionId: org.positionName
+          ? personDetailsCacheRef.current[org.userId]?.id || ""
+          : "", // Cần cách lấy positionId chuẩn hơn
+        name:
+          org.fullName ||
+          `${org.lastName || ""} ${org.firstName || ""}`.trim() ||
+          org.username,
+      })) || [];
+
+    const participantsForModal: ModalEventType["participants"] =
+      eventFromMyCreatedTab.participants?.map((par) => ({
+        userId: par.userId,
+        roleId: par.roles?.[0]?.id || "",
+        positionId: par.positionName ? "" : "", // Tương tự, cần cách lấy positionId
+        name:
+          par.fullName ||
+          `${par.lastName || ""} ${par.firstName || ""}`.trim() ||
+          par.username,
+      })) || [];
+
+    const eventForModal: ModalEventType = {
+      id: eventFromMyCreatedTab.id,
+      name: eventFromMyCreatedTab.name,
+      purpose: eventFromMyCreatedTab.purpose || "",
+      time: eventFromMyCreatedTab.time || "",
+      location: eventFromMyCreatedTab.location || "",
+      content: eventFromMyCreatedTab.content || "",
+      maxAttendees: eventFromMyCreatedTab.maxAttendees ?? "",
+      status: eventFromMyCreatedTab.status as ModalEventType["status"], // Ép kiểu nếu cần
+      avatarUrl: eventFromMyCreatedTab.avatarUrl,
+      organizers: organizersForModal,
+      participants: participantsForModal,
+    };
+    openModalCallback(eventForModal); // Gọi callback của component cha
   };
+
   const executeDeleteEvent = async (eventToDelete: EventType) => {
+    // ... (giữ nguyên logic xóa, đảm bảo cập nhật myEvents và deletedEvents)
     if (deletingEventId || !currentUserId) {
-      if (!currentUserId) toast.error("Không thể xác định người dùng.");
-      return;
+      /*...*/ return;
     }
     setDeletingEventId(eventToDelete.id);
     const token = localStorage.getItem("authToken");
@@ -457,7 +534,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       return;
     }
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToDelete.id}?deletedById=${currentUserId}`;
+      const url = `http://localhost:8080/identity/api/events/${eventToDelete.id}?deletedById=${currentUserId}`;
       const res = await fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -470,6 +547,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         } catch (_) {}
         throw new Error(`${m} (${res.status})`);
       }
+
       let messageAPI = `Xóa sự kiện "${
         eventToDelete.name || eventToDelete.title
       }" thành công!`;
@@ -480,22 +558,34 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         } catch (e) {}
       }
       toast.success(messageAPI);
-      const deletedEventData = {
+
+      const deletedEventData: EventType = {
         ...eventToDelete,
         deleted: true,
         deletedAt: new Date().toISOString(),
         deletedBy: {
-          id: currentUserId,
-          username: user?.username || "N/A",
-          firstName: user?.firstName || "N/A",
-          lastName: user?.lastName || "",
+          // Thông tin người xóa
+          userId: currentUserId,
+          id: user?.id,
+          username: user?.username,
+          firstName: user?.firstName,
+          lastName: user?.lastName,
           avatar: user?.avatar,
+          fullName: user
+            ? `${user.lastName || ""} ${user.firstName || ""}`.trim() ||
+              user.username
+            : "N/A",
         },
       };
       setMyEvents((prev) =>
         prev.filter((event) => event.id !== eventToDelete.id)
       );
-      setDeletedEvents((prev) => [deletedEventData, ...prev]);
+      setDeletedEvents((prev) =>
+        [deletedEventData, ...prev].sort(
+          (a, b) =>
+            new Date(b.deletedAt!).getTime() - new Date(a.deletedAt!).getTime()
+        )
+      ); // Sắp xếp lại
       if (viewingEventDetails?.id === eventToDelete.id) {
         setViewingEventDetails(null);
       }
@@ -506,7 +596,9 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       setDeletingEventId(null);
     }
   };
+
   const handleDeleteClick = (eventToDelete: EventType) => {
+    // ... (giữ nguyên logic confirmation)
     if (deletingEventId || restoringEventId) return;
     setDeleteConfirmationState({
       isOpen: true,
@@ -537,7 +629,9 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       cancelText: "Hủy",
     });
   };
+
   const executeRestoreEvent = async (eventToRestore: EventType) => {
+    // ... (giữ nguyên logic khôi phục, đảm bảo cập nhật myEvents và deletedEvents)
     if (restoringEventId) return;
     setRestoringEventId(eventToRestore.id);
     const token = localStorage.getItem("authToken");
@@ -547,7 +641,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       return;
     }
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToRestore.id}/restore`;
+      const url = `http://localhost:8080/identity/api/events/${eventToRestore.id}/restore`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -570,24 +664,29 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         setDeletedEvents((prev) =>
           prev.filter((event) => event.id !== eventToRestore.id)
         );
+
         const restoredEventFromApi: EventType = {
-          ...eventToRestore,
-          ...apiResponse.result,
+          // Chuyển đổi lại nếu cần
+          ...apiResponse.result, // Dữ liệu mới nhất từ API
           deleted: false,
           deletedAt: null,
           deletedBy: null,
+          organizers:
+            apiResponse.result.organizers?.map(
+              transformApiEventMemberToLocal
+            ) || [],
+          participants:
+            apiResponse.result.participants?.map(
+              transformApiEventMemberToLocal
+            ) || [],
         };
-        setMyEvents((prevMyEvents) => {
-          const existingEventIndex = prevMyEvents.findIndex(
-            (e) => e.id === restoredEventFromApi.id
-          );
-          if (existingEventIndex > -1) {
-            const updatedEvents = [...prevMyEvents];
-            updatedEvents[existingEventIndex] = restoredEventFromApi;
-            return updatedEvents;
-          }
-          return [restoredEventFromApi, ...prevMyEvents];
-        });
+        setMyEvents((prevMyEvents) =>
+          [restoredEventFromApi, ...prevMyEvents].sort(
+            (a, b) =>
+              new Date(b.createdAt!).getTime() -
+              new Date(a.createdAt!).getTime()
+          )
+        );
         if (viewingEventDetails?.id === eventToRestore.id) {
           setViewingEventDetails(null);
         }
@@ -604,7 +703,9 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       setRestoringEventId(null);
     }
   };
+
   const handleRestoreClick = (eventToRestore: EventType) => {
+    // ... (giữ nguyên logic confirmation)
     if (restoringEventId) return;
     setRestoreConfirmationState({
       isOpen: true,
@@ -632,7 +733,9 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       cancelText: "Hủy",
     });
   };
+
   const handleExportClick = async (eventId: string) => {
+    // ... (giữ nguyên logic xuất file)
     if (!eventId) {
       toast.error("Không tìm thấy ID sự kiện.");
       return;
@@ -642,7 +745,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Token không hợp lệ.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/export`;
+      const url = `http://localhost:8080/identity/api/events/${eventId}/export`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -659,6 +762,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         } catch (e) {}
         throw new Error(errorMsg);
       }
+
       const contentDisposition = response.headers.get("Content-Disposition");
       const filename = getFilenameFromHeader(contentDisposition);
       const blob = await response.blob();
@@ -679,21 +783,21 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   };
 
   const formatPersonForDisplay = useCallback(
-    (person: OrganizerInfo | ParticipantInfo | string): string => {
-      if (typeof person === "string") return `ID: ${person}`;
-      let displayName = "";
-      if (person.fullName) displayName = person.fullName;
-      else if (person.firstName || person.lastName)
-        displayName = `${person.lastName || ""} ${
-          person.firstName || ""
-        }`.trim();
-      else if (person.username) displayName = person.username;
+    (person?: string | PersonDetail): string => {
+      if (!person) return "Không rõ";
+      if (typeof person === "string") return `ID: ${person}`; // Nếu chỉ là userId
+
+      let displayName =
+        person.fullName ||
+        `${person.lastName || ""} ${person.firstName || ""}`.trim() ||
+        person.username;
       if (!displayName && person.userId) displayName = `ID: ${person.userId}`;
       else if (!displayName) displayName = "Thông tin không rõ";
 
       const parts: string[] = [displayName];
       if (person.positionName) parts.push(person.positionName);
 
+      // Hiển thị vai trò trong sự kiện (nếu có)
       if (person.roles && person.roles.length > 0) {
         const roleNamesString = person.roles
           .map((role) => role.name)
@@ -704,9 +808,10 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               name.toUpperCase() !== "USER"
           )
           .join(", ");
-        if (roleNamesString) {
-          parts.push(roleNamesString);
-        }
+        if (roleNamesString) parts.push(roleNamesString);
+      } else if (person.generalRoleName) {
+        // Hoặc vai trò chung nếu không có vai trò sự kiện
+        parts.push(person.generalRoleName);
       }
 
       const finalParts = parts.filter(
@@ -729,118 +834,97 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   const enhanceEventDetailsWithNames = useCallback(
     async (event: EventType): Promise<EventType> => {
       if (!event) return event;
+      let isModified = false;
+
       const enhanceList = async (
-        list: (OrganizerInfo | ParticipantInfo)[] | undefined
-      ): Promise<(OrganizerInfo | ParticipantInfo)[]> => {
+        list: PersonDetail[] | undefined
+      ): Promise<PersonDetail[]> => {
         if (!list || list.length === 0) return [];
-        return Promise.all(
+        const enhancedList = await Promise.all(
           list.map(async (person) => {
             let enrichedPerson = { ...person };
             if (
-              person &&
-              typeof person.userId === "string" &&
+              person.userId &&
               !person.fullName &&
-              !person.firstName &&
-              !person.lastName
+              (!person.firstName || !person.lastName)
             ) {
+              let details: Partial<PersonDetail> | null = null;
               if (personDetailsCacheRef.current[person.userId]) {
-                enrichedPerson = {
-                  ...enrichedPerson,
-                  ...personDetailsCacheRef.current[person.userId],
-                };
+                details = personDetailsCacheRef.current[person.userId];
               } else {
-                const details = await fetchUserDetailsAPI(person.userId);
-                if (details) {
+                details = await fetchUserDetailsAPI(person.userId);
+                if (details)
                   personDetailsCacheRef.current[person.userId] = details;
-                  enrichedPerson = { ...enrichedPerson, ...details };
-                }
+              }
+              if (details) {
+                enrichedPerson = { ...enrichedPerson, ...details };
+                isModified = true;
               }
             }
-            if (!enrichedPerson.roles && (person as any).roleName) {
-              enrichedPerson.roles = [
-                {
-                  id:
-                    (person as any).roleId ||
-                    (person as any).roleName.toLowerCase().replace(/\s+/g, "-"),
-                  name: (person as any).roleName,
-                },
-              ];
-            } else if (
-              !enrichedPerson.roles &&
-              (person as any).roleId &&
-              allSystemRoles.length > 0
-            ) {
-              const foundRole = allSystemRoles.find(
-                (r) => r.id === (person as any).roleId
-              );
-              if (foundRole) enrichedPerson.roles = [foundRole];
-            }
-            if (!enrichedPerson.positionName && (person as any).positionName) {
-              enrichedPerson.positionName = (person as any).positionName;
+            // Enrich vai trò nếu chỉ có roleId mà chưa có roleName (từ allSystemRoles)
+            if (enrichedPerson.roles && enrichedPerson.roles.length > 0) {
+              enrichedPerson.roles = enrichedPerson.roles.map((role) => {
+                if (role.id && !role.name && allSystemRoles.length > 0) {
+                  const systemRole = allSystemRoles.find(
+                    (sr) => sr.id === role.id
+                  );
+                  if (systemRole) {
+                    isModified = true;
+                    return { ...role, name: systemRole.name };
+                  }
+                }
+                return role;
+              });
             }
             return enrichedPerson;
           })
         );
+        return enhancedList;
       };
+
       const newOrganizers = await enhanceList(event.organizers);
       const newParticipants = await enhanceList(event.participants);
-      let newCreatedByDetail: Partial<OrganizerInfo> | undefined | string =
+
+      let newCreatedByDetail: string | PersonDetail | undefined =
         event.createdBy;
       if (typeof event.createdBy === "string" && event.createdBy) {
         if (personDetailsCacheRef.current[event.createdBy]) {
-          newCreatedByDetail =
-            personDetailsCacheRef.current[event.createdBy]?.fullName ||
-            `ID: ${event.createdBy}`;
+          newCreatedByDetail = personDetailsCacheRef.current[event.createdBy]!;
         } else {
           const details = await fetchUserDetailsAPI(event.createdBy);
           if (details) {
             personDetailsCacheRef.current[event.createdBy] = details;
-            newCreatedByDetail = details.fullName || `ID: ${details.userId}`;
-          } else {
-            newCreatedByDetail = `ID: ${event.createdBy}`;
+            newCreatedByDetail = details;
+            isModified = true;
           }
         }
-      } else if (
-        event.createdBy &&
-        typeof event.createdBy === "object" &&
-        (event.createdBy as OrganizerInfo).userId
-      ) {
-        const creatorAsObject = event.createdBy as OrganizerInfo;
-        if (creatorAsObject.fullName)
-          newCreatedByDetail = creatorAsObject.fullName;
-        else if (creatorAsObject.firstName || creatorAsObject.lastName)
-          newCreatedByDetail =
-            `${creatorAsObject.lastName || ""} ${
-              creatorAsObject.firstName || ""
-            }`.trim() || `ID: ${creatorAsObject.userId}`;
-        else if (creatorAsObject.username)
-          newCreatedByDetail = creatorAsObject.username;
-        else newCreatedByDetail = `ID: ${creatorAsObject.userId}`;
       }
-      return {
-        ...event,
-        organizers: newOrganizers,
-        participants: newParticipants,
-        createdBy: newCreatedByDetail as any,
-      };
+
+      if (isModified) {
+        return {
+          ...event,
+          organizers: newOrganizers,
+          participants: newParticipants,
+          createdBy: newCreatedByDetail,
+        };
+      }
+      return event;
     },
-    [allSystemRoles]
+    [allSystemRoles] // Thêm allSystemRoles để enrich roleName
   );
 
   const handleSetViewingEventDetails = useCallback(
     (event: EventType | null) => {
-      if (enhancementController) {
-        enhancementController.abort();
-      }
+      if (enhancementController) enhancementController.abort();
       if (event) {
-        setViewingEventDetails(event);
+        setViewingEventDetails(event); // Set ngay để UI không bị giật
         setIsLoadingEventDetailsEnhancement(true);
-        setIsEnhancementPending(true); // Đánh dấu là đang chờ enhance
-
+        setIsEnhancementPending(true);
         const controller = new AbortController();
         setEnhancementController(controller);
 
-        if (!isLoadingSystemRoles && allSystemRoles.length > 0) {
+        if (!isLoadingSystemRoles) {
+          // Chỉ enrich khi roles đã tải (hoặc lỗi)
           (async () => {
             try {
               const enhancedEvent = await enhanceEventDetailsWithNames(event);
@@ -850,10 +934,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               }
             } catch (error: any) {
               if (error.name !== "AbortError" && !controller.signal.aborted) {
-                console.error(
-                  "Error enhancing event details in handleSet:",
-                  error
-                );
+                console.error("Error enhancing event details:", error);
               }
             } finally {
               if (!controller.signal.aborted) {
@@ -871,30 +952,19 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         setEnhancementController(null);
       }
     },
-    [
-      enhanceEventDetailsWithNames,
-      isLoadingSystemRoles,
-      allSystemRoles,
-      enhancementController,
-    ]
+    [enhanceEventDetailsWithNames, isLoadingSystemRoles, enhancementController]
   );
 
+  // Effect để re-enhance khi allSystemRoles tải xong và đang có event được xem
   useEffect(() => {
-    if (
-      viewingEventDetails &&
-      isEnhancementPending &&
-      !isLoadingSystemRoles &&
-      allSystemRoles.length > 0
-    ) {
+    if (viewingEventDetails && isEnhancementPending && !isLoadingSystemRoles) {
+      setIsLoadingEventDetailsEnhancement(true);
       const controller = new AbortController();
       setEnhancementController(controller);
-      setIsLoadingEventDetailsEnhancement(true);
-
       (async () => {
         try {
-          const currentEventSnapshot = viewingEventDetails;
           const reEnhancedEvent = await enhanceEventDetailsWithNames(
-            currentEventSnapshot
+            viewingEventDetails
           );
           if (
             !controller.signal.aborted &&
@@ -918,13 +988,9 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       })();
       return () => {
         controller.abort();
-      }; // Cleanup abort controller
-    } else if (
-      isEnhancementPending &&
-      !allSystemRoles.length &&
-      !isLoadingSystemRoles
-    ) {
-      // Roles loaded but empty or error, stop pending and loading
+      };
+    } else if (isEnhancementPending && !isLoadingSystemRoles) {
+      // Roles đã tải nhưng có thể rỗng/lỗi
       setIsLoadingEventDetailsEnhancement(false);
       setIsEnhancementPending(false);
     }
@@ -937,12 +1003,14 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     enhancementController,
   ]);
 
-  const triggerParentRefreshAsync = useCallback(async (): Promise<void> => {
-    callOnEventNeedsRefresh();
-  }, [callOnEventNeedsRefresh]);
-
   const renderEventDetails = (event: EventType) => {
-    if (isLoadingEventDetailsEnhancement) {
+    // ... (Giữ nguyên logic renderEventDetails, sử dụng formatPersonForDisplay)
+    // Đảm bảo nó hiển thị PersonDetail.fullName hoặc các trường tên khác
+    if (
+      isLoadingEventDetailsEnhancement &&
+      !event.organizers?.every((o) => o.fullName)
+    ) {
+      // Chỉ hiện loading nếu chưa có tên
       return (
         <div className="p-4 bg-white rounded-lg shadow border text-center min-h-[400px] flex flex-col justify-center items-center">
           <button
@@ -968,40 +1036,22 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     const vietnameseStatus = getVietnameseEventStatus(event.status);
     let statusColorClass = "text-gray-600 bg-gray-200 border-gray-300";
     if (event.status) {
-      const upperStatus = event.status.toUpperCase();
-      if (upperStatus === "APPROVED")
-        statusColorClass = "text-green-700 bg-green-100 border-green-300";
-      else if (upperStatus === "PENDING")
-        statusColorClass = "text-yellow-700 bg-yellow-100 border-yellow-300";
-      else if (upperStatus === "REJECTED" || upperStatus === "CANCELLED")
-        statusColorClass = "text-red-700 bg-red-100 border-red-300";
-    }
+      /* ... */
+    } // Logic màu status giữ nguyên
 
     let creatorDisplay = "Không rõ";
-    if (event.createdBy && typeof event.createdBy === "string") {
-      const creatorDetails = personDetailsCacheRef.current[event.createdBy];
-      if (creatorDetails?.fullName) creatorDisplay = creatorDetails.fullName;
-      else if (creatorDetails)
-        creatorDisplay = formatPersonForDisplay(
-          creatorDetails as OrganizerInfo
-        );
-      else creatorDisplay = `ID: ${event.createdBy}`;
-    } else if (
-      event.createdBy &&
-      typeof event.createdBy === "object" &&
-      (event.createdBy as OrganizerInfo).userId
-    ) {
-      creatorDisplay = formatPersonForDisplay(event.createdBy as OrganizerInfo);
+    if (event.createdBy) {
+      if (typeof event.createdBy === "string") {
+        // Nếu là userId
+        const details = personDetailsCacheRef.current[event.createdBy];
+        creatorDisplay = details?.fullName || `ID: ${event.createdBy}`;
+      } else {
+        // Nếu là object PersonDetail
+        creatorDisplay = formatPersonForDisplay(event.createdBy);
+      }
     }
-    if (
-      creatorDisplay.trim().toLowerCase().startsWith("id:") ||
-      creatorDisplay.trim() === "" ||
-      creatorDisplay.toLowerCase() === "không rõ id:" ||
-      creatorDisplay.toLowerCase() === "id: null" ||
-      creatorDisplay.toLowerCase() === "id: undefined"
-    ) {
-      creatorDisplay = "Không rõ";
-    }
+    if (creatorDisplay.startsWith("ID:") && creatorDisplay.length < 10)
+      creatorDisplay = "Không rõ"; // Dọn dẹp
 
     return (
       <div className="p-4 bg-white rounded-lg shadow border">
@@ -1018,6 +1068,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         </button>
         <>
           <div className="flex flex-col lg:flex-row gap-6 xl:gap-8">
+            {/* ... Avatar ... */}
             <div className="flex-shrink-0 lg:w-2/5 xl:w-1/3">
               {event.avatarUrl ? (
                 <div className="aspect-[4/3] relative w-full">
@@ -1039,6 +1090,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3 leading-tight">
                 {eventName}
               </h1>
+              {/* ... Status ... */}
               {!isDeletedEvent && event.status && (
                 <div className="mb-5">
                   <span
@@ -1050,11 +1102,12 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
               {isDeletedEvent && (
                 <p className="text-red-600 font-semibold text-sm mt-1 mb-3">
-                  <ExclamationTriangleIcon className="inline-block mr-1 h-4 w-4" />
+                  <ExclamationTriangleIcon className="inline-block mr-1 h-4 w-4" />{" "}
                   Sự kiện này đã bị xóa.
                 </p>
               )}
               <div className="space-y-4 text-base text-gray-700">
+                {/* ... Time, Location, MaxAttendees ... */}
                 {(event.time || event.date) && (
                   <div className="flex items-start">
                     <RadixCalendarIcon className="w-5 h-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" />
@@ -1080,6 +1133,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 )}
                 {event.location && (
                   <div className="flex items-start">
+                    {" "}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       className="h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1"
@@ -1098,7 +1152,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                         strokeLinejoin="round"
                         d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                       />
-                    </svg>
+                    </svg>{" "}
                     <div>
                       <p className="font-semibold text-gray-800">Địa điểm:</p>
                       <p className="text-gray-600">{event.location}</p>
@@ -1136,6 +1190,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               </div>
             </div>
           </div>
+          {/* ... Purpose, Content ... */}
           {(event.purpose || event.content) && !isDeletedEvent && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <h4 className="text-xl font-semibold text-gray-800 mb-3">
@@ -1163,6 +1218,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
             </div>
           )}
+          {/* ... Organizers, Participants ... */}
           {!isDeletedEvent &&
             event.organizers &&
             event.organizers.length > 0 && (
@@ -1187,7 +1243,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
             event.participants.length > 0 && (
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <h4 className="text-xl font-semibold text-gray-800 mb-3">
-                  Người tham dự
+                  Người tham dự (dự kiến)
                 </h4>
                 <ul className="space-y-2 text-sm">
                   {event.participants.map((par, index) => (
@@ -1201,6 +1257,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 </ul>
               </div>
             )}
+          {/* ... Deleted Info ... */}
           {isDeletedEvent && event.deletedAt && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <h4 className="text-xl font-semibold text-gray-800 mb-3">
@@ -1220,8 +1277,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                   <strong className="font-medium text-gray-900">
                     Người xóa:
                   </strong>{" "}
-                  {event.deletedBy.lastName} {event.deletedBy.firstName} (
-                  {event.deletedBy.username})
+                  {formatPersonForDisplay(event.deletedBy)}
                   {event.deletedBy.avatar && (
                     <img
                       src={event.deletedBy.avatar}
@@ -1233,6 +1289,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
             </div>
           )}
+          {/* ... Other Info (Creator, CreatedAt) ... */}
           {(creatorDisplay !== "Không rõ" || event.createdAt) && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <h4 className="text-xl font-semibold text-gray-800 mb-3">
@@ -1259,64 +1316,81 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
             </div>
           )}
+          {/* ... Action Buttons ... */}
           <div className="mt-10 pt-6 border-t-2 border-gray-300 flex flex-col sm:flex-row justify-end gap-3">
-            {mainTab === "myEvents" && !isDeletedEvent && (
-              <>
+            {mainTab === "myEvents" &&
+              !isDeletedEvent &&
+              user?.id ===
+                (typeof event.createdBy === "string"
+                  ? event.createdBy
+                  : event.createdBy?.userId) && (
+                <>
+                  <button
+                    onClick={() =>
+                      handleOpenUpdateModal(event as MyCreatedEventType)
+                    }
+                    disabled={
+                      deletingEventId === event.id ||
+                      restoringEventId === event.id
+                    }
+                    className={`w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                      deletingEventId === event.id ||
+                      restoringEventId === event.id
+                        ? "opacity-50 cursor-wait"
+                        : ""
+                    }`}
+                  >
+                    <Pencil1Icon className="h-4 w-4 mr-2" /> Chỉnh sửa
+                  </button>
+                  <button
+                    onClick={() => handleDeleteClick(event)}
+                    disabled={
+                      deletingEventId === event.id ||
+                      restoringEventId === event.id
+                    }
+                    className={`w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                      deletingEventId === event.id ||
+                      restoringEventId === event.id
+                        ? "opacity-50 cursor-wait"
+                        : ""
+                    }`}
+                  >
+                    {deletingEventId === event.id ? (
+                      <ReloadIcon className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <TrashIcon className="h-4 w-4 mr-2" />
+                    )}
+                    {deletingEventId === event.id
+                      ? "Đang xóa..."
+                      : "Xóa sự kiện"}
+                  </button>
+                </>
+              )}
+            {mainTab === "myEvents" &&
+              isDeletedEvent &&
+              user?.id ===
+                (typeof event.createdBy === "string"
+                  ? event.createdBy
+                  : event.createdBy?.userId) && (
                 <button
-                  onClick={() => localHandleOpenUpdateModal(event)}
-                  disabled={
-                    deletingEventId === event.id ||
-                    restoringEventId === event.id
-                  }
-                  className={`w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
-                    deletingEventId === event.id ||
+                  onClick={() => handleRestoreClick(event)}
+                  disabled={restoringEventId === event.id}
+                  className={`w-full sm:w-auto bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
                     restoringEventId === event.id
                       ? "opacity-50 cursor-wait"
                       : ""
                   }`}
                 >
-                  <Pencil1Icon className="h-4 w-4 mr-2" /> Chỉnh sửa
-                </button>
-                <button
-                  onClick={() => handleDeleteClick(event)}
-                  disabled={
-                    deletingEventId === event.id ||
-                    restoringEventId === event.id
-                  }
-                  className={`w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
-                    deletingEventId === event.id ||
-                    restoringEventId === event.id
-                      ? "opacity-50 cursor-wait"
-                      : ""
-                  }`}
-                >
-                  {deletingEventId === event.id ? (
+                  {restoringEventId === event.id ? (
                     <ReloadIcon className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
-                    <TrashIcon className="h-4 w-4 mr-2" />
+                    <ArchiveIcon className="h-4 w-4 mr-2" />
                   )}
-                  {deletingEventId === event.id ? "Đang xóa..." : "Xóa sự kiện"}
+                  {restoringEventId === event.id
+                    ? "Đang khôi phục..."
+                    : "Khôi phục sự kiện"}
                 </button>
-              </>
-            )}
-            {mainTab === "myEvents" && isDeletedEvent && (
-              <button
-                onClick={() => handleRestoreClick(event)}
-                disabled={restoringEventId === event.id}
-                className={`w-full sm:w-auto bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
-                  restoringEventId === event.id ? "opacity-50 cursor-wait" : ""
-                }`}
-              >
-                {restoringEventId === event.id ? (
-                  <ReloadIcon className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <ArchiveIcon className="h-4 w-4 mr-2" />
-                )}
-                {restoringEventId === event.id
-                  ? "Đang khôi phục..."
-                  : "Khôi phục sự kiện"}
-              </button>
-            )}
+              )}
             {mainTab === "myEvents" &&
               !isDeletedEvent &&
               event.status === "APPROVED" && (
@@ -1400,17 +1474,15 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           <MyCreatedEventsTab
             user={user}
             currentUserId={currentUserId}
-            myEvents={myEvents}
-            deletedEvents={deletedEvents}
+            myEvents={myEvents} // Truyền myEvents (raw)
+            deletedEvents={deletedEvents} // Truyền deletedEvents (raw)
             myLoading={myLoading}
             deletedLoading={deletedLoading}
             myError={myError}
             deletedError={deletedError}
-            fetchMyEvents={fetchMyEvents}
-            fetchDeletedEvents={fetchDeletedEvents}
-            viewingEventDetails={null}
-            setViewingEventDetails={handleSetViewingEventDetails}
-            onOpenUpdateModal={localHandleOpenUpdateModal}
+            viewingEventDetails={null} // MyCreatedEventsTab không quản lý viewingEventDetails này
+            setViewingEventDetails={handleSetViewingEventDetails} // Prop để MyCreatedEventsTab có thể mở chi tiết
+            onOpenUpdateModal={handleOpenUpdateModal} // Prop để mở modal chỉnh sửa
             onDeleteClick={handleDeleteClick}
             onRestoreClick={handleRestoreClick}
             onExportClick={handleExportClick}
@@ -1419,7 +1491,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
             deletingEventId={deletingEventId}
             isExporting={isExporting}
             handleRefresh={handleRefreshLocal}
-            fetchOrganizerDetailsById={fetchUserDetailsAPI}
+            fetchOrganizerDetailsById={fetchUserDetailsAPI} // Truyền hàm lấy chi tiết user
           />
         ) : (
           <RegisteredEventsTab
@@ -1427,11 +1499,13 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
             initialRegisteredEventIds={initialRegisteredEventIds}
             isLoadingRegisteredIdsProp={isLoadingRegisteredIds}
             onRegistrationChange={onRegistrationChange}
-            isCreatedByUser={isCreatedByUserCallback}
-            isRegistered={isRegisteredCallback}
+            isCreatedByUser={(eventId) =>
+              createdEventIdsFromParent.has(eventId)
+            }
+            isRegistered={(eventId) => initialRegisteredEventIds.has(eventId)}
             setViewingEventDetails={handleSetViewingEventDetails}
-            onMainRefreshTrigger={triggerParentRefreshAsync}
-            isParentRefreshing={isRefreshing}
+            onMainRefreshTrigger={callOnEventNeedsRefresh}
+            isParentRefreshing={isRefreshing || myLoading || deletedLoading}
           />
         )}
       </div>

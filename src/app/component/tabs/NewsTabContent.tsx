@@ -179,7 +179,7 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
       setIsDeleting(null);
       return;
     }
-    const API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${newsItem.id}?deletedById=${user.id}`;
+    const API_URL = `http://localhost:8080/identity/api/news/${newsItem.id}?deletedById=${user.id}`;
     try {
       let response = await fetch(API_URL, {
         method: "DELETE",

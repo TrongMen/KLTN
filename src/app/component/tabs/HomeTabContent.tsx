@@ -3,17 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import {
-  User,
-  NewsItem,
-  EventDisplayInfo,
-  
-} from "../types/appTypes";
+import { User, NewsItem, EventDisplayInfo } from "../types/appTypes";
 import { useRouter } from "next/navigation";
-import {
-
-  EventDataForForm,
-} from "../types/typCreateEvent";
 import {
   ReloadIcon,
   Pencil1Icon,
@@ -27,7 +18,6 @@ import {
   ChevronRightIcon,
   TrashIcon,
 } from "@radix-ui/react-icons";
-
 import ConfirmationDialog, {
   ConfirmationDialogProps,
 } from "../../../utils/ConfirmationDialog";
@@ -163,7 +153,7 @@ interface HomeTabContentProps {
   refreshNewsList: () => void;
   refreshToken?: () => Promise<string | null>;
   onRefreshEvents: () => Promise<void>;
-  onOpenUpdateModal: (event: EventDisplayInfo) => void; 
+  onOpenUpdateModal: (event: EventDisplayInfo) => void;
 }
 
 const HomeTabContent: React.FC<HomeTabContentProps> = ({
@@ -192,7 +182,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
   refreshNewsList,
   refreshToken,
   onRefreshEvents,
-  onOpenUpdateModal, // Nhận prop này
+  onOpenUpdateModal,
 }) => {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [startDateFilter, setStartDateFilter] = useState<string>("");
@@ -220,62 +210,103 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
 
   const router = useRouter();
 
-  if (
-  selectedEvent &&
-  selectedEvent.organizers &&
-  selectedEvent.organizers.length > 0
-) {
-  const organizers = selectedEvent.organizers; // <-- biến tạm
+  useEffect(() => {
+    if (selectedEvent && selectedEvent.createdBy) {
+      setIsLoadingCreator(true);
+      setCreatorName(null);
+      fetch(
+        `/identity/users/notoken/${selectedEvent.createdBy}`
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.code === 1000 && data.result) {
+            const userDetail = data.result;
+            setCreatorName(
+              [userDetail.lastName, userDetail.firstName]
+                .filter(Boolean)
+                .join(" ")
+                .trim() ||
+                userDetail.username ||
+                `ID: ${selectedEvent.createdBy}`
+            );
+          } else {
+            setCreatorName(`ID: ${selectedEvent.createdBy}`);
+          }
+        })
+        .catch(() => setCreatorName(`ID: ${selectedEvent.createdBy} (lỗi)`))
+        .finally(() => setIsLoadingCreator(false));
+    } else {
+      setCreatorName(null);
+    }
+  }, [selectedEvent]);
 
-  const fetchOrganizerDetails = async () => {
-    setIsLoadingOrganizers(true);
-    setDetailedOrganizers(null);
-    try {
-      const organizerPromises = organizers.map(async (org) => {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${org.userId}`
-        );
-        if (!response.ok)
-          return {
-            ...org,
-            fullName: `ID: ${org.userId.substring(0, 8)}...`,
-          };
-        const data = await response.json();
-        if (data.code === 1000 && data.result) {
-          const userDetail = data.result;
-          const fullName =
-            [userDetail.lastName, userDetail.firstName]
-              .filter(Boolean)
-              .join(" ")
-              .trim() || userDetail.username;
-          return {
-            ...org,
-            fullName: fullName || `ID: ${org.userId.substring(0, 8)}...`,
-          };
+  useEffect(() => {
+    if (
+      selectedEvent &&
+      selectedEvent.organizers &&
+      selectedEvent.organizers.length > 0
+    ) {
+      const organizersToFetch = selectedEvent.organizers;
+      const fetchDetails = async () => {
+        setIsLoadingOrganizers(true);
+        setDetailedOrganizers(null);
+        try {
+          const organizerPromises = organizersToFetch.map(async (org) => {
+            const response = await fetch(
+              `http://localhost:8080/identity/users/notoken/${org.userId}`
+            );
+            if (!response.ok) {
+              return {
+                userId: org.userId,
+                roleName: org.roleName,
+                positionName: org.positionName,
+                fullName: `ID: ${org.userId.substring(0, 8)}...`,
+              };
+            }
+            const data = await response.json();
+            if (data.code === 1000 && data.result) {
+              const userDetail = data.result;
+              const fullName =
+                [userDetail.lastName, userDetail.firstName]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim() || userDetail.username;
+              return {
+                userId: org.userId,
+                roleName: org.roleName,
+                positionName: org.positionName,
+                fullName: fullName || `ID: ${org.userId.substring(0, 8)}...`,
+              };
+            }
+            return {
+              userId: org.userId,
+              roleName: org.roleName,
+              positionName: org.positionName,
+              fullName: `ID: ${org.userId.substring(0, 8)}...`,
+            };
+          });
+          const settledOrganizers = await Promise.all(organizerPromises);
+          setDetailedOrganizers(settledOrganizers as DetailedOrganizer[]);
+        } catch (error) {
+          console.error("Lỗi tải thông tin ban tổ chức:", error);
+          setDetailedOrganizers(
+            organizersToFetch.map((org) => ({
+              userId: org.userId,
+              roleName: org.roleName,
+              positionName: org.positionName,
+              fullName: "Lỗi tải tên",
+            })) as DetailedOrganizer[]
+          );
+        } finally {
+          setIsLoadingOrganizers(false);
         }
-        return {
-          ...org,
-          fullName: `ID: ${org.userId.substring(0, 8)}...`,
-        };
-      });
-      const settledOrganizers = await Promise.all(organizerPromises);
-      setDetailedOrganizers(settledOrganizers as DetailedOrganizer[]);
-    } catch (error) {
-      console.error("Lỗi tải thông tin ban tổ chức:", error);
-      setDetailedOrganizers(
-        organizers.map((org) => ({
-          ...org,
-          fullName: "Lỗi tải tên",
-        })) as DetailedOrganizer[]
-      );
-    } finally {
+      };
+      fetchDetails();
+    } else {
+      setDetailedOrganizers(null);
       setIsLoadingOrganizers(false);
     }
-  };
-
-  fetchOrganizerDetails();
-}
-
+  }, [selectedEvent]);
 
   const processedEvents = useMemo(() => {
     if (!allEvents || !Array.isArray(allEvents)) return [];
@@ -284,6 +315,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
+
     if (timeFilterOption === "upcoming")
       evts = evts.filter((e) => getEventStatus(e.date) === "upcoming");
     else if (timeFilterOption === "ongoing")
@@ -345,6 +377,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         console.error("Error parsing date range:", e);
       }
     }
+
     if (search) {
       const l = search.toLowerCase();
       evts = evts.filter(
@@ -353,6 +386,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           (e.location && e.location.toLowerCase().includes(l))
       );
     }
+
     if (sortOption === "za")
       evts.sort((a, b) =>
         b.title.localeCompare(a.title, "vi", { sensitivity: "base" })
@@ -396,14 +430,17 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
 
   const totalItems = processedEvents.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
     }
   }, [totalPages, currentPage]);
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedEvents = processedEvents.slice(startIndex, endIndex);
+
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newStartDate = e.target.value;
     setStartDateFilter(newStartDate);
@@ -440,9 +477,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       toast.error("Không thể làm mới.");
     }
   };
-
   const handleEditEvent = (event: EventDisplayInfo) => {
-    onOpenUpdateModal(event); // Gọi prop từ UserHome
+    onOpenUpdateModal(event);
   };
 
   const handleDeleteEvent = (event: EventDisplayInfo) => {
@@ -463,7 +499,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         });
         return;
       }
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}?deletedById=${user.id}`;
+      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
       try {
         let response = await fetch(apiUrl, {
           method: "DELETE",
@@ -655,15 +691,13 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       </div>
       {timeFilterOption === "dateRange" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
-          {" "}
           <div>
-            {" "}
             <label
               htmlFor="startDateFilterHome"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
               Từ ngày
-            </label>{" "}
+            </label>
             <input
               type="date"
               id="startDateFilterHome"
@@ -671,16 +705,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               onChange={handleStartDateChange}
               max={endDateFilter || undefined}
               className="w-full p-2 border rounded-lg text-sm"
-            />{" "}
-          </div>{" "}
+            />
+          </div>
           <div>
-            {" "}
             <label
               htmlFor="endDateFilterHome"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
               Đến ngày
-            </label>{" "}
+            </label>
             <input
               type="date"
               id="endDateFilterHome"
@@ -688,15 +721,14 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               onChange={handleEndDateChange}
               min={startDateFilter || undefined}
               className="w-full p-2 border rounded-lg text-sm"
-            />{" "}
-          </div>{" "}
+            />
+          </div>
         </div>
       )}
       <div className="relative w-full mb-6">
-        {" "}
         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
           🔍
-        </span>{" "}
+        </span>
         <input
           id="searchGuest"
           type="text"
@@ -707,7 +739,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             setSearch(e.target.value);
             setCurrentPage(1);
           }}
-        />{" "}
+        />
       </div>
 
       {isLoadingEvents && !selectedEvent ? (
@@ -741,10 +773,9 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             </div>
             <div className="flex-grow space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                {" "}
                 <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex-1">
                   {selectedEvent.title}
-                </h2>{" "}
+                </h2>
                 {(() => {
                   const status = getEventStatus(selectedEvent.date);
                   return (
@@ -756,7 +787,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                       {getStatusIcon(status)} {getStatusText(status)}
                     </span>
                   );
-                })()}{" "}
+                })()}
               </div>
               <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
                 <p>
@@ -803,19 +834,17 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               </div>
               <div className="space-y-3 text-sm">
                 <div>
-                  {" "}
-                  <p className="font-medium mb-1">📜 Nội dung sự kiện:</p>{" "}
+                  <p className="font-medium mb-1">📜 Nội dung sự kiện:</p>
                   <p className="whitespace-pre-wrap">
                     {selectedEvent.content ||
                       selectedEvent.description ||
                       "Không có mô tả chi tiết."}
-                  </p>{" "}
+                  </p>
                 </div>
                 <div>
-                  {" "}
                   <strong className="font-medium mb-1 block">
                     👥 Ban tổ chức:
-                  </strong>{" "}
+                  </strong>
                   {isLoadingOrganizers ? (
                     <p className="italic">Đang tải...</p>
                   ) : detailedOrganizers && detailedOrganizers.length > 0 ? (
@@ -830,16 +859,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                     </ul>
                   ) : (
                     <p className="italic">Chưa có thông tin.</p>
-                  )}{" "}
+                  )}
                 </div>
                 <div>
-                  {" "}
                   <strong className="font-medium mb-1 block">
                     ✅ Số lượng đăng ký:
-                  </strong>{" "}
+                  </strong>
                   <p className="text-sm text-gray-700">
                     {selectedEvent.attendees?.length || 0} người
-                  </p>{" "}
+                  </p>
                 </div>
               </div>
               <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end gap-3">
@@ -862,7 +890,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         <button
                           onClick={() => handleDeleteEvent(selectedEvent)}
                           disabled={isDeleting === selectedEvent.id}
-                          className="px-4 py-2 cursor-pointer rounded-lg bg-red-500 text-white hover:bg-red-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-wait"
+                          className={`px-4 py-2 cursor-pointer rounded-lg bg-red-500 text-white hover:bg-red-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-wait`}
                         >
                           {isDeleting === selectedEvent.id ? (
                             <ReloadIcon className="w-4 h-4 animate-spin" />
@@ -878,7 +906,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   } else if (user && showRegisterBtn) {
                     const canClick = !isRegistered && !processing;
                     const isDisabled =
-  !canClick || isLoadingRegisteredIds || isLoadingCreatedEventIds || isRegistered;
+                      !canClick ||
+                      isLoadingRegisteredIds ||
+                      isLoadingCreatedEventIds ||
+                      isRegistered;
                     return (
                       <button
                         onClick={() => {
@@ -901,7 +932,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           </>
                         ) : processing ? (
                           <>
-                            <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />
+                            <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />{" "}
                             ...
                           </>
                         ) : (
@@ -944,7 +975,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           {processedEvents.length > 0 ? (
             viewMode === "card" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {" "}
                 {paginatedEvents.map((event) => {
                   const isRegistered = registeredEventIds.has(event.id);
                   const isCreatedByUser = createdEventIds.has(event.id);
@@ -966,7 +996,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         className="relative w-full h-40 bg-gray-200 cursor-pointer"
                         onClick={() => onEventClick(event)}
                       >
-                        {" "}
                         {event.avatarUrl ? (
                           <Image
                             src={event.avatarUrl}
@@ -978,7 +1007,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
                             {event.title?.charAt(0).toUpperCase() || "?"}
                           </div>
-                        )}{" "}
+                        )}
                         <span
                           className={`absolute top-2 right-2 ${getStatusBadgeClasses(
                             status
@@ -1017,8 +1046,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         </div>
                         <div className="text-xs flex items-center gap-x-3 mt-1">
                           {event.attendees && event.attendees.length > 0 && (
-  <span>✅ Đã đăng ký: {event.attendees.length}</span>
-)}
+                            <span>✅ Đã đăng ký: {event.attendees.length}</span>
+                          )}
                         </div>
                         <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
                           {isCreatedByUser ? (
@@ -1051,13 +1080,12 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 </>
                               ) : processing ? (
                                 <>
-                                  <ReloadIcon className="animate-spin mr-1.5" />
+                                  <ReloadIcon className="animate-spin mr-1.5" />{" "}
                                   ...
                                 </>
                               ) : (
                                 <>
-                                  <Pencil1Icon className="mr-1" />
-                                  Đăng ký
+                                  <Pencil1Icon className="mr-1" /> Đăng ký
                                 </>
                               )}
                             </button>
@@ -1146,7 +1174,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               />
                             </div>
                           ) : (
-                            <div className="relative w-16 h-12 rounded flex-shrink-0 hidden sm:block bg-gradient-to-br from-gray-100 to-gray-200 text-gray-400 items-center justify-center text-xl font-semibold">
+                            <div className="relative w-16 h-12 rounded flex-shrink-0 hidden sm:block bg-gradient-to-br from-gray-100 to-gray-200 text-gray-400 items-center justify-center text-xl font-semibold flex">
                               {event.title?.charAt(0).toUpperCase() || "?"}
                             </div>
                           )}
@@ -1213,13 +1241,12 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 </>
                               ) : processing ? (
                                 <>
-                                  <ReloadIcon className="animate-spin mr-1.5" />
+                                  <ReloadIcon className="animate-spin mr-1.5" />{" "}
                                   ...
                                 </>
                               ) : (
                                 <>
-                                  <Pencil1Icon className="mr-1" />
-                                  Đăng ký
+                                  <Pencil1Icon className="mr-1" /> Đăng ký
                                 </>
                               )}
                             </button>
@@ -1293,8 +1320,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   disabled={currentPage === 1}
                   className="px-3 py-1.5 rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
                 >
-                  <ChevronLeftIcon className="w-4 h-4" />
-                  Trước
+                  <ChevronLeftIcon className="w-4 h-4" /> Trước
                 </button>
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}

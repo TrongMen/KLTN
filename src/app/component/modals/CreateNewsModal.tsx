@@ -65,7 +65,7 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
         const headers: HeadersInit = token
           ? { Authorization: `Bearer ${token}` }
           : {};
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=APPROVED`;
+        const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
         const res = await fetch(url, { headers, cache: "no-store" });
         if (!res.ok) throw new Error("Lỗi tải danh sách sự kiện");
         const data = await res.json();

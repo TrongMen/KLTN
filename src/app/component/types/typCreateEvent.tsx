@@ -98,6 +98,8 @@ export interface OrganizerParticipantInput {
   userId: string;
   roleId: string;
   positionId: string;
+  name?: string;
+  roleName?: string;
 }
 
 // Type cho dữ liệu sự kiện nhận từ API hoặc để điền form khi edit

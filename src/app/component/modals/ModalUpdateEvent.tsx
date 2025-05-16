@@ -1,4 +1,7 @@
+// ModalUpdateEvent.tsx
+
 "use client";
+
 import React, {
   useState,
   useCallback,
@@ -10,12 +13,13 @@ import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import type {
-  User, // Kiểu User này có vẻ là người dùng hiện tại đang đăng nhập
+  User,
   EventDataForForm,
-  OrganizerParticipantInput,
-  DetailedApiUser, // User từ API, bao gồm roles và position
-  ApiRole,         
-} from "../types/typCreateEvent"; 
+  ParticipantInput,
+  OrganizerInput,
+  DetailedApiUser,
+  ApiRole,
+} from "../types/typCreateEvent";
 
 interface SearchableDropdownOption {
   id: string;
@@ -30,7 +34,7 @@ interface SearchableDropdownProps {
   disabledOptions?: Set<string>;
   isLoading?: boolean;
   disabled?: boolean;
-  initialSearchTerm?: string; // Prop mới để hiển thị tên ban đầu nếu có
+  initialSearchTerm?: string;
 }
 
 const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
@@ -41,7 +45,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
   disabledOptions = new Set(),
   isLoading = false,
   disabled = false,
-  initialSearchTerm, // Nhận prop mới
+  initialSearchTerm,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -53,33 +57,30 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
   );
 
   useEffect(() => {
-    // Ưu tiên initialSearchTerm khi dropdown mở lần đầu hoặc selectedValue thay đổi và có initialSearchTerm
-    if (initialSearchTerm && selectedValue) {
-        setSearchTerm(initialSearchTerm);
-    } else {
+    if (initialSearchTerm && (selectedValue || !isOpen || !searchTerm )) {
+       setSearchTerm(initialSearchTerm);
+    } else if (!initialSearchTerm && selectedValue && !isOpen) {
         setSearchTerm(selectedOptionName);
+    } else if (!selectedValue && !isOpen) {
+        setSearchTerm("");
     }
   }, [selectedOptionName, isOpen, initialSearchTerm, selectedValue]);
 
 
   const filteredOptions = useMemo(() => {
     if (isLoading) return [];
-    if (!searchTerm && selectedValue && selectedOptionName) {
-        // Nếu có giá trị đã chọn và searchTerm rỗng (có thể do click ra ngoài rồi click vào lại)
-        // thì hiển thị lại tên đã chọn và các lựa chọn khác
-        return options.filter((option) =>
-          option.name.toLowerCase().includes(selectedOptionName.toLowerCase()) || option.id === selectedValue
-        );
+     if (!searchTerm && selectedValue && selectedOptionName && isOpen) {
+      return options;
     }
     return options.filter((option) =>
       option.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [options, searchTerm, isLoading, selectedValue, selectedOptionName]);
+  }, [options, searchTerm, isLoading, selectedValue, selectedOptionName, isOpen]);
 
   const handleSelectOption = (optionId: string) => {
     const selectedOpt = options.find(opt => opt.id === optionId);
     if (selectedOpt) {
-        setSearchTerm(selectedOpt.name); // Cập nhật searchTerm khi chọn
+        setSearchTerm(selectedOpt.name);
     }
     onChange(optionId);
     setIsOpen(false);
@@ -92,18 +93,15 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
-        // Khi click ra ngoài, nếu có giá trị đã chọn, giữ lại tên đó trong input
         if (selectedValue && selectedOptionName) {
             setSearchTerm(selectedOptionName);
         } else if (!selectedValue) {
-            // Nếu không có giá trị nào được chọn và click ra ngoài, xóa searchTerm
-            // setSearchTerm(""); // Tùy chọn: có thể muốn giữ lại text người dùng đã gõ
         }
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [selectedOptionName, selectedValue]); // Thêm selectedValue để cập nhật đúng searchTerm
+  }, [selectedOptionName, selectedValue]);
 
   return (
     <div className="relative w-full" ref={dropdownRef}>
@@ -116,10 +114,19 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
         }}
         onFocus={() => {
             setIsOpen(true);
-            // Khi focus, nếu chưa có searchTerm và có selectedValue, hiển thị tên đã chọn
-            if (!searchTerm && selectedValue && selectedOptionName) {
-                setSearchTerm(selectedOptionName);
+            if (selectedValue && selectedOptionName) {
+                 if (!searchTerm) setSearchTerm(selectedOptionName);
+            } else {
+                 setSearchTerm("");
             }
+        }}
+        onBlur={() => {
+            setTimeout(() => {
+                if (!isOpen && selectedValue && selectedOptionName) {
+                    setSearchTerm(selectedOptionName);
+                } else if (!isOpen && !selectedValue) {
+                }
+            }, 150);
         }}
         placeholder={placeholder}
         disabled={disabled || isLoading}
@@ -134,7 +141,10 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
               return (
                 <li
                   key={option.id}
-                  onClick={() => !isDisabled && handleSelectOption(option.id)}
+                  onMouseDown={(e) => { 
+                    e.preventDefault(); 
+                    if(!isDisabled) handleSelectOption(option.id);
+                  }}
                   className={`px-3 py-2 text-sm hover:bg-indigo-50 ${
                     isDisabled
                       ? "text-gray-400 bg-gray-100 cursor-not-allowed"
@@ -172,16 +182,15 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
   );
 };
 
-// Interface EventFormDataState không cần thay đổi nhiều,
-// vì OrganizerParticipantInput đã có 'name' (từ editingEvent)
+
 interface EventFormDataState {
   name: string;
   purpose: string;
   time: string;
   location: string;
   content: string;
-  organizers: OrganizerParticipantInput[]; // Giờ đây mỗi item có thể có 'name'
-  participants: OrganizerParticipantInput[]; // Giờ đây mỗi item có thể có 'name'
+  organizers: OrganizerInput[];
+  participants: ParticipantInput[];
   maxAttendees: number | string;
   id?: string;
   status?: "PENDING" | "APPROVED" | "REJECTED";
@@ -189,9 +198,9 @@ interface EventFormDataState {
 }
 
 interface ModalUpdateEventProps {
-  user: User | null; // User hiện tại đang đăng nhập
+  user: User | null;
   onSuccess: () => void;
-  editingEvent: EventDataForForm; // editingEvent giờ sẽ có 'name' trong organizers/participants
+  editingEvent: EventDataForForm;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -220,7 +229,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
   const [internalAllUsers, setInternalAllUsers] = useState<DetailedApiUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(true);
   const [fetchUsersError, setFetchUsersError] = useState<string | null>(null);
-  const [internalRoles, setInternalRoles] = useState<ApiRole[]>([]); // Vai trò cho BTC/NTG trong sự kiện
+  const [internalRoles, setInternalRoles] = useState<ApiRole[]>([]);
   const [isLoadingRoles, setIsLoadingRoles] = useState<boolean>(true);
   const [fetchRolesError, setFetchRolesError] = useState<string | null>(null);
 
@@ -232,159 +241,99 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    const fetchInitialData = async () => {
+    const fetchDropdownOptionsData = async () => {
       const token = localStorage.getItem("authToken");
       if (!token) {
-        toast.error("Yêu cầu xác thực để tải dữ liệu.");
+        console.warn("Chưa xác thực, không thể tải tùy chọn mới cho dropdowns.");
         setIsLoadingUsers(false);
         setIsLoadingRoles(false);
         setFetchUsersError("Chưa xác thực.");
         setFetchRolesError("Chưa xác thực.");
         return;
       }
-
-      // Fetch users if not already fetched or if isOpen changes (để đảm bảo dữ liệu mới nhất)
-      // Tuy nhiên, thường chỉ fetch 1 lần khi modal được mount và isOpen
-      if (!internalAllUsers.length || isOpen) { // Điều kiện fetch có thể cần xem xét lại nếu muốn fetch mỗi khi mở
-        setIsLoadingUsers(true);
-        setFetchUsersError(null);
-        try {
-          const res = await fetch(
-            `http://localhost:8080/identity/users`, // API này cần trả về cả 'roles' của user
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
-            throw new Error(errData.message || `Lỗi ${res.status}`);
-          }
-          const data = await res.json();
-          if (data.code === 1000 && Array.isArray(data.result)) {
-            setInternalAllUsers(data.result);
-          } else {
-            throw new Error(data.message || "Lỗi tải danh sách người dùng.");
-          }
-        } catch (error: any) {
-          setFetchUsersError(error.message);
-          toast.error(`Lỗi tải danh sách người dùng: ${error.message}`);
-          setInternalAllUsers([]);
-        } finally {
-          setIsLoadingUsers(false);
+      
+      setIsLoadingUsers(true);
+      setFetchUsersError(null);
+      try {
+        const res = await fetch(
+          `http://localhost:8080/identity/users`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
+          throw new Error(errData.message || `Lỗi ${res.status}`);
         }
-      } else {
-         setIsLoadingUsers(false); // Nếu đã có dữ liệu, không load lại
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result)) {
+          setInternalAllUsers(data.result);
+        } else {
+          throw new Error(data.message || "Lỗi tải danh sách người dùng.");
+        }
+      } catch (error: any) {
+        setFetchUsersError(error.message);
+        toast.error(`Lỗi tải tùy chọn người dùng: ${error.message}`);
+        setInternalAllUsers([]);
+      } finally {
+        setIsLoadingUsers(false);
       }
 
-
-      if (!internalRoles.length || isOpen) {
-        setIsLoadingRoles(true);
-        setFetchRolesError(null);
-        try {
-          const res = await fetch(
-            `http://localhost:8080/identity/api/organizerrole`, // API lấy vai trò cho thành viên sự kiện
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
-            throw new Error(errData.message || `Lỗi ${res.status}`);
-          }
-          const data = await res.json();
-          if (data.code === 1000 && Array.isArray(data.result)) {
-            setInternalRoles(data.result);
-          } else {
-            throw new Error(data.message || "Lỗi tải danh sách vai trò.");
-          }
-        } catch (error: any) {
-          setFetchRolesError(error.message);
-          toast.error(`Lỗi tải vai trò: ${error.message}`);
-          setInternalRoles([]);
-        } finally {
-          setIsLoadingRoles(false);
+      setIsLoadingRoles(true);
+      setFetchRolesError(null);
+      try {
+        const res = await fetch(
+          `http://localhost:8080/identity/api/organizerrole`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
+          throw new Error(errData.message || `Lỗi ${res.status}`);
         }
-      } else {
+        const data = await res.json();
+        if (data.code === 1000 && Array.isArray(data.result)) {
+          setInternalRoles(data.result);
+        } else {
+          throw new Error(data.message || "Lỗi tải danh sách vai trò.");
+        }
+      } catch (error: any) {
+        setFetchRolesError(error.message);
+        toast.error(`Lỗi tải tùy chọn vai trò: ${error.message}`);
+        setInternalRoles([]);
+      } finally {
         setIsLoadingRoles(false);
       }
     };
 
-    if (isOpen) { // Chỉ fetch khi modal mở
-      fetchInitialData();
+    if (isOpen) {
+      fetchDropdownOptionsData();
     }
-  }, [isOpen]); // Phụ thuộc vào isOpen để fetch khi modal mở
-
-  // Options cho Ban Tổ Chức (BTC) - Lọc user có vai trò "USER"
-  const organizerUserOptions = useMemo(() => {
-    if (isLoadingUsers || !internalAllUsers || !Array.isArray(internalAllUsers)) {
-      return [];
-    }
-    return internalAllUsers
-      .filter(user => {
-        // Giả sử 'user.roles' là một mảng các đối tượng ApiRole { id: string, name: string }
-        // API /with-position-and-role cần trả về trường 'roles' này cho mỗi user.
-        if (user.roles && Array.isArray(user.roles)) {
-          return user.roles.some(role => role.name === "USER");
-        }
-        return false; 
-      })
-      .map((u) => ({
-        id: u.id,
-        name: `${u.lastName || ""} ${u.firstName || ""}`.trim() || u.username || u.id,
-      }));
-  }, [internalAllUsers, isLoadingUsers]);
-
-  // Options cho Người Tham Dự (NTG) - Lọc user có position
-  const usersWithPositionOptions = useMemo(() => {
-    if (isLoadingUsers || !internalAllUsers || !Array.isArray(internalAllUsers)) return [];
-    return internalAllUsers
-      .filter((u) => !!u.position) // Yêu cầu NTG phải có position
-      .map((u) => ({
-        id: u.id,
-        name: `${u.lastName || ""} ${u.firstName || ""}`.trim() || u.username || u.id,
-      }));
-  }, [internalAllUsers, isLoadingUsers]);
-  
-  // Options cho vai trò (chung cho BTC và NTG khi chọn vai trò trong sự kiện)
-  const roleOptions = useMemo(() => {
-    if (isLoadingRoles || !internalRoles) return [];
-    return internalRoles.map((r) => ({ id: r.id, name: r.name }));
-  }, [internalRoles, isLoadingRoles]);
-
-  const busyUserIds = useMemo(() => {
-    const ids = new Set<string>();
-    formData.organizers.forEach((o) => {
-      if (o.userId) ids.add(o.userId);
-    });
-    formData.participants.forEach((p) => {
-      if (p.userId) ids.add(p.userId);
-    });
-    return ids;
-  }, [formData.organizers, formData.participants]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (editingEvent && isOpen) {
-      let formattedTime = editingEvent.time;
-      try {
-        if (editingEvent.time) {
-          const date = new Date(editingEvent.time);
-          if (!isNaN(date.getTime())) {
-            formattedTime = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")}T${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-          } else {
-            formattedTime = "";
-          }
-        }
-      } catch (e) {
-        formattedTime = "";
-      }
-
       setFormData({
         id: editingEvent.id,
         name: editingEvent.name || "",
         purpose: editingEvent.purpose || "",
-        time: formattedTime,
+        time: editingEvent.time,
         location: editingEvent.location || "",
         content: editingEvent.content || "",
-        // Giờ đây, editingEvent.organizers và .participants đã có trường `name` từ component cha
-        organizers: editingEvent.organizers?.map(o => ({ ...o })) || [],
-        participants: editingEvent.participants?.map(p => ({ ...p })) || [],
-        maxAttendees: editingEvent.maxAttendees === null || editingEvent.maxAttendees === undefined ? "" : editingEvent.maxAttendees,
+        organizers: editingEvent.organizers.map(o => ({ 
+            userId: o.userId || "", 
+            roleId: o.roleId || "", 
+            positionId: o.positionId || "", 
+            name: o.name || "",
+            roleName: o.roleName || "",
+            positionName: o.positionName || ""
+        })),
+        participants: editingEvent.participants.map(p => ({ 
+            userId: p.userId || "", 
+            roleId: p.roleId || "", 
+            positionId: p.positionId || "",
+            name: p.name || "",
+            roleName: p.roleName || "",
+            positionName: p.positionName || ""
+        })),
+        maxAttendees: editingEvent.maxAttendees === null || editingEvent.maxAttendees === undefined ? "" : String(editingEvent.maxAttendees),
         status: editingEvent.status,
         avatarUrl: editingEvent.avatarUrl || null,
       });
@@ -396,8 +345,43 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
       }
       setEventAvatarFile(null);
     }
-  }, [editingEvent, isOpen]); 
+  }, [editingEvent, isOpen]);
 
+  const organizerUserOptions = useMemo(() => {
+    if (!internalAllUsers || !Array.isArray(internalAllUsers)) return [];
+    return internalAllUsers
+      .filter(user => user.roles && Array.isArray(user.roles) && user.roles.some(role => role.name === "USER"))
+      .map((u) => ({
+        id: u.id,
+        name: `${u.lastName || ""} ${u.firstName || ""}`.trim() || u.username || u.id,
+      }));
+  }, [internalAllUsers]);
+
+  const usersWithPositionOptions = useMemo(() => {
+    if (!internalAllUsers || !Array.isArray(internalAllUsers)) return [];
+    return internalAllUsers
+      .filter((u) => !!u.position)
+      .map((u) => ({
+        id: u.id,
+        name: `${u.lastName || ""} ${u.firstName || ""}`.trim() || u.username || u.id,
+      }));
+  }, [internalAllUsers]);
+  
+  const roleOptions = useMemo(() => {
+    if (!internalRoles) return [];
+    return internalRoles.map((r) => ({ id: r.id, name: r.name }));
+  }, [internalRoles]);
+
+  const busyUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    formData.organizers.forEach((o) => {
+      if (o.userId) ids.add(o.userId);
+    });
+    formData.participants.forEach((p) => {
+      if (p.userId) ids.add(p.userId);
+    });
+    return ids;
+  }, [formData.organizers, formData.participants]);
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -406,7 +390,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
     else setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
- const handleMemberChange = useCallback(
+  const handleMemberChange = useCallback(
     (
       type: "organizers" | "participants",
       index: number,
@@ -419,45 +403,41 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
 
         if (field === "userId") {
           member.userId = value;
-          const selectedUser =
-            internalAllUsers && internalAllUsers.find((u) => u.id === value);
-          member.positionId = selectedUser?.position?.id || "";
+          const selectedUser = internalAllUsers.find((u) => u.id === value);
           member.name = selectedUser
-            ? `${selectedUser.lastName || ""} ${selectedUser.firstName || ""}`.trim() ||
-              selectedUser.username ||
-              selectedUser.id
+            ? `${selectedUser.lastName || ""} ${selectedUser.firstName || ""}`.trim() || selectedUser.username || `ID: ${value}`
             : "";
+          member.positionId = selectedUser?.position?.id || ""; 
+          member.positionName = selectedUser?.position?.name || (value ? (selectedUser?.position?.id ? selectedUser.position.name : "Chưa có/Không áp dụng") : "N/A");
+          
+          member.roleId = ""; 
+          member.roleName = "";
 
-          if (type === "participants") {
-            
-            if (selectedUser?.organizerRole?.id) {
+          if (type === "participants" && selectedUser?.organizerRole?.id) {
               const isValidEventRole = roleOptions.some(r => r.id === selectedUser.organizerRole!.id);
               if (isValidEventRole) {
-                member.roleId = selectedUser.organizerRole.id;
+                  member.roleId = selectedUser.organizerRole.id;
+                  member.roleName = selectedUser.organizerRole.name;
               } else {
-               
-                console.warn(`Vai trò mặc định '${selectedUser.organizerRole.name}' của người dùng '${selectedUser.username}' không phải là một vai trò sự kiện hợp lệ.`);
+                  console.warn(`Vai trò mặc định '${selectedUser.organizerRole.name}' của người dùng '${member.name}' không phải là vai trò sự kiện hợp lệ.`);
               }
-            } else {
-          
-            }
-          } else if (type === "organizers") {
-            
           }
         } else if (field === "roleId") {
           member.roleId = value;
+          const selectedRole = roleOptions.find(r => r.id === value);
+          member.roleName = selectedRole?.name || "";
         }
         updatedMembers[index] = member;
         return { ...prev, [type]: updatedMembers };
       });
     },
-    [internalAllUsers, roleOptions] 
+    [internalAllUsers, roleOptions]
   );
 
   const handleAddMember = useCallback((type: "organizers" | "participants") => {
     setFormData((prev) => ({
       ...prev,
-      [type]: [...prev[type], { userId: "", roleId: "", positionId: "", name: "" }],
+      [type]: [...prev[type], { userId: "", roleId: "", positionId: "", name: "", roleName: "", positionName: "" }],
     }));
   }, []);
 
@@ -475,7 +455,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
       if (eventAvatarPreviewUrl && eventAvatarPreviewUrl.startsWith("blob:"))
         URL.revokeObjectURL(eventAvatarPreviewUrl);
       setEventAvatarPreviewUrl(URL.createObjectURL(file));
-      setFormData((prev) => ({ ...prev, avatarUrl: null })); // Đánh dấu avatar hiện tại không còn là URL từ server
+      setFormData((prev) => ({ ...prev, avatarUrl: null }));
     }
   };
 
@@ -484,13 +464,13 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
     if (eventAvatarPreviewUrl && eventAvatarPreviewUrl.startsWith("blob:"))
       URL.revokeObjectURL(eventAvatarPreviewUrl);
     setEventAvatarPreviewUrl(null);
-    setFormData((prev) => ({ ...prev, avatarUrl: null })); // Xóa avatarUrl khỏi formData
+    setFormData((prev) => ({ ...prev, avatarUrl: null }));
     if (avatarImageInputRef.current) avatarImageInputRef.current.value = "";
   };
 
   useEffect(() => {
     const currentPreview = eventAvatarPreviewUrl;
-    return () => { // Cleanup function
+    return () => {
       if (currentPreview && currentPreview.startsWith("blob:")) {
         URL.revokeObjectURL(currentPreview);
       }
@@ -499,7 +479,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
 
   const uploadEventAvatar = async (eventId: string, token: string) => {
     if (!eventAvatarFile) return null;
-    const formDataUpload = new FormData(); // Tránh trùng tên với formData của state
+    const formDataUpload = new FormData();
     formDataUpload.append("file", eventAvatarFile);
     const uploadUrl = `http://localhost:8080/identity/api/events/${eventId}/avatar`;
     try {
@@ -533,22 +513,35 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
       return;
     }
     if (!formData.name || !formData.purpose || !formData.time || !formData.location || !formData.content) {
-      toast.error("Vui lòng điền đầy đủ các trường thông tin bắt buộc (*).");
+      toast.error("Vui lòng điền đầy đủ các trường thông tin sự kiện bắt buộc (*).");
       return;
     }
-    if (formData.organizers.some((o) => !o.userId || !o.roleId || !o.positionId)) {
-      toast.error("Vui lòng điền đầy đủ thông tin cho tất cả thành viên Ban Tổ Chức.");
-      return;
+    
+    const activeOrganizers = formData.organizers.filter(o => o.userId);
+    if (activeOrganizers.length === 0 && formData.organizers.some(o => o.roleId)) {
+        toast.error("Thành viên Ban Tổ Chức đã chọn Vai trò nhưng chưa chọn User. Vui lòng hoàn tất hoặc xóa dòng.");
+        setIsSubmitting(false);
+        return;
     }
-    if (formData.organizers.length === 0) {
-      toast.error("Sự kiện phải có ít nhất một thành viên Ban Tổ Chức.");
-      return;
+    if (activeOrganizers.length === 0) {
+        toast.error("Sự kiện phải có ít nhất một thành viên Ban Tổ Chức (đã chọn User).");
+        setIsSubmitting(false);
+        return;
     }
-    if (formData.participants.some((p) => !p.userId || !p.roleId || !p.positionId)) {
-      // Nếu NTG là tùy chọn, có thể bỏ qua kiểm tra này hoặc làm nó linh hoạt hơn
-      toast.error("Vui lòng điền đầy đủ thông tin cho tất cả Người Tham Dự đã thêm (nếu có).");
-      return;
+    if (activeOrganizers.some(o => !o.userId)) { // Kiểm tra kỹ hơn nếu có dòng nào đó không hợp lệ (dù filter ở trên)
+        toast.error("Vui lòng chọn User cho tất cả thành viên Ban Tổ Chức đã thêm.");
+        setIsSubmitting(false);
+        return;
     }
+
+
+    const activeParticipants = formData.participants.filter(p => p.userId);
+    if (activeParticipants.length < formData.participants.length && formData.participants.some(p => !p.userId && p.roleId)) {
+         toast.error("Người Tham Dự đã chọn Vai trò nhưng chưa chọn User. Vui lòng hoàn tất hoặc xóa dòng.");
+         setIsSubmitting(false);
+         return;
+    }
+    // Không bắt buộc phải có participant, nhưng nếu có dòng participant thì userId phải được điền
 
     setIsSubmitting(true);
     const token = localStorage.getItem("authToken");
@@ -569,10 +562,16 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
       ? null
       : Number(formData.maxAttendees);
 
-    // Loại bỏ trường 'name' không cần thiết khỏi organizers và participants trước khi gửi lên API
-    const organizersForApi = formData.organizers.map(({ name, ...rest }) => rest);
-    const participantsForApi = formData.participants.map(({ name, ...rest }) => rest);
-
+    const organizersForApi = activeOrganizers.map(({ name, roleName, positionName, ...rest }) => ({
+        ...rest,
+        roleId: rest.roleId || null, // Gửi null nếu roleId là chuỗi rỗng
+        positionId: rest.positionId || null 
+    }));
+    const participantsForApi = activeParticipants.map(({ name, roleName, positionName, ...rest }) => ({
+        ...rest,
+        roleId: rest.roleId || null, // Gửi null nếu roleId là chuỗi rỗng
+        positionId: rest.positionId || null
+    }));
 
     let payload: any = {
       id: formData.id,
@@ -583,24 +582,10 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
       content: formData.content,
       maxAttendees: finalMaxAttendees,
       organizers: organizersForApi,
-      participants: participantsForApi,
+      participants: participantsForApi, // Sẽ là mảng rỗng nếu không có active participants
       status: formData.status || "PENDING",
-      // avatarUrl không gửi trong payload này, sẽ xử lý riêng nếu không có file mới
     };
     
-    // Nếu không có file avatar mới được chọn VÀ avatarUrl hiện tại là null (do người dùng xóa ảnh cũ)
-    // thì cần gửi avatarUrl: null để API biết là xóa avatar.
-    // Tuy nhiên, API PATCH /avatar thường đã xử lý việc này.
-    // Nếu API PUT sự kiện cần avatarUrl, và người dùng muốn xóa avatar hiện có mà không chọn file mới:
-    if (!eventAvatarFile && formData.avatarUrl === null && editingEvent?.avatarUrl) {
-        // Điều này ngụ ý người dùng đã xóa avatar hiện có và không chọn avatar mới
-        // payload.avatarUrl = null; // Gửi null để API xóa avatar
-        // Tuy nhiên, việc xóa avatar thường được xử lý qua một endpoint riêng hoặc API upload avatar (PATCH) tự xử lý.
-        // Nếu API PUT cần biết avatarUrl cũ, bạn có thể giữ lại editingEvent.avatarUrl nếu không có eventAvatarFile.
-        // Hiện tại, chúng ta sẽ không gửi avatarUrl trong payload này, để uploadEventAvatar xử lý.
-    }
-
-
     const url = `http://localhost:8080/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
     const method = "PUT";
 
@@ -616,23 +601,9 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         toast.error(result?.message || "Cập nhật sự kiện thất bại.");
       } else {
         let successMessage = result?.message || "Cập nhật sự kiện thành công!";
-        if (eventAvatarFile) { // Nếu có file mới được chọn
-          await uploadEventAvatar(formData.id!, token); // formData.id chắc chắn có ở đây
+        if (eventAvatarFile) {
+          await uploadEventAvatar(formData.id!, token);
         } else if (formData.avatarUrl === null && editingEvent?.avatarUrl) {
-          // Trường hợp người dùng xóa avatar hiện có mà không chọn file mới.
-          // Cần gọi API để xóa avatar nếu có (ví dụ: DELETE /events/{id}/avatar)
-          // Nếu API PATCH avatar ở trên có thể nhận file rỗng để xóa thì không cần.
-          // Giả sử API DELETE avatar tồn tại:
-          // try {
-          //   await fetch(`http://localhost:8080/identity/api/events/${formData.id}/avatar`, {
-          //     method: "DELETE",
-          //     headers: { Authorization: `Bearer ${token}` },
-          //   });
-          //   toast.success("Đã xóa avatar cũ của sự kiện.");
-          // } catch (deleteError: any) {
-          //   toast.error(`Không thể xóa avatar cũ: ${deleteError.message}`);
-          // }
-          // Tạm thời bỏ qua, vì logic này phụ thuộc vào thiết kế API của bạn.
         }
         toast.success(successMessage);
         onSuccess();
@@ -657,10 +628,10 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
 
   if (!isOpen) return null;
   
-
   return (
     <div
       className="fixed inset-0 bg-black/30 bg-opacity-60 flex justify-center items-center z-50 p-4 transition-opacity duration-300 ease-in-out animate-fade-in"
+      onClick={onClose}
     >
       <div
         ref={modalContentRef}
@@ -683,11 +654,11 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         </div>
 
         <div className="p-4 sm:p-6 overflow-y-auto">
-          {isDataLoading && (!internalAllUsers.length || !internalRoles.length) ? (
+          {isDataLoading && (!internalAllUsers.length || !internalRoles.length) && (!editingEvent || !editingEvent.id) ? (
             <div className="text-center py-10">
               <p className="text-gray-500">Đang tải dữ liệu cho form...</p>
             </div>
-          ) : fetchUsersError || fetchRolesError ? (
+          ) : (fetchUsersError || fetchRolesError) && (!editingEvent || !editingEvent.id) ? (
             <div className="text-center py-10">
               <p className="text-red-500">
                 {fetchUsersError && `Lỗi tải người dùng: ${fetchUsersError}`}
@@ -761,8 +732,8 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
                 </div>
                 <div>
                   <label htmlFor="maxAttendeesModal" className="block text-sm font-medium text-gray-700 mb-1">Số lượng tham dự tối đa</label>
-                  <input type="number" id="maxAttendeesModal" name="maxAttendees" value={formData.maxAttendees} onChange={handleChange} min="1"
-                    className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"/>
+                  <input type="number" id="maxAttendeesModal" name="maxAttendees" value={formData.maxAttendees} onChange={handleChange} min="0"
+                    className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Để trống nếu không giới hạn"/>
                 </div>
                 <div className="md:col-span-2">
                   <label htmlFor="purposeModal" className="block text-sm font-medium text-gray-700 mb-1">Mục đích <span className="text-red-500">*</span></label>
@@ -776,131 +747,102 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
                 </div>
               </div>
 
-              {/* Ban Tổ Chức */}
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-medium text-gray-700 mb-3">Ban Tổ Chức <span className="text-red-500">*</span></h3>
-                {formData.organizers.map((organizer, index) => {
-                  const selectedUser = internalAllUsers?.find(u => u.id === organizer.userId);
-                  const positionName = selectedUser?.position?.name || (organizer.userId ? "Chưa có/Không áp dụng" : "N/A (Chọn User)");
-                  return (
+                {formData.organizers.map((organizer, index) => (
                     <div key={`org-${index}`} className="p-3 border rounded-md bg-gray-50 mb-3 space-y-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Họ tên</label>
-                          <SearchableDropdown
-                            options={organizerUserOptions} // Dùng options đã lọc cho BTC
-                            selectedValue={organizer.userId}
-                            initialSearchTerm={organizer.name} // Truyền tên ban đầu
-                            onChange={(selectedId) => handleMemberChange("organizers", index, "userId", selectedId)}
-                            placeholder="-- Chọn hoặc tìm User (Vai trò USER) --"
-                            disabledOptions={busyUserIds}
-                            isLoading={isLoadingUsers}
-                            disabled={isDataLoading}
-                          />
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Họ tên</label>
+                                <SearchableDropdown
+                                    options={organizerUserOptions}
+                                    selectedValue={organizer.userId}
+                                    initialSearchTerm={organizer.name}
+                                    onChange={(selectedId) => handleMemberChange("organizers", index, "userId", selectedId)}
+                                    placeholder="-- Chọn hoặc tìm User --"
+                                    disabledOptions={busyUserIds}
+                                    isLoading={isLoadingUsers}
+                                    disabled={isDataLoading && !internalAllUsers.length}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Chức vụ (từ Profile)</label>
+                                <input type="text" value={organizer.positionName} readOnly className="w-full p-2 border border-gray-200 bg-gray-100 rounded-md sm:text-sm"/>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Vai trò BTC (trong sự kiện)</label>
+                                <SearchableDropdown
+                                    options={roleOptions}
+                                    selectedValue={organizer.roleId}
+                                    initialSearchTerm={organizer.roleName}
+                                    onChange={(selectedId) => handleMemberChange("organizers", index, "roleId", selectedId)}
+                                    placeholder="-- Chọn Vai trò BTC (Tùy chọn) --"
+                                    isLoading={isLoadingRoles}
+                                    disabled={(isDataLoading && !internalRoles.length) || !organizer.userId}
+                                />
+                            </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Chức vụ (từ Profile)</label>
-                          <input type="text" value={positionName} readOnly className="w-full p-2 border border-gray-200 bg-gray-100 rounded-md sm:text-sm"/>
+                         <div className="flex justify-end">
+                            <button type="button" onClick={() => handleRemoveMember("organizers", index)}
+                                className="bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded-md shadow-sm transition-colors cursor-pointer">
+                                Xóa
+                            </button>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Vai trò BTC (trong sự kiện)</label>
-                          <SearchableDropdown
-                            options={roleOptions}
-                            selectedValue={organizer.roleId}
-                            initialSearchTerm={organizer.roleName}
-                            onChange={(selectedId) => handleMemberChange("organizers", index, "roleId", selectedId)}
-                            placeholder="-- Chọn Vai trò BTC --"
-                            isLoading={isLoadingRoles}
-                            disabled={isDataLoading || !organizer.userId}
-                          />
-                        </div>
-
-                      </div>
-                      <div className="flex justify-end">
-                        <button type="button" onClick={() => handleRemoveMember("organizers", index)}
-                          className="bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded-md shadow-sm transition-colors cursor-pointer">
-                          Xóa
-                        </button>
-                      </div>
                     </div>
-                  );
-                })}
+                ))}
                 <button type="button" onClick={() => handleAddMember("organizers")}
                   className="mt-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-2 px-4 rounded-md shadow-sm transition-colors"
-                  disabled={isDataLoading || isLoadingUsers}>
+                  disabled={(isDataLoading && (!internalAllUsers.length || !internalRoles.length))}>
                   + Thêm BTC
                 </button>
               </div>
 
-              {/* Người Tham Gia */}
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-medium text-gray-700 mb-3">Người Tham Gia</h3>
-                {formData.participants.map((participant, index) => {
-                  const selectedUser = internalAllUsers?.find(u => u.id === participant.userId);
-                  const positionName = selectedUser?.position?.name || (participant.userId ? "Chưa có/Không áp dụng" : "N/A (Chọn User)");
-                  // Vai trò NTG có thể được tự động gán từ organizerRole của user hoặc chọn thủ công
-                  const isRoleFixedByProfile = !!selectedUser?.organizerRole && selectedUser.id === participant.userId && !participant.roleId; // Chỉ fixed nếu chưa có roleId explicit
-                  const roleForDisplayOrEdit = isRoleFixedByProfile ? selectedUser.organizerRole!.id : participant.roleId;
-                  const roleNameDisplay = isRoleFixedByProfile
-                                        ? selectedUser.organizerRole!.name
-                                        : roleOptions.find(r => r.id === participant.roleId)?.name || "N/A";
-
-
-                  return (
-                    <div key={`part-${index}`} className="p-3 border rounded-md bg-gray-50 mb-3 space-y-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Họ tên NTG</label>
-                          <SearchableDropdown
-                            options={usersWithPositionOptions} // Dùng options đã lọc position cho NTG
-                            selectedValue={participant.userId}
-                            initialSearchTerm={participant.name} // Truyền tên ban đầu
-                            onChange={(selectedId) => handleMemberChange("participants", index, "userId", selectedId)}
-                            placeholder="-- Chọn User (có vị trí) --"
-                            disabledOptions={busyUserIds}
-                            isLoading={isLoadingUsers}
-                            disabled={isDataLoading}
-                          />
+                {formData.participants.map((participant, index) => (
+                     <div key={`part-${index}`} className="p-3 border rounded-md bg-gray-50 mb-3 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Họ tên NTG</label>
+                                <SearchableDropdown
+                                    options={usersWithPositionOptions}
+                                    selectedValue={participant.userId}
+                                    initialSearchTerm={participant.name}
+                                    onChange={(selectedId) => handleMemberChange("participants", index, "userId", selectedId)}
+                                    placeholder="-- Chọn User (có vị trí) --"
+                                    disabledOptions={busyUserIds}
+                                    isLoading={isLoadingUsers}
+                                    disabled={isDataLoading && !internalAllUsers.length}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Chức vụ (từ Profile)</label>
+                                <input type="text" value={participant.positionName} readOnly className="w-full p-2 border border-gray-200 bg-gray-100 rounded-md sm:text-sm"/>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Vai trò NTG (trong sự kiện)</label>
+                                <SearchableDropdown
+                                    options={roleOptions}
+                                    selectedValue={participant.roleId}
+                                    initialSearchTerm={participant.roleName}
+                                    onChange={(selectedId) => handleMemberChange("participants", index, "roleId", selectedId)}
+                                    placeholder="-- Chọn Vai trò NTG (Tùy chọn) --"
+                                    isLoading={isLoadingRoles}
+                                    disabled={(isDataLoading && !internalRoles.length) || !participant.userId }
+                                />
+                            </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Chức vụ (từ Profile)</label>
-                          <input type="text" value={positionName} readOnly className="w-full p-2 border border-gray-200 bg-gray-100 rounded-md sm:text-sm"/>
+                         <div className="flex justify-end">
+                            <button type="button" onClick={() => handleRemoveMember("participants", index)}
+                                className="bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded-md shadow-sm transition-colors">
+                                Xóa
+                            </button>
                         </div>
-                        <div>
-                           <label className="block text-xs font-medium text-gray-600 mb-0.5">Vai trò NTG (trong sự kiện)</label>
-                           {isRoleFixedByProfile && selectedUser?.organizerRole ? ( // Nếu vai trò được lấy từ profile user và user có organizerRole
-                            <input
-                              type="text"
-                              value={selectedUser.organizerRole.name} // Hiển thị tên vai trò từ profile
-                              readOnly
-                              className="w-full p-2 border border-gray-200 bg-gray-100 rounded-md sm:text-sm"
-                              title="Vai trò này được lấy từ thông tin hồ sơ của người dùng."
-                            />
-                          ) : (
-                            <SearchableDropdown
-                              options={roleOptions}
-                              selectedValue={participant.roleId} 
-                              initialSearchTerm={participant.roleName || roleOptions.find(r => r.id === participant.roleId)?.name}
-                              onChange={(selectedId) => handleMemberChange("participants", index, "roleId", selectedId)}
-                              placeholder="-- Chọn Vai trò NTG --"
-                              isLoading={isLoadingRoles}
-                              disabled={isDataLoading || !participant.userId } // Disable nếu chưa chọn user hoặc vai trò đã fixed
-                            />
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex justify-end">
-                        <button type="button" onClick={() => handleRemoveMember("participants", index)}
-                          className="bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded-md shadow-sm transition-colors">
-                          Xóa
-                        </button>
-                      </div>
                     </div>
-                  );
-                })}
+                ))}
                 <button type="button" onClick={() => handleAddMember("participants")}
                   className="mt-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-2 px-4 rounded-md shadow-sm transition-colors"
-                  disabled={isDataLoading || isLoadingUsers}>
+                  disabled={(isDataLoading && (!internalAllUsers.length || !internalRoles.length))}>
                   + Thêm NTG
                 </button>
               </div>
@@ -912,7 +854,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
                 </button>
                 <button type="submit"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400 transition-colors cursor-pointer"
-                  disabled={isSubmitting || isDataLoading}>
+                  disabled={isSubmitting || (isDataLoading && (!internalAllUsers.length || !internalRoles.length))}>
                   {isSubmitting ? "Đang cập nhật..." : "Cập Nhật Sự Kiện"}
                 </button>
               </div>

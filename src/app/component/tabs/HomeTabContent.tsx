@@ -1,9 +1,12 @@
+// HomeTabContent.tsx
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User, NewsItem, EventDisplayInfo } from "../types/appTypes";
+import { User, NewsItem, EventDisplayInfo, EventMemberInfo } from "../types/appTypes";
+import { EventDataForForm, DetailedApiUser, ApiRole } from "../types/typCreateEvent";
 import { useRouter } from "next/navigation";
 import {
   ReloadIcon,
@@ -28,11 +31,13 @@ type ConfirmationState = Omit<ConfirmationDialogProps, "onCancel"> & {
 
 type EventStatus = "upcoming" | "ongoing" | "ended";
 
-interface DetailedOrganizer {
+interface DetailedMember { // Dùng chung cho Organizer và Participant trong state của component này
   userId: string;
   fullName?: string;
   roleName?: string;
   positionName?: string;
+  roleId?: string;
+  positionId?: string;
 }
 
 const getEventStatus = (eventDateStr: string | undefined): EventStatus => {
@@ -153,7 +158,7 @@ interface HomeTabContentProps {
   refreshNewsList: () => void;
   refreshToken?: () => Promise<string | null>;
   onRefreshEvents: () => Promise<void>;
-  onOpenUpdateModal: (event: EventDisplayInfo) => void;
+  onOpenUpdateModal: (eventData: EventDataForForm) => void;
 }
 
 const HomeTabContent: React.FC<HomeTabContentProps> = ({
@@ -202,11 +207,13 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     });
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [isLoadingCreator, setIsLoadingCreator] = useState<boolean>(false);
-  const [detailedOrganizers, setDetailedOrganizers] = useState<
-    DetailedOrganizer[] | null
-  >(null);
-  const [isLoadingOrganizers, setIsLoadingOrganizers] =
-    useState<boolean>(false);
+  
+  const [detailedOrganizers, setDetailedOrganizers] = useState<DetailedMember[] | null>(null);
+  const [isLoadingOrganizers, setIsLoadingOrganizers] = useState<boolean>(false);
+  
+  const [detailedParticipants, setDetailedParticipants] = useState<DetailedMember[] | null>(null);
+  const [isLoadingParticipants, setIsLoadingParticipants] = useState<boolean>(false);
+
 
   const router = useRouter();
 
@@ -255,47 +262,43 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             const response = await fetch(
               `http://localhost:8080/identity/users/notoken/${org.userId}`
             );
-            if (!response.ok) {
-              return {
-                userId: org.userId,
-                roleName: org.roleName,
-                positionName: org.positionName,
-                fullName: `ID: ${org.userId.substring(0, 8)}...`,
-              };
-            }
-            const data = await response.json();
-            if (data.code === 1000 && data.result) {
-              const userDetail = data.result;
-              const fullName =
-                [userDetail.lastName, userDetail.firstName]
-                  .filter(Boolean)
-                  .join(" ")
-                  .trim() || userDetail.username;
-              return {
-                userId: org.userId,
-                roleName: org.roleName,
-                positionName: org.positionName,
-                fullName: fullName || `ID: ${org.userId.substring(0, 8)}...`,
-              };
+            let fullName = org.name || `ID: ${org.userId.substring(0, 8)}...`;
+            let positionName = org.positionName;
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.code === 1000 && data.result) {
+                const userDetail = data.result;
+                fullName =
+                  [userDetail.lastName, userDetail.firstName]
+                    .filter(Boolean)
+                    .join(" ")
+                    .trim() || userDetail.username || fullName;
+                positionName = userDetail.position?.name || org.positionName;
+              }
             }
             return {
               userId: org.userId,
+              roleId: org.roleId,
               roleName: org.roleName,
-              positionName: org.positionName,
-              fullName: `ID: ${org.userId.substring(0, 8)}...`,
+              positionId: org.positionId,
+              positionName: positionName,
+              fullName: fullName,
             };
           });
           const settledOrganizers = await Promise.all(organizerPromises);
-          setDetailedOrganizers(settledOrganizers as DetailedOrganizer[]);
+          setDetailedOrganizers(settledOrganizers as DetailedMember[]);
         } catch (error) {
           console.error("Lỗi tải thông tin ban tổ chức:", error);
           setDetailedOrganizers(
             organizersToFetch.map((org) => ({
               userId: org.userId,
-              roleName: org.roleName,
-              positionName: org.positionName,
+              roleId: org.roleId,
+              roleName: org.roleName || "N/A",
+              positionId: org.positionId,
+              positionName: org.positionName || "N/A",
               fullName: "Lỗi tải tên",
-            })) as DetailedOrganizer[]
+            })) as DetailedMember[]
           );
         } finally {
           setIsLoadingOrganizers(false);
@@ -305,6 +308,70 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     } else {
       setDetailedOrganizers(null);
       setIsLoadingOrganizers(false);
+    }
+  }, [selectedEvent]);
+
+  useEffect(() => {
+    if (
+      selectedEvent &&
+      selectedEvent.participants &&
+      selectedEvent.participants.length > 0
+    ) {
+      const participantsToFetch = selectedEvent.participants;
+      const fetchParticipantDetails = async () => {
+        setIsLoadingParticipants(true);
+        setDetailedParticipants(null);
+        try {
+          const participantPromises = participantsToFetch.map(async (par) => {
+            const response = await fetch(
+              `http://localhost:8080/identity/users/notoken/${par.userId}`
+            );
+            let fullName = par.name || `ID: ${par.userId.substring(0, 8)}...`;
+            let positionName = par.positionName;
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.code === 1000 && data.result) {
+                const userDetail = data.result;
+                fullName =
+                  [userDetail.lastName, userDetail.firstName]
+                    .filter(Boolean)
+                    .join(" ")
+                    .trim() || userDetail.username || fullName;
+                positionName = userDetail.position?.name || par.positionName;
+              }
+            }
+            return {
+              userId: par.userId,
+              roleId: par.roleId,
+              roleName: par.roleName,
+              positionId: par.positionId,
+              positionName: positionName,
+              fullName: fullName,
+            };
+          });
+          const settledParticipants = await Promise.all(participantPromises);
+          setDetailedParticipants(settledParticipants as DetailedMember[]);
+        } catch (error) {
+          console.error("Lỗi tải thông tin người tham dự:", error);
+          setDetailedParticipants(
+            participantsToFetch.map((par) => ({
+              userId: par.userId,
+              roleId: par.roleId,
+              roleName: par.roleName || "N/A",
+              positionId: par.positionId,
+              positionName: par.positionName || "N/A",
+              fullName: "Lỗi tải tên",
+            })) as DetailedMember[]
+          );
+        } finally {
+          setIsLoadingParticipants(false);
+        }
+      };
+      fetchParticipantDetails();
+    } else {
+      setDetailedParticipants(null);
+      setIsLoadingParticipants(false);
     }
   }, [selectedEvent]);
 
@@ -477,8 +544,111 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       toast.error("Không thể làm mới.");
     }
   };
-  const handleEditEvent = (event: EventDisplayInfo) => {
-    onOpenUpdateModal(event);
+
+  const prepareEventDataForModal = async (eventToEdit: EventDisplayInfo): Promise<EventDataForForm | null> => {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast.error("Yêu cầu đăng nhập để sửa sự kiện.");
+      return null;
+    }
+
+    const loadingToastId = toast.loading("Đang chuẩn bị dữ liệu sửa...");
+
+    let tempAllUsers: DetailedApiUser[] = [];
+    let tempEventRoles: ApiRole[] = [];
+
+    try {
+      const usersRes = await fetch(`http://localhost:8080/identity/users`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!usersRes.ok) {
+        const errData = await usersRes.json().catch(() => ({}));
+        throw new Error(errData.message || `Lỗi tải người dùng (${usersRes.status})`);
+      }
+      const usersData = await usersRes.json();
+      if (usersData.code === 1000 && Array.isArray(usersData.result)) {
+        tempAllUsers = usersData.result;
+      } else {
+        throw new Error(usersData.message || "Lỗi xử lý dữ liệu người dùng.");
+      }
+
+      const rolesRes = await fetch(`http://localhost:8080/identity/api/organizerrole`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!rolesRes.ok) {
+         const errData = await rolesRes.json().catch(() => ({}));
+        throw new Error(errData.message || `Lỗi tải vai trò sự kiện (${rolesRes.status})`);
+      }
+      const rolesData = await rolesRes.json();
+      if (rolesData.code === 1000 && Array.isArray(rolesData.result)) {
+        tempEventRoles = rolesData.result;
+      } else {
+        throw new Error(rolesData.message || "Lỗi xử lý dữ liệu vai trò sự kiện.");
+      }
+
+      const mapMemberToInput = (member: EventMemberInfo) => {
+        const userDetail = tempAllUsers.find(u => u.id === member.userId);
+        const roleDetail = tempEventRoles.find(r => r.id === member.roleId);
+
+        return {
+          userId: member.userId,
+          roleId: member.roleId,
+          positionId: userDetail?.position?.id || member.positionId || "",
+          name: member.name || (userDetail ? `${userDetail.lastName || ""} ${userDetail.firstName || ""}`.trim() || userDetail.username : `ID: ${member.userId}`),
+          roleName: member.roleName || roleDetail?.name || "",
+          positionName: member.positionName || userDetail?.position?.name || "",
+        };
+      };
+      
+      let formattedTime = eventToEdit.date;
+        if (eventToEdit.time) {
+            try {
+                const d = new Date(eventToEdit.time);
+                if (!isNaN(d.getTime())) {
+                     formattedTime = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}-${d.getDate().toString().padStart(2, "0")}T${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+                } else {
+                    const dateOnly = new Date(eventToEdit.date);
+                     formattedTime = `${dateOnly.getFullYear()}-${(dateOnly.getMonth() + 1).toString().padStart(2, "0")}-${dateOnly.getDate().toString().padStart(2, "0")}T00:00`;
+                }
+            } catch (e) {
+                 const dateOnly = new Date(eventToEdit.date);
+                 formattedTime = `${dateOnly.getFullYear()}-${(dateOnly.getMonth() + 1).toString().padStart(2, "0")}-${dateOnly.getDate().toString().padStart(2, "0")}T00:00`;
+            }
+        } else {
+            const dateOnly = new Date(eventToEdit.date);
+            formattedTime = `${dateOnly.getFullYear()}-${(dateOnly.getMonth() + 1).toString().padStart(2, "0")}-${dateOnly.getDate().toString().padStart(2, "0")}T00:00`;
+        }
+
+      const eventDataForModal: EventDataForForm = {
+        id: eventToEdit.id,
+        name: eventToEdit.title,
+        purpose: eventToEdit.purpose || "",
+        time: formattedTime,
+        location: eventToEdit.location || "",
+        content: eventToEdit.content || eventToEdit.description || "",
+        maxAttendees: eventToEdit.maxAttendees === null || eventToEdit.maxAttendees === undefined ? "" : eventToEdit.maxAttendees,
+        avatarUrl: eventToEdit.avatarUrl || null,
+        status: eventToEdit.status || "PENDING",
+        organizers: eventToEdit.organizers?.map(org => mapMemberToInput(org as EventMemberInfo)) || [],
+        participants: eventToEdit.participants?.map(par => mapMemberToInput(par as EventMemberInfo)) || [],
+      };
+      
+      toast.dismiss(loadingToastId);
+      return eventDataForModal;
+
+    } catch (error: any) {
+      toast.dismiss(loadingToastId);
+      toast.error(`Không thể chuẩn bị dữ liệu: ${error.message}`);
+      console.error("Lỗi khi chuẩn bị dữ liệu sửa sự kiện:", error);
+      return null;
+    }
+  };
+
+  const handleEditEvent = async (eventToEdit: EventDisplayInfo) => {
+    const eventData = await prepareEventDataForModal(eventToEdit);
+    if (eventData) {
+      onOpenUpdateModal(eventData);
+    }
   };
 
   const handleDeleteEvent = (event: EventDisplayInfo) => {
@@ -755,10 +925,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           >
             <ChevronLeftIcon className="h-7 w-7 " /> Quay lại
           </button>
-          {/* Console logs for debugging selectedEvent data */}
-          {/* {console.log("Selected Event Data DEBUG:", selectedEvent)}
-          {console.log("Max Attendees Value DEBUG:", selectedEvent.maxAttendees)}
-          {console.log("Type of Max Attendees DEBUG:", typeof selectedEvent.maxAttendees)} */}
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
               {selectedEvent.avatarUrl ? (
@@ -862,7 +1028,27 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                       ))}
                     </ul>
                   ) : (
-                    <p className="italic">Chưa có thông tin.</p>
+                    <p className="italic">Chưa có thông tin ban tổ chức.</p>
+                  )}
+                </div>
+                <div>
+                  <strong className="font-medium mb-1 block">
+                    🧑‍🤝‍🧑 Người tham dự:
+                  </strong>
+                  {isLoadingParticipants ? (
+                    <p className="italic">Đang tải...</p>
+                  ) : detailedParticipants && detailedParticipants.length > 0 ? (
+                    <ul className="list-disc list-inside pl-5 space-y-1">
+                      {detailedParticipants.map((par, index) => (
+                        <li key={`par-detail-${par.userId}-${index}`}>
+                          {[par.fullName, par.positionName, par.roleName]
+                            .filter(Boolean)
+                            .join(" - ") || `Người tham dự ${index + 1}`}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="italic">Chưa có thông tin người tham dự.</p>
                   )}
                 </div>
                 <div>
@@ -871,9 +1057,11 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   </strong>
                   <p className="text-sm text-gray-700">
                     {selectedEvent.attendees?.length || 0}
-                    {typeof selectedEvent.maxAttendees === 'number'
+                    {typeof selectedEvent.maxAttendees === 'number' && selectedEvent.maxAttendees > 0
                       ? ` / ${selectedEvent.maxAttendees} người`
-                      : " người (Không giới hạn)"}
+                      : selectedEvent.maxAttendees === 0 || selectedEvent.maxAttendees === null || selectedEvent.maxAttendees === undefined
+                      ? " người (Không giới hạn)"
+                      :  ` / ${selectedEvent.maxAttendees} người`}
                   </p>
                 </div>
               </div>
@@ -1052,13 +1240,15 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           </p>
                         </div>
                         <div className="text-xs text-gray-600 mt-1">
-                           <span>
-                             ✅ Đã đăng ký: {event.attendees?.length || 0}
-                             {typeof event.maxAttendees === 'number'
-                               ? ` / ${event.maxAttendees}`
-                               : " (Không giới hạn)"}
-                           </span>
-                         </div>
+                            <span>
+                              ✅ Đã đăng ký: {event.attendees?.length || 0}
+                              {typeof event.maxAttendees === 'number' && event.maxAttendees > 0
+                                ? ` / ${event.maxAttendees}`
+                                : event.maxAttendees === 0 || event.maxAttendees === null || event.maxAttendees === undefined
+                                ? " (Không giới hạn)"
+                                : ` / ${event.maxAttendees}`}
+                            </span>
+                          </div>
                         <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
                           {isCreatedByUser ? (
                             <div className="w-full px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium text-center">
@@ -1220,9 +1410,11 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               </span>
                               <span className="text-xs text-gray-500">
                                 (ĐK: {event.attendees?.length || 0}
-                                {typeof event.maxAttendees === 'number'
+                                {typeof event.maxAttendees === 'number' && event.maxAttendees > 0
                                   ? `/${event.maxAttendees}`
-                                  : ""})
+                                  : event.maxAttendees === 0 || event.maxAttendees === null || event.maxAttendees === undefined
+                                  ? "" 
+                                  : `/${event.maxAttendees}`})
                               </span>
                             </div>
                           </div>

@@ -1,15 +1,13 @@
-// src/app/types/appTypes.ts
+// src/app/types/typCreateEvent.ts
 
-// User type used by the application, potentially from authentication context
 export type User = {
   id: string;
   username?: string | null;
   email?: string | null;
-  // Add other properties your MainUserType might have
-  role?: string; // Example: 'ADMIN', 'USER'
+  role?: string; 
 };
 
-export interface UserRoleDetail { // Hoặc một tên phù hợp khác
+export interface UserRoleDetail { 
   name: string;
   description?: string;
 
@@ -20,71 +18,70 @@ export type ApiUser = {
   lastName: string | null;
   username: string | null;
   email?: string;
-  role?: string; // User's general role in the system
-  position?: { id: string; name: string } | null; // User's position in a club/org
-  organizerRole?: { id: string; name: string } | null; // User's predefined role for event organization (from profile)
+  role?: string;
+  position?: { id: string; name: string } | null; 
+  organizerRole?: { id: string; name: string } | null; 
  
   dob?: string;
   avatar?: string;
   gender?: boolean;
 };
 
-// Role for event organization or participation
+
 export type ApiRole = {
   id: string;
   name: string;
   description?: string;
 };
 
-// Position of a user in an organization/club
+
 export type ApiPosition = {
   id: string;
   name: string;
   description?: string;
 };
 
-// Member of an event (organizer or participant)
 export type EventMember = {
   userId: string;
   roleId?: string;
          
-  positionId?: string;   // User's Position ID at the time of adding
-  roleName?: string;     // Event-specific Role Name
-  positionName?: string; // User's Position Name
+  positionId?: string;  
+  roleName?: string;     
+  positionName?: string; 
 };
 
-// Main Event type
+
 export type Event = {
   id: string;
   name: string;
   purpose: string;
-  time: string; // Should be ISO string or Date object, handle appropriately
+  time: string; 
   location: string;
   content: string;
-  createdBy?: string; // User ID of the creator
+  createdBy?: string;
   organizers: EventMember[];
   participants: EventMember[];
   status?: "PENDING" | "APPROVED" | "REJECTED";
-  image?: string; // URL or path to a general event image
-  avatarUrl?: string | null; // URL to event's specific avatar/poster
-  attendees?: any[]; // Consider a more specific type if structure is known
+  image?: string;
+  avatarUrl?: string | null; 
+  attendees?: any[];
   rejectionReason?: string | null;
-  createdAt?: string; // Should be ISO string or Date
+  createdAt?: string; 
   deleted?: boolean;
-  deletedAt?: string | null; // Should be ISO string or Date
-  deletedBy?: string | null; // User ID
+  deletedAt?: string | null; 
+  deletedBy?: string | null; 
   progressStatus?: string;
   qrCodeUrl?: string | null;
   maxAttendees?: number | null;
 };
 
-// Types for data structures passed between components or to/from API for specific sections
+
 export type OrganizerData = { userId: string; roleId: string; positionId: string };
 export type ParticipantData = { userId: string; roleId: string; positionId: string };
 
 
 
-// User chi tiết, bao gồm cả position
+
 export interface DetailedApiUser extends User {
   firstName?: string | null;
   lastName?: string | null;
@@ -123,9 +120,8 @@ export interface EventDataForForm {
   content: string;
   organizers: OrganizerInput[];
   participants: ParticipantInput[];
-  maxAttendees: number | null ; 
   status?: "PENDING" | "APPROVED" | "REJECTED"; 
-  createdBy?: string;
-  
+  createdBy?: string; 
   avatarUrl?: string | null;
+   maxAttendees: number | null ; 
 }

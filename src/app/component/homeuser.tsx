@@ -1,3 +1,5 @@
+//UserHome.tsx
+
 "use client";
 
 import React, {
@@ -31,7 +33,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@radix-ui/react-icons";
-import { User, EventDisplayInfo, NewsItem } from "./types/appTypes";
+import { User, EventDisplayInfo, NewsItem } from "./types/homeType";
 import {
   ChatMessageNotificationPayload,
   MainConversationType,
@@ -2126,12 +2128,12 @@ export default function UserHome() {
                 timeFilterOption={timeFilterOption}
                 setTimeFilterOption={setTimeFilterOption}
                 refreshToken={refreshToken}
-                onRefreshEvents={fetchAllEvents}
+                onRefreshEvents={fetchAllEvents} // Hoặc handleGlobalEventRefresh nếu logic giống nhau
                 newsItems={newsItems}
                 isLoadingNews={isLoadingNews}
                 errorNews={errorNews}
                 refreshNewsList={refreshNewsList}
-                onOpenUpdateModal={openModalForEventUpdate}
+                onOpenUpdateModal={openModalForEventUpdate} // Truyền hàm này
               />
             )}{" "}
             {activeTab === "news" && (

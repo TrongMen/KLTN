@@ -904,7 +904,7 @@ export default function Dashboard() {
                         )}
                         {event.attendees?.length > 0 && (
                           <span className="inline-flex items-center gap-1">
-                            ✅ {event.attendees.length} ĐK
+                            ✅ {event.attendees.length} Đăng ký
                           </span>
                         )}
                       </div>
@@ -1015,8 +1015,8 @@ export default function Dashboard() {
                 )}
                 {newsItem.createdBy && (
                   <p className="text-xs text-gray-500">
-                    ✍️ {newsItem.createdBy.firstName}{" "}
-                    {newsItem.createdBy.lastName}
+                    ✍️ {newsItem.createdBy.lastName}{" "}
+                    {newsItem.createdBy.firstName}
                   </p>
                 )}
               </div>

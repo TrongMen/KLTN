@@ -17,6 +17,16 @@ export interface User {
   email?: string;
   gender?: boolean;
 }
+export interface EventMemberInfo { // Dùng chung cho organizer và participant trong EventDisplayInfo
+  userId: string;
+  roleId: string;       // ID của vai trò trong sự kiện
+  positionId?: string;
+  
+  name?: string;       
+  roleName?: string;   
+  positionName?: string; 
+}
+
 
 export interface EventDisplayInfo {
   id: string;
@@ -34,8 +44,8 @@ export interface EventDisplayInfo {
   createdAt?: string;
   status: "APPROVED" | "PENDING" | "REJECTED" | string;
   createdBy?: string;
-  organizers?: OrganizerInfo[];
-  participants?: ParticipantInfo[];
+  organizers?: EventMemberInfo[];
+  participants?: EventMemberInfo[];
   attendees?: {
     userId: string;
     fullName?: string;
@@ -46,6 +56,7 @@ export interface EventDisplayInfo {
   maxAttendees?: number | null;
   currentAttendeesCount?: number;
 }
+
 
 export interface EventDisplayInfoGuest {
   id: string;
@@ -72,7 +83,7 @@ export interface EventDisplayInfoGuest {
     checkedInAt?: string | null;
     attending?: boolean;
   }[];
-  maxAttendees?: number | null ;
+  maxAttendees?: number | null;
   currentAttendeesCount?: number;
 }
 
@@ -96,6 +107,8 @@ export interface NewsItem {
   event?: { id: string; name?: string } | null;
   coverImageUrl?: string;
   rejectionReason?: string | null;
+  maxAttendees?: number|null ;
+  
 }
 
 export interface Participant {
@@ -113,24 +126,6 @@ export interface Conversation {
 }
 
 
-export interface EventInfo {
-  id: string;
-  name: string;
-  time?: string;
-  location?: string;
-  description?: string;
-  content?: string;
-  status?: string;
-  purpose?: string;
-  createdBy?: string;
-  createdAt?: string;
-  attendees?: any[];
-  organizers?: any[];
-  participants?: any[];
-  permissions?: string[];
-  rejectionReason?: string | null;
-  avatarUrl?: string | null;
-}
 
 export interface Attendee {
   id?: string;
@@ -198,4 +193,5 @@ export interface PersonDetail {
   profileRoleName?: string;     
   eventSpecificRoleName?: string;
   eventSpecificPositionName?: string;
+  maxAttendees?: number | null;
 }

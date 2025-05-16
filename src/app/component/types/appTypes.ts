@@ -19,30 +19,30 @@ export interface User {
 }
 export type EventMember = {
   userId: string;
-  roleId?: string;       // Event-specific Role ID (e.g., Organizer Role ID, Participant Role ID)
-  positionId?: string;   // User's Position ID at the time of adding
-  roleName?: string;     // Event-specific Role Name
-  positionName?: string; // User's Position Name
+  roleId?: string;       
+  positionId?: string;   
+  roleName?: string;    
+  positionName?: string; 
 };
 export type Event = {
   id: string;
   name: string;
   purpose: string;
-  time: string; // Should be ISO string or Date object, handle appropriately
+  time: string;
   location: string;
   content: string;
-  createdBy?: string; // User ID of the creator
+  createdBy?: string;
   organizers: EventMember[];
   participants: EventMember[];
   status?: "PENDING" | "APPROVED" | "REJECTED";
-  image?: string; // URL or path to a general event image
-  avatarUrl?: string | null; // URL to event's specific avatar/poster
-  attendees?: any[]; // Consider a more specific type if structure is known
+  image?: string; 
+  avatarUrl?: string | null;
+  attendees?: any[]; 
   rejectionReason?: string | null;
-  createdAt?: string; // Should be ISO string or Date
+  createdAt?: string; 
   deleted?: boolean;
-  deletedAt?: string | null; // Should be ISO string or Date
-  deletedBy?: string | null; // User ID
+  deletedAt?: string | null; 
+  deletedBy?: string | null; 
   progressStatus?: string;
   qrCodeUrl?: string | null;
   maxAttendees?: number | null;

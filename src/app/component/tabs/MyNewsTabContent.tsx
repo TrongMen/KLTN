@@ -1466,8 +1466,8 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
                       backgroundSize: "1.5em 1.5em",
                     }}
                   >
-                    <option value="newest">Ngày tạo mới nhất</option>
-                    <option value="oldest">Ngày tạo cũ nhất</option>
+                    <option value="newest"> Mới nhất</option>
+                    <option value="oldest"> Cũ nhất</option>
                     <option value="az"> A - Z</option>
                     <option value="za"> Z - A</option>
                   </select>

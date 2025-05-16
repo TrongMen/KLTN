@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from "react";
 import Image from "next/image";
-import { User as MainUserType } from "../../types/appTypes"; // Điều chỉnh đường dẫn nếu cần
+import { User as MainUserType } from "../../types/appTypes";
 import {
   CheckIcon,
   Cross2Icon,
@@ -23,37 +23,34 @@ import {
 } from "@radix-ui/react-icons";
 import { toast } from "react-hot-toast";
 
-// Định nghĩa các kiểu dữ liệu cần thiết ngay trong file hoặc import từ một file chung
-interface RoleInfo { // Có thể dùng ApiRole từ typCreateEvent nếu giống hệt
+interface RoleInfo {
   id: string;
   name: string;
 }
 interface OrganizerInfo {
   userId: string;
-  roleName?: string; // Tên vai trò trong sự kiện
-  roleId?: string;   // ID vai trò trong sự kiện
+  roleName?: string;
+  roleId?: string;
   positionName?: string;
   firstName?: string;
   lastName?: string;
-  fullName?: string; // Sẽ được enrich
-  // Thêm các trường khác từ API nếu cần
+  fullName?: string;
 }
 
-// Kiểu EventType này nên đồng bộ với những gì API trả về và những gì ModalUpdateEvent cần (sau khi mapping)
-export interface EventType { // Đảm bảo kiểu này nhất quán
+export interface EventType {
   id: string;
   name: string;
   time?: string;
   location?: string;
   content?: string;
-  description?: string; // Giữ lại nếu có
+  description?: string;
   status: "APPROVED" | "PENDING" | "REJECTED" | string | undefined;
   rejectionReason?: string | null;
   purpose?: string;
-  createdBy?: string; // Hoặc một object chi tiết hơn nếu API trả về
+  createdBy?: string;
   createdAt?: string;
-  organizers?: OrganizerInfo[]; // Quan trọng: Sẽ được enrich với tên
-  participants?: OrganizerInfo[]; // Tương tự, nếu có participants ở đây và cần enrich
+  organizers?: OrganizerInfo[];
+  participants?: OrganizerInfo[];
   attendees?: any[];
   permissions?: string[];
   deleted?: boolean;
@@ -68,17 +65,16 @@ export interface EventType { // Đảm bảo kiểu này nhất quán
   avatarUrl?: string | null;
   qrCodeUrl?: string | null;
   progressStatus?: string;
-  title?: string; // Có thể gộp với name
-  date?: string;  // Có thể gộp với time
+  title?: string;
+  date?: string;
   maxAttendees?: number | null;
   currentAttendeesCount?: number;
 }
 
-// Các hàm tiện ích cho việc lọc thời gian
 const getWeekRange = (refDate: Date): { startOfWeek: Date; endOfWeek: Date } => {
   const d = new Date(refDate);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday is the first day of the week
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   const start = new Date(d.setDate(diff));
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
@@ -91,40 +87,38 @@ const getMonthRange = (refDate: Date): { startOfMonth: Date; endOfMonth: Date } 
   const d = new Date(refDate);
   const start = new Date(d.getFullYear(), d.getMonth(), 1);
   start.setHours(0, 0, 0, 0);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0); // Day 0 of next month is last day of current month
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
   end.setHours(23, 59, 59, 999);
   return { startOfMonth: start, endOfMonth: end };
 };
 
+type MyEventTemporalFilterOption = "all" | "upcoming" | "ongoing" | "ended" | "dateRange";
 
 interface MyCreatedEventsTabProps {
   user: MainUserType | null;
-  currentUserId: string | null; // Thường là user.id
-  myEvents: EventType[]; // Danh sách sự kiện chưa được enrich từ component cha
-  deletedEvents: EventType[]; // Danh sách sự kiện đã xóa chưa được enrich
+  currentUserId: string | null;
+  myEvents: EventType[];
+  deletedEvents: EventType[];
   myLoading: boolean;
   deletedLoading: boolean;
   myError: string;
   deletedError: string;
-  // fetchMyEvents: () => Promise<void>; // Không cần fetch ở đây nếu cha đã fetch
-  // fetchDeletedEvents: () => Promise<void>; // Tương tự
-  viewingEventDetails: EventType | null; // Thường sẽ được quản lý ở component cha (MyEventsTabContent)
+  viewingEventDetails: EventType | null;
   setViewingEventDetails: (event: EventType | null) => void;
-  onOpenUpdateModal: (event: EventType) => void; // EventType này cần được enrich trước khi gọi
+  onOpenUpdateModal: (event: EventType) => void;
   onDeleteClick: (event: EventType) => void;
   onRestoreClick: (event: EventType) => void;
-  onExportClick: (eventId: string) => void; // Thêm prop này nếu cần
+  onExportClick: (eventId: string) => void;
   isRefreshing: boolean;
   restoringEventId: string | null;
   deletingEventId: string | null;
-  isExporting: boolean; // Thêm prop này nếu cần
-  handleRefresh: () => Promise<void>; // Hàm refresh từ cha
-  fetchOrganizerDetailsById: (userId: string) => Promise<Partial<OrganizerInfo> | null>; // Hàm lấy chi tiết BTC
+  isExporting: boolean;
+  handleRefresh: () => Promise<void>;
+  fetchOrganizerDetailsById: (userId: string) => Promise<Partial<OrganizerInfo> | null>;
 }
 
 const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   user,
-  // currentUserId, // Không dùng trực tiếp, user.id đã đủ
   myEvents: initialMyEvents,
   deletedEvents: initialDeletedEvents,
   myLoading,
@@ -138,14 +132,14 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   isRefreshing,
   restoringEventId,
   deletingEventId,
-  isExporting, // Nhận prop
-  handleRefresh, // Nhận prop
-  fetchOrganizerDetailsById, // Nhận prop
+  isExporting,
+  handleRefresh,
+  fetchOrganizerDetailsById,
 }) => {
   const [myTab, setMyTab] = useState<"approved" | "pending" | "rejected" | "deleted">("approved");
   const [mySearchTerm, setMySearchTerm] = useState("");
-  const [mySortOrder, setMySortOrder] = useState<"az" | "za">("az"); // 'az' for A-Z, 'za' for Z-A
-  const [myTimeFilterOption, setMyTimeFilterOption] = useState<"all" | "today" | "thisWeek" | "thisMonth" | "dateRange">("all");
+  const [mySortOrder, setMySortOrder] = useState<"az" | "za">("az");
+  const [myTimeFilterOption, setMyTimeFilterOption] = useState<MyEventTemporalFilterOption>("all");
   const [myStartDateFilter, setMyStartDateFilter] = useState<string>("");
   const [myEndDateFilter, setMyEndDateFilter] = useState<string>("");
   const [myViewMode, setMyViewMode] = useState<"list" | "card">("list");
@@ -174,7 +168,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
 
           if (event.organizers && event.organizers.length > 0) {
             for (let i = 0; i < newOrganizers.length; i++) {
-              let org = { ...newOrganizers[i] }; // Tạo bản sao để không thay đổi trực tiếp state
+              let org = { ...newOrganizers[i] };
               if (org.userId && (!org.fullName && (!org.firstName || !org.lastName))) {
                 let details: Partial<OrganizerInfo> | null = null;
                 if (organizerDetailsCacheRef.current[org.userId]) {
@@ -191,9 +185,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   org.lastName = details.lastName || org.lastName;
                   org.fullName = details.fullName || `${details.lastName || ""} ${details.firstName || ""}`.trim() || org.fullName;
                   org.positionName = details.positionName || org.positionName;
-                  // Giữ lại roleName và roleId nếu đã có từ API sự kiện
-                  org.roleName = org.roleName || details.roleName; 
-                  // org.roleId = org.roleId; // không cần gán lại nếu đã có
+                  org.roleName = org.roleName || details.roleName;
                   newOrganizers[i] = org;
                   needsUpdate = true;
                 }
@@ -220,62 +212,69 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   }, [initialMyEvents, enrichEventsWithFullNames]);
 
   useEffect(() => {
-    // Chỉ enrich deletedEvents khi tab 'deleted' được chọn và có dữ liệu
     if (myTab === "deleted" && initialDeletedEvents.length > 0) {
-       enrichEventsWithFullNames(initialDeletedEvents)
+        enrichEventsWithFullNames(initialDeletedEvents)
         .then(setEnrichedDeletedEvents)
         .catch(error => console.error("Error enriching deleted events:", error));
-    } else if (myTab !== "deleted" && enrichedDeletedEvents.length > 0) {
-      // Nếu chuyển khỏi tab deleted, có thể cân nhắc xóa enrichedDeletedEvents để tiết kiệm bộ nhớ
-      // setEnrichedDeletedEvents([]);
     }
   }, [initialDeletedEvents, myTab, enrichEventsWithFullNames]);
 
 
   const processedMyEvents = useMemo(() => {
-    let eventsToProcess = [...enrichedMyEvents]; // Luôn làm việc trên bản sao đã enrich
+    let eventsToProcess = [...enrichedMyEvents];
     
     eventsToProcess = eventsToProcess.filter((event) => {
       const s = event.status?.toUpperCase();
       if (myTab === "approved") return s === "APPROVED";
       if (myTab === "pending") return s === "PENDING";
       if (myTab === "rejected") return s === "REJECTED";
-      // Tab "deleted" sẽ dùng processedDeletedEvents
-      return false; 
+      return false;
     });
 
     if (myTimeFilterOption !== "all") {
-      const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-      const todayEnd = new Date(); todayEnd.setHours(23,59,59,999);
+        const now = new Date();
+        const todayDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      eventsToProcess = eventsToProcess.filter(event => {
-        const dateStrToUse = event.time || event.createdAt || event.date;
-        if (!dateStrToUse) return false;
-        try {
-          const eventDate = new Date(dateStrToUse);
-          if(isNaN(eventDate.getTime())) return false;
+        eventsToProcess = eventsToProcess.filter(event => {
+            const dateStrToUse = event.time || event.date;
 
-          switch(myTimeFilterOption) {
-            case "today":
-              return eventDate >= todayStart && eventDate <= todayEnd;
-            case "thisWeek":
-              const { startOfWeek, endOfWeek } = getWeekRange(new Date());
-              return eventDate >= startOfWeek && eventDate <= endOfWeek;
-            case "thisMonth":
-              const { startOfMonth, endOfMonth } = getMonthRange(new Date());
-              return eventDate >= startOfMonth && eventDate <= endOfMonth;
-            case "dateRange":
-              if (!myStartDateFilter || !myEndDateFilter) return true; // Hoặc false nếu muốn bắt buộc chọn khoảng
-              const start = new Date(myStartDateFilter); start.setHours(0,0,0,0);
-              const end = new Date(myEndDateFilter); end.setHours(23,59,59,999);
-              return !isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end && eventDate >= start && eventDate <= end;
-            default: return true;
-          }
-        } catch (e) {
-          console.error("Error parsing date (My Events):", dateStrToUse, e);
-          return false;
-        }
-      });
+            if (myTimeFilterOption === "dateRange") {
+                if (!myStartDateFilter || !myEndDateFilter) return true;
+                if (!dateStrToUse) return false;
+                try {
+                    const eventDate = new Date(dateStrToUse);
+                    if (isNaN(eventDate.getTime())) return false;
+                    const startFilter = new Date(myStartDateFilter); startFilter.setHours(0,0,0,0);
+                    const endFilter = new Date(myEndDateFilter); endFilter.setHours(23,59,59,999);
+                    return !isNaN(startFilter.getTime()) && !isNaN(endFilter.getTime()) && startFilter <= endFilter &&
+                           eventDate >= startFilter && eventDate <= endFilter;
+                } catch (e) {
+                    console.error("Error parsing date for dateRange (My Events):", dateStrToUse, e);
+                    return false;
+                }
+            } else {
+                if (!dateStrToUse) return false;
+                try {
+                    const eventDate = new Date(dateStrToUse);
+                    if (isNaN(eventDate.getTime())) return false;
+                    const eventDayStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+
+                    switch (myTimeFilterOption) {
+                        case "upcoming":
+                            return eventDayStart > todayDayStart;
+                        case "ongoing":
+                            return eventDayStart.getTime() === todayDayStart.getTime();
+                        case "ended":
+                            return eventDayStart < todayDayStart;
+                        default:
+                            return true;
+                    }
+                } catch (e) {
+                    console.error("Error parsing event date for temporal status (My Events):", dateStrToUse, e);
+                    return false;
+                }
+            }
+        });
     }
 
     if (mySearchTerm.trim()) {
@@ -299,19 +298,19 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
 
   const processedDeletedEvents = useMemo(() => {
     if (myTab !== "deleted") return [];
-    let eventsToProcess = [...enrichedDeletedEvents]; // Làm việc trên bản sao đã enrich
+    let eventsToProcess = [...enrichedDeletedEvents];
 
     if (deletedTimeFilterOption !== "all") {
         const todayStart = new Date(); todayStart.setHours(0,0,0,0);
         const todayEnd = new Date(); todayEnd.setHours(23,59,59,999);
-  
+    
         eventsToProcess = eventsToProcess.filter(event => {
-          const dateStrToUse = event.deletedAt || event.time || event.createdAt || event.date; // Ưu tiên deletedAt
+          const dateStrToUse = event.deletedAt || event.time || event.createdAt || event.date;
           if (!dateStrToUse) return false;
           try {
             const eventDate = new Date(dateStrToUse);
             if(isNaN(eventDate.getTime())) return false;
-  
+    
             switch(deletedTimeFilterOption) {
               case "today":
                 return eventDate >= todayStart && eventDate <= todayEnd;
@@ -358,7 +357,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   const handleMyStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMyStartDateFilter(e.target.value);
     if (myEndDateFilter && new Date(e.target.value) > new Date(myEndDateFilter)) {
-      setMyEndDateFilter(""); // Reset end date if start date is after it
+      setMyEndDateFilter("");
     }
   };
   const handleMyEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -385,8 +384,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   };
   
   const handleEditClick = (event: EventType) => {
-    if (deletingEventId || restoringEventId) return; // Không cho sửa nếu đang xóa/khôi phục
-    // Event đã được enrich, gọi onOpenUpdateModal
+    if (deletingEventId || restoringEventId) return;
     onOpenUpdateModal(event);
   };
 
@@ -433,7 +431,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                 className={`bg-white shadow rounded-lg flex flex-col border border-gray-200 transition-shadow duration-150 overflow-hidden ${
                   isProcessing ? "opacity-50 cursor-wait" : "hover:shadow-md cursor-pointer"
                 } ${currentTabType === "deleted" ? "border-l-4 border-gray-300" : ""}`}
-                onClick={() => !isProcessing && setViewingEventDetails(event)} // Xem chi tiết
+                onClick={() => !isProcessing && setViewingEventDetails(event)}
               >
                 {event.avatarUrl ? (
                   <div className="w-full h-36 bg-gray-200 relative">
@@ -455,7 +453,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                       <p className="text-xs text-gray-500 mb-0.5 flex items-center gap-1">
                         <CalendarIcon className="w-3 h-3 opacity-70" />
                         {event.time ? new Date(event.time).toLocaleString('vi-VN', {dateStyle: 'short', timeStyle: 'short'})
-                                    : `(Tạo) ${new Date(event.createdAt || event.date!).toLocaleString('vi-VN', {dateStyle: 'short', timeStyle: 'short'})}`}
+                                      : `(Tạo) ${new Date(event.createdAt || event.date!).toLocaleString('vi-VN', {dateStyle: 'short', timeStyle: 'short'})}`}
                       </p>
                     )}
                     {event.deletedAt && (
@@ -470,7 +468,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                       <span className="font-medium">Lý do:</span> {event.rejectionReason}
                     </p>
                   )}
-                   {currentTabType === "deleted" && event.deletedBy && (
+                  {currentTabType === "deleted" && event.deletedBy && (
                     <div className="text-xs text-gray-500 mt-2 pt-1 border-t border-dashed border-gray-200 flex items-center gap-1.5">
                         <span className="font-medium">Bởi:</span>
                         {event.deletedBy.avatar && <img src={event.deletedBy.avatar} alt="Avatar" className="w-4 h-4 rounded-full"/>}
@@ -503,13 +501,13 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
             );
           })}
         </div>
-      ) : ( // List view
+      ) : (
         <ul className="space-y-3">
           {eventsToDisplay.map((event) => {
-             const isRestoringThis = restoringEventId === event.id;
-             const isDeletingThis = deletingEventId === event.id;
-             const isProcessing = isRestoringThis || isDeletingThis;
-             const eventName = event.name || event.title || "Sự kiện không tên";
+              const isRestoringThis = restoringEventId === event.id;
+              const isDeletingThis = deletingEventId === event.id;
+              const isProcessing = isRestoringThis || isDeletingThis;
+              const eventName = event.name || event.title || "Sự kiện không tên";
             return (
               <li key={event.id}
                 className={`bg-white shadow-lg rounded-xl overflow-hidden transition transform hover:scale-[1.01] hover:shadow-xl flex flex-col md:flex-row border border-gray-200 ${
@@ -533,7 +531,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                             {(event.time || event.createdAt || event.date) && !event.deletedAt && (
                                 <p className="flex items-center gap-1"><CalendarIcon className="w-3 h-3 opacity-70" />
                                 {event.time ? new Date(event.time).toLocaleString('vi-VN', {dateStyle: 'short', timeStyle: 'short'})
-                                            : `(Tạo) ${new Date(event.createdAt || event.date!).toLocaleString('vi-VN', {dateStyle: 'short', timeStyle: 'short'})}`}
+                                              : `(Tạo) ${new Date(event.createdAt || event.date!).toLocaleString('vi-VN', {dateStyle: 'short', timeStyle: 'short'})}`}
                                 </p>
                             )}
                             {event.deletedAt && (
@@ -598,7 +596,6 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
         </button>
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-2 mb-5 border-b border-gray-200 flex-shrink-0">
-        {/* Tabs */}
         <button onClick={() => setMyTab("approved")} className={`pb-2 font-semibold cursor-pointer text-sm md:text-base flex items-center gap-1 ${myTab === "approved" ? "border-b-2 border-green-500 text-green-600" : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"}`}>
             <CheckIcon /> Đã duyệt ({initialMyEvents.filter(e => e.status?.toUpperCase() === "APPROVED").length})
         </button>
@@ -613,7 +610,6 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
         </button>
       </div>
 
-      {/* Filters for My Events (non-deleted) */}
       {myTab !== "deleted" && (
         <div className="mb-5 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
@@ -632,16 +628,16 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                         <option value="za">Z - A</option>
                     </select>
                 </div>
-                 <div>
-                    <label htmlFor="timeFilterMyEvents" className="block text-xs font-medium text-gray-600 mb-1">Lọc thời gian</label>
-                    <select id="timeFilterMyEvents" value={myTimeFilterOption} onChange={(e) => setMyTimeFilterOption(e.target.value as any)}
+                <div>
+                    <label htmlFor="timeFilterMyEvents" className="block text-xs font-medium text-gray-600 mb-1">Lọc theo trạng thái</label>
+                    <select id="timeFilterMyEvents" value={myTimeFilterOption} onChange={(e) => setMyTimeFilterOption(e.target.value as MyEventTemporalFilterOption)}
                         className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
-                         style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}>
-                        <option value="all">Tất cả</option>
-                        <option value="today">Hôm nay</option>
-                        <option value="thisWeek">Tuần này</option>
-                        <option value="thisMonth">Tháng này</option>
-                        <option value="dateRange">Khoảng ngày</option>
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}>
+                        <option value="all">Tất cả </option>
+                        <option value="upcoming">Sắp diễn ra</option>
+                        <option value="ongoing">Đang diễn ra</option>
+                        <option value="ended">Đã diễn ra</option>
+                        <option value="dateRange">Khoảng ngày cụ thể</option>
                     </select>
                 </div>
                 <div className="flex items-end justify-start md:justify-end gap-2 lg:col-start-auto xl:col-start-4">
@@ -674,9 +670,8 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
         </div>
       )}
 
-      {/* Filters for Deleted Events */}
       {myTab === "deleted" && (
-         <div className="mb-5 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
+        <div className="mb-5 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
                 <div className="relative lg:col-span-1 xl:col-span-1">
                     <label htmlFor="searchDeletedEvents" className="block text-xs font-medium text-gray-600 mb-1">Tìm kiếm (Đã xóa)</label>
@@ -693,11 +688,11 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                         <option value="za">Z - A</option>
                     </select>
                 </div>
-                 <div>
+                <div>
                     <label htmlFor="timeFilterDeletedEvents" className="block text-xs font-medium text-gray-600 mb-1">Lọc thời gian xóa</label>
                     <select id="timeFilterDeletedEvents" value={deletedTimeFilterOption} onChange={(e) => setDeletedTimeFilterOption(e.target.value as any)}
                         className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-gray-500 focus:border-gray-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
-                         style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}>
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}>
                         <option value="all">Tất cả</option>
                         <option value="today">Hôm nay</option>
                         <option value="thisWeek">Tuần này</option>
@@ -706,7 +701,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                     </select>
                 </div>
                 <div className="flex items-end justify-start md:justify-end gap-2 lg:col-start-auto xl:col-start-4">
-                     <div className="flex w-full md:w-auto">
+                    <div className="flex w-full md:w-auto">
                         <button onClick={() => setDeletedViewMode("card")} title="Chế độ thẻ"
                             className={`flex-1 md:flex-none cursor-pointer p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${deletedViewMode === "card" ? "bg-gray-600 border-gray-700 text-white shadow-sm z-10" : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"}`}>
                             <Component1Icon className="h-5 w-5"/>

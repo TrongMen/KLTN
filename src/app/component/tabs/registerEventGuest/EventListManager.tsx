@@ -1,4 +1,3 @@
-// EventListManager.tsx
 "use client";
 
 import React, { useState, useMemo, useCallback } from "react";
@@ -7,35 +6,29 @@ import {
   CalendarIcon,
   Component1Icon,
   ListBulletIcon,
-  // Bỏ ArrowLeftIcon, ReaderIcon, ChevronLeftIcon nếu không dùng trực tiếp ở đây
-  // Giữ lại các icon cần thiết cho các nút điều khiển
 } from "@radix-ui/react-icons";
-import { EventDisplayInfo } from "../../types/appTypes"; // Đảm bảo đường dẫn đúng
+import { EventDisplayInfo } from "../../types/appTypes";
 
-const getWeekRange = (
-  refDate: Date
-): { startOfWeek: Date; endOfWeek: Date } => {
-  const d = new Date(refDate);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const start = new Date(d.setDate(diff));
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  return { startOfWeek: start, endOfWeek: end };
+const getEventTemporalStatus = (eventTime?: string | null): "upcoming" | "ongoing" | "ended" | "unknown" => {
+    if (!eventTime) return "unknown";
+    try {
+        const eventDate = new Date(eventTime);
+        if (isNaN(eventDate.getTime())) return "unknown";
+
+        const now = new Date();
+        const todayDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const eventDayStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+
+        if (eventDayStart > todayDayStart) return "upcoming";
+        if (eventDayStart.getTime() === todayDayStart.getTime()) return "ongoing";
+        if (eventDayStart < todayDayStart) return "ended";
+        return "ongoing"; 
+    } catch {
+        return "unknown";
+    }
 };
 
-const getMonthRange = (
-  refDate: Date
-): { startOfMonth: Date; endOfMonth: Date } => {
-  const d = new Date(refDate);
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  end.setHours(23, 59, 59, 999);
-  return { startOfMonth: start, endOfMonth: end };
-};
+type EventListManagerTemporalFilterOption = "all" | "upcoming" | "ongoing" | "ended" | "dateRange";
 
 interface EventListManagerProps {
   allEvents: EventDisplayInfo[];
@@ -76,9 +69,7 @@ const EventListManager: React.FC<EventListManagerProps> = ({
 }) => {
   const [eventSearchTerm, setEventSearchTerm] = useState("");
   const [eventSortOrder, setEventSortOrder] = useState<"az" | "za">("az");
-  const [eventTimeFilter, setEventTimeFilter] = useState<
-    "all" | "today" | "thisWeek" | "thisMonth" | "dateRange"
-  >("all");
+  const [eventTimeFilter, setEventTimeFilter] = useState<EventListManagerTemporalFilterOption>("all");
   const [eventStartDateFilter, setEventStartDateFilter] = useState<string>("");
   const [eventEndDateFilter, setEventEndDateFilter] = useState<string>("");
   const [eventViewMode, setEventViewMode] = useState<"list" | "card">("list");
@@ -108,71 +99,81 @@ const EventListManager: React.FC<EventListManagerProps> = ({
   );
 
   const processedEvents = useMemo(() => {
-    let eventsToProcess = [...allEvents];
-    if (eventTimeFilter !== "all") {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-      eventsToProcess = eventsToProcess.filter((event) => {
-        const dateStrToUse = event.time;
-        if (!dateStrToUse) return false;
-        try {
-          const eventDate = new Date(dateStrToUse);
-          if (isNaN(eventDate.getTime())) return false;
-          switch (eventTimeFilter) {
-            case "today":
-              return eventDate >= todayStart && eventDate <= todayEnd;
-            case "thisWeek":
-              const { startOfWeek, endOfWeek } = getWeekRange(new Date());
-              return eventDate >= startOfWeek && eventDate <= endOfWeek;
-            case "thisMonth":
-              const { startOfMonth, endOfMonth } = getMonthRange(new Date());
-              return eventDate >= startOfMonth && eventDate <= endOfMonth;
-            case "dateRange":
-              if (!eventStartDateFilter || !eventEndDateFilter) return true; // Nếu chưa chọn đủ range thì không lọc
-              const start = new Date(eventStartDateFilter);
-              start.setHours(0, 0, 0, 0);
-              const end = new Date(eventEndDateFilter);
-              end.setHours(23, 59, 59, 999);
-              if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return true; // Range không hợp lệ thì không lọc
-              return eventDate >= start && eventDate <= end;
-            default:
-              return true;
-          }
-        } catch {
-          return false;
-        }
+    let filteredEvents = [...allEvents];
+
+    if (tab === "available") {
+      filteredEvents = filteredEvents.filter(
+        (event) => !isRegistered(event.id) && !isCreatedByUser(event.id)
+      );
+      filteredEvents = filteredEvents.filter(event => {
+          const temporalStatus = getEventTemporalStatus(event.time);
+          return temporalStatus === "upcoming" || temporalStatus === "ongoing";
       });
+    } else { 
+      filteredEvents = filteredEvents.filter((event) => isRegistered(event.id));
     }
+    
+    if (eventTimeFilter !== "all") {
+        const now = new Date();
+        const todayDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        filteredEvents = filteredEvents.filter((event) => {
+            const dateStrToUse = event.time;
+            if (!dateStrToUse && eventTimeFilter !== "dateRange") return false;
+
+            if (eventTimeFilter === "dateRange") {
+                if (!eventStartDateFilter || !eventEndDateFilter) return true;
+                if (!dateStrToUse) return false;
+                try {
+                    const eventDate = new Date(dateStrToUse);
+                    if (isNaN(eventDate.getTime())) return false;
+                    const startFilter = new Date(eventStartDateFilter); startFilter.setHours(0,0,0,0);
+                    const endFilter = new Date(eventEndDateFilter); endFilter.setHours(23,59,59,999);
+                    return !isNaN(startFilter.getTime()) && !isNaN(endFilter.getTime()) && startFilter <= endFilter &&
+                           eventDate >= startFilter && eventDate <= endFilter;
+                } catch { return false; }
+            } else {
+                if (!dateStrToUse) return false;
+                try {
+                    const eventDate = new Date(dateStrToUse);
+                    if (isNaN(eventDate.getTime())) return false;
+                    const eventDayStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+
+                    switch (eventTimeFilter) {
+                        case "upcoming":
+                            return eventDayStart > todayDayStart;
+                        case "ongoing":
+                            return eventDayStart.getTime() === todayDayStart.getTime();
+                        case "ended":
+                            return eventDayStart < todayDayStart;
+                        default:
+                            return true;
+                    }
+                } catch { return false; }
+            }
+        });
+    }
+    
     if (eventSearchTerm.trim()) {
       const lowerSearchTerm = eventSearchTerm.trim().toLowerCase();
-      eventsToProcess = eventsToProcess.filter(
+      filteredEvents = filteredEvents.filter(
         (event) =>
           event.name.toLowerCase().includes(lowerSearchTerm) ||
           (event.location &&
             event.location.toLowerCase().includes(lowerSearchTerm))
       );
     }
-    if (tab === "available") {
-      eventsToProcess = eventsToProcess.filter(
-        (event) => !isRegistered(event.id) && !isCreatedByUser(event.id)
-      );
-    } else {
-      eventsToProcess = eventsToProcess.filter((event) =>
-        isRegistered(event.id)
-      );
-    }
+
     if (eventSortOrder === "za") {
-      eventsToProcess.sort((a, b) =>
+      filteredEvents.sort((a, b) =>
         b.name.localeCompare(a.name, "vi", { sensitivity: "base" })
       );
     } else {
-      eventsToProcess.sort((a, b) =>
+      filteredEvents.sort((a, b) =>
         a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
       );
     }
-    return eventsToProcess;
+    return filteredEvents;
   }, [
     allEvents,
     tab,
@@ -187,18 +188,21 @@ const EventListManager: React.FC<EventListManagerProps> = ({
 
   const allVisibleRegisteredEventIds = useMemo(() => {
     if (tab === "registered") {
-      return new Set(processedEvents.map(e => e.id));
+      return new Set(
+        processedEvents
+        .filter(event => getEventTemporalStatus(event.time) !== "ended")
+        .map(e => e.id)
+      );
     }
     return new Set<string>();
   }, [processedEvents, tab]);
 
   const noResultMessage =
     eventSearchTerm ||
-    eventTimeFilter !== "all" ||
-    (eventTimeFilter === "dateRange" && (eventStartDateFilter || eventEndDateFilter))
+    (eventTimeFilter !== "all" && !(eventTimeFilter === "dateRange" && !eventStartDateFilter && !eventEndDateFilter))
       ? `Không tìm thấy sự kiện nào khớp.`
       : tab === "available"
-      ? "Không có sự kiện mới nào để đăng ký."
+      ? "Không có sự kiện mới nào (sắp hoặc đang diễn ra) để đăng ký."
       : "Bạn chưa đăng ký sự kiện nào.";
 
   if (isLoadingData)
@@ -219,6 +223,7 @@ const EventListManager: React.FC<EventListManagerProps> = ({
     allVisibleRegisteredEventIds.size > 0 &&
     Array.from(allVisibleRegisteredEventIds).every((id) => selectedEventIdsForBatchAction.has(id)) &&
     selectedEventIdsForBatchAction.size >= allVisibleRegisteredEventIds.size;
+
 
   return (
     <>
@@ -267,28 +272,23 @@ const EventListManager: React.FC<EventListManagerProps> = ({
               htmlFor="timeFilterRegEventsManager"
               className="block text-xs font-medium text-gray-600 mb-1"
             >
-              Lọc thời gian
+              Lọc theo trạng thái
             </label>
             <select
               id="timeFilterRegEventsManager"
               value={eventTimeFilter}
               onChange={(e) =>
                 setEventTimeFilter(
-                  e.target.value as
-                    | "all"
-                    | "today"
-                    | "thisWeek"
-                    | "thisMonth"
-                    | "dateRange"
+                  e.target.value as EventListManagerTemporalFilterOption
                 )
               }
               className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
             >
               <option value="all">Tất cả</option>
-              <option value="today">Hôm nay</option>
-              <option value="thisWeek">Tuần này</option>
-              <option value="thisMonth">Tháng này</option>
-              <option value="dateRange">Khoảng ngày</option>
+              <option value="upcoming">Sắp diễn ra</option>
+              <option value="ongoing">Đang diễn ra</option>
+              <option value="ended">Đã diễn ra</option>
+              <option value="dateRange">Khoảng ngày cụ thể</option>
             </select>
           </div>
           <div className="flex items-end justify-start sm:justify-end gap-2">
@@ -369,8 +369,8 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                 className="mr-2 h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded cursor-pointer"
                 checked={allFilteredRegisteredSelected}
                 onChange={(e) => onToggleBatchSelectAll(e.target.checked, allVisibleRegisteredEventIds)}
-                disabled={processedEvents.length === 0 || isBatchUnregistering}
-                aria-label="Chọn tất cả để hủy"
+                disabled={allVisibleRegisteredEventIds.size === 0 || isBatchUnregistering}
+                aria-label="Chọn tất cả sự kiện (chưa kết thúc) để hủy"
               />
               <label
                 htmlFor="select-all-unregister-manager"
@@ -416,6 +416,8 @@ const EventListManager: React.FC<EventListManagerProps> = ({
               const alreadyRegistered = isRegistered(event.id);
               const isCreated = isCreatedByUser(event.id);
               const canAct = !!currentUserId && !isLoadingUserId;
+              const temporalStatus = getEventTemporalStatus(event.time);
+              const isEventEnded = temporalStatus === "ended";
 
               return (
                 <li
@@ -423,20 +425,18 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                   className={`border rounded-lg shadow-sm transition-all duration-150 flex gap-4 items-start p-3 md:p-4
                     ${processing ? "opacity-60 cursor-wait" : "hover:shadow-md"}
                     ${tab === "registered" && isSelectedForBatch ? "bg-red-50 border-red-200" : "bg-white border-gray-200"}
-                    ${!(tab === "registered" && isSelectedForBatch) ? "cursor-pointer hover:bg-gray-50" : "cursor-default"}
+                    ${!(tab === "registered" && isSelectedForBatch) && !(isCreated && tab === "available") && !processing ? "cursor-pointer hover:bg-gray-50" : "cursor-default"}
                   `}
                   onClick={() => {
-                    // Chỉ gọi onViewEventDetails nếu không phải đang chọn cho batch và item không bị processing
-                    if (!processing && !(tab === "registered" && isSelectedForBatch)) {
-                         onViewEventDetails(event);
-                    } else if (tab === "registered" && !processing){
-                        // Nếu đang ở tab registered và click vào item đã chọn (mà không processing) -> bỏ chọn
-                        // Hoặc nếu click vào item chưa chọn -> chọn
+                    if (!processing && !(tab === "registered" && isSelectedForBatch) && !(isCreated && tab === "available")) {
+                        onViewEventDetails(event);
+                    } else if (tab === "registered" && !processing && !isEventEnded){
                         onToggleBatchSelectEventId(event.id);
+                    } else if (tab === "registered" && isEventEnded && !processing) {
+                        toast.error("Không thể chọn sự kiện đã kết thúc để hủy.");
                     }
                   }}
                 >
-                  {/* Event Image */}
                   <div className="flex-shrink-0 w-24 h-24 md:w-32 md:h-32 bg-gray-200 rounded-md overflow-hidden">
                     {event.avatarUrl ? (
                       <img
@@ -450,8 +450,6 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                       </div>
                     )}
                   </div>
-
-                  {/* Event Info and Actions */}
                   <div className="flex-grow flex flex-col justify-between min-w-0">
                     <div>
                       <h3 className="text-md md:text-lg font-semibold text-gray-800 mb-1 flex items-center">
@@ -460,13 +458,14 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                             type="checkbox"
                             checked={isSelectedForBatch}
                             onChange={(e) => {
-                                e.stopPropagation(); // Ngăn li's onClick
-                                onToggleBatchSelectEventId(event.id);
+                                e.stopPropagation(); 
+                                if (!isEventEnded) onToggleBatchSelectEventId(event.id);
                             }}
-                            onClick={(e) => e.stopPropagation()} // Đảm bảo click vào checkbox không trigger li's onClick
-                            disabled={processing}
+                            onClick={(e) => e.stopPropagation()} 
+                            disabled={processing || isEventEnded}
+                            title={isEventEnded ? "Không thể chọn sự kiện đã kết thúc" : `Chọn hủy ${event.name}`}
                             aria-label={`Chọn hủy ${event.name}`}
-                            className="mr-2 h-4 w-4 align-middle text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer flex-shrink-0"
+                            className="mr-2 h-4 w-4 align-middle text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         )}
                         <span className="hover:underline" onClick={(e) => { e.stopPropagation(); onViewEventDetails(event); }}>{event.name}</span>
@@ -474,6 +473,11 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                           <span className="ml-2 text-xs font-normal text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded whitespace-nowrap">
                             ✨ Của bạn
                           </span>
+                        )}
+                        {isEventEnded && (
+                            <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                🏁 Đã kết thúc
+                            </span>
                         )}
                       </h3>
                       <div className=" sm:flex-row sm:gap-4 text-sm text-gray-600">
@@ -487,7 +491,7 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                           </span>
                         )}
                         {event.location && (
-                          <span className="flex items-center mt-1 sm:mt-5">
+                          <span className="flex items-center mt-1 sm:mt-0">
                             <span className="mr-1.4 opacity-70">📍</span>
                             {event.location}
                           </span>
@@ -496,8 +500,7 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto self-start sm:self-end pt-3 mt-2">
-                       {/* Nút Đăng ký/Hủy đăng ký sẽ được hiển thị ở đây */}
-                       {tab === "available" &&
+                      {tab === "available" &&
                         (isCreated ? (
                           <button
                             className="w-full cursor-not-allowed sm:w-auto px-3 py-1.5 rounded-md text-gray-600 bg-gray-300 text-xs font-medium"
@@ -512,9 +515,10 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                               e.stopPropagation();
                               onRegisterEvent(event);
                             }}
-                            disabled={alreadyRegistered || processing || !canAct}
+                            disabled={alreadyRegistered || processing || !canAct || isEventEnded}
+                            title={isEventEnded ? "Sự kiện đã kết thúc, không thể đăng ký" : (alreadyRegistered ? "Đã đăng ký" : "Đăng ký")}
                             className={`w-full cursor-pointer sm:w-auto px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium ${
-                              alreadyRegistered
+                              alreadyRegistered || isEventEnded
                                 ? "bg-gray-400 cursor-not-allowed"
                                 : processing || !canAct
                                 ? "bg-blue-300 cursor-wait"
@@ -525,19 +529,21 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                               ? "✅ Đã đăng ký"
                               : processing
                               ? "..."
-                              : "📝 Đăng ký"}
+                              : isEventEnded ? "🏁 Đã kết thúc" : "📝 Đăng ký"}
                           </button>
                         ))}
-                      {tab === "registered" && !isSelectedForBatch && ( // Chỉ hiện nút Hủy đơn lẻ nếu item không được chọn cho batch
+                      {tab === "registered" && !isSelectedForBatch && ( 
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onUnregisterEvent(event);
+                            if(!isEventEnded) onUnregisterEvent(event);
+                            else toast.error("Không thể hủy đăng ký sự kiện đã kết thúc.");
                           }}
-                          disabled={processing || !canAct}
+                          disabled={processing || !canAct || isEventEnded}
+                          title={isEventEnded ? "Không thể hủy sự kiện đã kết thúc" : "Hủy đăng ký"}
                           className={`w-full cursor-pointer sm:w-auto px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium ${
-                            processing || !canAct
-                              ? "bg-red-300 cursor-wait"
+                            processing || !canAct || isEventEnded
+                              ? "bg-red-300 cursor-not-allowed"
                               : "bg-red-500 hover:bg-red-600"
                           }`}
                         >
@@ -555,15 +561,17 @@ const EventListManager: React.FC<EventListManagerProps> = ({
               );
             })}
           </ul>
-        ) : ( // Chế độ Card View (giữ nguyên logic cũ, chỉ cần đảm bảo className và props đúng)
+        ) : ( 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {processedEvents.map((event) => {
               const isProcessingSingle = isSubmittingAction === event.id;
-              const isSelectedForBatch = selectedEventIdsForBatchAction.has(event.id); // Giữ lại để biết style
+              const isSelectedForBatch = selectedEventIdsForBatchAction.has(event.id); 
               const processing = isProcessingSingle || (isBatchUnregistering && isSelectedForBatch);
               const alreadyRegistered = isRegistered(event.id);
               const isCreated = isCreatedByUser(event.id);
               const canAct = !!currentUserId && !isLoadingUserId;
+              const temporalStatus = getEventTemporalStatus(event.time);
+              const isEventEnded = temporalStatus === "ended";
               return (
                 <div
                   key={event.id}
@@ -572,73 +580,85 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                     ${tab === "registered" && isSelectedForBatch ? "bg-red-50 border-red-200" : "bg-white border-gray-200"}
                   `}
                 >
-                  {/* Event Image for Card View */}
                   <div 
-                    className="w-full h-40 bg-gray-200 rounded-md mb-3 overflow-hidden cursor-pointer"
-                    onClick={() => onViewEventDetails(event)}
+                    className={`${!(tab === "registered" && isSelectedForBatch) && !(isCreated && tab === "available") && !processing ? "cursor-pointer" : "cursor-default"}`}
+                    onClick={() => {
+                        if (!processing && !(tab === "registered" && isSelectedForBatch) && !(isCreated && tab === "available")) {
+                            onViewEventDetails(event);
+                        } else if (tab === "registered" && !processing && !isEventEnded){
+                             onToggleBatchSelectEventId(event.id);
+                        } else if (tab === "registered" && isEventEnded && !processing) {
+                            toast.error("Không thể chọn sự kiện đã kết thúc để hủy.");
+                        }
+                    }}
                   >
-                    {event.avatarUrl ? (
-                      <img
-                        src={event.avatarUrl}
-                        alt={event.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <CalendarIcon className="w-12 h-12" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-md font-semibold text-gray-800 mb-1 flex items-start">
-                      {tab === "registered" && (
-                        <input
-                          type="checkbox"
-                          checked={isSelectedForBatch}
-                          onChange={(e) => {
-                              e.stopPropagation();
-                              onToggleBatchSelectEventId(event.id);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          disabled={processing}
-                          aria-label={`Chọn hủy ${event.name}`}
-                          tabIndex={-1}
-                          className="mr-2 mt-1 h-4 w-4 align-middle text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer flex-shrink-0"
+                    <div className="w-full h-40 bg-gray-200 rounded-md mb-3 overflow-hidden">
+                      {event.avatarUrl ? (
+                        <img
+                          src={event.avatarUrl}
+                          alt={event.name}
+                          className="w-full h-full object-cover"
                         />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                          <CalendarIcon className="w-12 h-12" />
+                        </div>
                       )}
-                      <span className="line-clamp-2 flex-grow hover:underline cursor-pointer" onClick={() => onViewEventDetails(event)}>
-                        {event.name}
-                      </span>
-                      {isCreated && tab === "available" && (
-                        <span className="ml-2 text-xs font-normal text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap">
-                          ✨ Của bạn
-                        </span>
-                      )}
-                    </h3>
-                    <div
-                      className={`space-y-1 text-sm text-gray-600 mt-1 mb-3 ${
-                        tab === "registered" ? "pl-6 sm:pl-6" : "pl-0" // Điều chỉnh padding cho checkbox
-                      }`}
-                    >
-                      {event.time && (
-                        <p className="flex items-center text-xs">
-                          <CalendarIcon className="w-3 h-3 mr-1.5 opacity-70 flex-shrink-0" />
-                          {new Date(event.time).toLocaleString("vi-VN", {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })}
-                        </p>
-                      )}
-                      {event.location && (
-                        <p className="flex items-center text-xs">
-                          <span className="mr-1.5 opacity-70">📍</span>
-                          {event.location}
-                        </p>
-                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-md font-semibold text-gray-800 mb-1 flex items-start">
+                        {tab === "registered" && (
+                          <input
+                            type="checkbox"
+                            checked={isSelectedForBatch}
+                            onChange={(e) => {
+                                e.stopPropagation();
+                                if (!isEventEnded) onToggleBatchSelectEventId(event.id);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            disabled={processing || isEventEnded}
+                            title={isEventEnded ? "Không thể chọn sự kiện đã kết thúc" : `Chọn hủy ${event.name}`}
+                            aria-label={`Chọn hủy ${event.name}`}
+                            tabIndex={-1}
+                            className="mr-2 mt-1 h-4 w-4 align-middle text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          />
+                        )}
+                        <span className="line-clamp-2 flex-grow hover:underline cursor-pointer" onClick={(e)=>{e.stopPropagation(); onViewEventDetails(event);}}>{event.name}</span>
+                        {isCreated && tab === "available" && (
+                          <span className="ml-2 text-xs font-normal text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap">
+                            ✨ Của bạn
+                          </span>
+                        )}
+                         {isEventEnded && (
+                            <span className="ml-2 text-xs font-normal text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap">
+                                🏁 Đã kết thúc
+                            </span>
+                        )}
+                      </h3>
+                      <div
+                        className={`space-y-1 text-sm text-gray-600 mt-1 mb-3 ${
+                          tab === "registered" ? "pl-6 sm:pl-6" : "pl-0"
+                        }`}
+                      >
+                        {event.time && (
+                          <p className="flex items-center text-xs">
+                            <CalendarIcon className="w-3 h-3 mr-1.5 opacity-70 flex-shrink-0" />
+                            {new Date(event.time).toLocaleString("vi-VN", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })}
+                          </p>
+                        )}
+                        {event.location && (
+                          <p className="flex items-center text-xs">
+                            <span className="mr-1.5 opacity-70">📍</span>
+                            {event.location}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="mt-auto pt-3 border-t border-gray-100 flex flex-col gap-2">
-                    {/* Nút Xem chi tiết đã bị loại bỏ, click vào ảnh hoặc tiêu đề để xem */}
                     {tab === "available" &&
                       (isCreated ? (
                         <button
@@ -654,9 +674,10 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                             e.stopPropagation();
                             onRegisterEvent(event);
                           }}
-                          disabled={alreadyRegistered || processing || !canAct}
+                          disabled={alreadyRegistered || processing || !canAct || isEventEnded}
+                          title={isEventEnded ? "Sự kiện đã kết thúc, không thể đăng ký" : (alreadyRegistered ? "Đã đăng ký" : "Đăng ký")}
                           className={`w-full cursor-pointer px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium ${
-                            alreadyRegistered
+                            alreadyRegistered || isEventEnded
                               ? "bg-gray-400 cursor-not-allowed"
                               : processing || !canAct
                               ? "bg-blue-300 cursor-wait"
@@ -667,30 +688,32 @@ const EventListManager: React.FC<EventListManagerProps> = ({
                             ? "✅ Đã đăng ký"
                             : processing
                             ? "..."
-                            : "📝 Đăng ký"}
+                            : isEventEnded ? "🏁 Đã kết thúc" : "📝 Đăng ký"}
                         </button>
                       ))}
                     {tab === "registered" && !isSelectedForBatch && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onUnregisterEvent(event);
+                          if(!isEventEnded) onUnregisterEvent(event);
+                          else toast.error("Không thể hủy đăng ký sự kiện đã kết thúc.");
                         }}
-                        disabled={processing || !canAct}
+                        disabled={processing || !canAct || isEventEnded}
+                        title={isEventEnded ? "Không thể hủy sự kiện đã kết thúc" : "Hủy đăng ký"}
                         className={`w-full cursor-pointer px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium ${
-                          processing || !canAct
-                            ? "bg-red-300 cursor-wait"
+                          processing || !canAct || isEventEnded
+                            ? "bg-red-300 cursor-not-allowed"
                             : "bg-red-500 hover:bg-red-600"
                         }`}
                       >
                         {processing ? "..." : " Hủy đăng ký"}
                       </button>
                     )}
-                     {tab === "registered" && isSelectedForBatch && processing && (
-                        <div className="text-xs text-red-500 italic text-center mt-1">
-                          Đang xử lý...
-                        </div>
-                      )}
+                    {tab === "registered" && isSelectedForBatch && processing && (
+                      <div className="text-xs text-red-500 italic text-center mt-1">
+                        Đang xử lý...
+                      </div>
+                    )}
                   </div>
                 </div>
               );

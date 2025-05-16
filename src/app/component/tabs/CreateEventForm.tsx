@@ -15,7 +15,6 @@ import type {
   EventDataForForm,
   OrganizerInput,
   ParticipantInput,
-  
   DetailedApiUser,
   ApiRole,
 } from "../types/typCreateEvent";
@@ -158,7 +157,7 @@ interface EventFormDataState {
   time: string;
   location: string;
   content: string;
-  organizers: [];
+  organizers: OrganizerInput[];
   participants: ParticipantInput[];
   maxAttendees: number | string;
   id?: string;
@@ -403,20 +402,22 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       value: string
     ) => {
       setFormData((prev) => {
-        const updatedMembers = [...prev[type]];
+        const updatedMembers = [...prev[type]] as (OrganizerInput | ParticipantInput)[];
         const member = { ...updatedMembers[index] };
+        
         if (field === "userId") {
           member.userId = value;
           const selectedUser =
             internalAllUsers && internalAllUsers.find((u) => u.id === value);
-          member.positionId = selectedUser?.position?.id || "";
+          (member as OrganizerInput | ParticipantInput).positionId = selectedUser?.position?.id || "";
+          
           if (type === "participants" && selectedUser?.organizerRole) {
-            member.roleId = selectedUser.organizerRole.id;
+            (member as ParticipantInput).roleId = selectedUser.organizerRole.id;
           } else if (type === "participants" && !selectedUser?.organizerRole) {
-              member.roleId = "";
+              (member as ParticipantInput).roleId = ""; 
           }
         } else if (field === "roleId") {
-          member.roleId = value;
+          (member as OrganizerInput | ParticipantInput).roleId = value;
         }
         updatedMembers[index] = member;
         return { ...prev, [type]: updatedMembers };
@@ -428,7 +429,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
   const handleAddMember = useCallback((type: "organizers" | "participants") => {
     setFormData((prev) => ({
       ...prev,
-      [type]: [...prev[type], { userId: "", roleId: "", positionId: "" }],
+      [type]: [...prev[type], { userId: "", roleId: "", positionId: "" } as any],
     }));
   }, []);
 
@@ -539,16 +540,34 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
       formData.maxAttendees === "" || isNaN(Number(formData.maxAttendees))
         ? null
         : Number(formData.maxAttendees);
+    
+    let timeToSend: string;
+    const dateTimeLocalString = formData.time; 
+
+    if (dateTimeLocalString) {
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dateTimeLocalString)) {
+        toast.error("Định dạng thời gian không hợp lệ. Vui lòng dùng định dạng YYYY-MM-DDTHH:MM.");
+        setIsSubmitting(false);
+        return;
+      }
+      timeToSend = dateTimeLocalString + ":00.000Z";
+    } else { 
+      toast.error("Thời gian là bắt buộc.");
+      setIsSubmitting(false);
+      return;
+    }
+
     let payload: any = {
       name: formData.name,
       purpose: formData.purpose,
-      time: new Date(formData.time).toISOString(),
+      time: timeToSend, 
       location: formData.location,
       content: formData.content,
       maxAttendees: finalMaxAttendees,
       organizers: formData.organizers,
       participants: formData.participants,
     };
+    
     let url = `http://localhost:8080/identity/api/events`;
     let method = "POST";
 
@@ -721,7 +740,7 @@ const CreateEventForm: React.FC<CreateEventFormProps> = ({
               name="time"
               value={formData.time}
               onChange={handleChange}
-              min={getCurrentDateTimeLocalString()}
+              min={isEditMode ? undefined : getCurrentDateTimeLocalString()}
               className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
               required
             />

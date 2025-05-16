@@ -1,13 +1,11 @@
-// ModalUpdateEvent.tsx
-
 "use client";
 
 import React, {
   useState,
-  useCallback,
   useEffect,
-  useMemo,
+  useCallback,
   useRef,
+  useMemo,
 } from "react";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -58,7 +56,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
 
   useEffect(() => {
     if (initialSearchTerm && (selectedValue || !isOpen || !searchTerm )) {
-       setSearchTerm(initialSearchTerm);
+        setSearchTerm(initialSearchTerm);
     } else if (!initialSearchTerm && selectedValue && !isOpen) {
         setSearchTerm(selectedOptionName);
     } else if (!selectedValue && !isOpen) {
@@ -69,7 +67,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
 
   const filteredOptions = useMemo(() => {
     if (isLoading) return [];
-     if (!searchTerm && selectedValue && selectedOptionName && isOpen) {
+    if (!searchTerm && selectedValue && selectedOptionName && isOpen) {
       return options;
     }
     return options.filter((option) =>
@@ -115,9 +113,9 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
         onFocus={() => {
             setIsOpen(true);
             if (selectedValue && selectedOptionName) {
-                 if (!searchTerm) setSearchTerm(selectedOptionName);
+                if (!searchTerm) setSearchTerm(selectedOptionName);
             } else {
-                 setSearchTerm("");
+                setSearchTerm("");
             }
         }}
         onBlur={() => {
@@ -310,11 +308,28 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
 
   useEffect(() => {
     if (editingEvent && isOpen) {
+      let formattedTime = "";
+      if (editingEvent.time) {
+        try {
+          const date = new Date(editingEvent.time); 
+          if (!isNaN(date.getTime())) {
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, "0");
+            const day = date.getDate().toString().padStart(2, "0");
+            const hours = date.getHours().toString().padStart(2, "0");
+            const minutes = date.getMinutes().toString().padStart(2, "0");
+            formattedTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+          }
+        } catch (e) {
+          console.error("Error formatting date for editingEvent:", e);
+        }
+      }
+
       setFormData({
         id: editingEvent.id,
         name: editingEvent.name || "",
         purpose: editingEvent.purpose || "",
-        time: editingEvent.time,
+        time: formattedTime,
         location: editingEvent.location || "",
         content: editingEvent.content || "",
         organizers: editingEvent.organizers.map(o => ({ 
@@ -528,7 +543,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         setIsSubmitting(false);
         return;
     }
-    if (activeOrganizers.some(o => !o.userId)) { // Kiểm tra kỹ hơn nếu có dòng nào đó không hợp lệ (dù filter ở trên)
+    if (activeOrganizers.some(o => !o.userId)) { 
         toast.error("Vui lòng chọn User cho tất cả thành viên Ban Tổ Chức đã thêm.");
         setIsSubmitting(false);
         return;
@@ -537,11 +552,10 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
 
     const activeParticipants = formData.participants.filter(p => p.userId);
     if (activeParticipants.length < formData.participants.length && formData.participants.some(p => !p.userId && p.roleId)) {
-         toast.error("Người Tham Dự đã chọn Vai trò nhưng chưa chọn User. Vui lòng hoàn tất hoặc xóa dòng.");
-         setIsSubmitting(false);
-         return;
+        toast.error("Người Tham Dự đã chọn Vai trò nhưng chưa chọn User. Vui lòng hoàn tất hoặc xóa dòng.");
+        setIsSubmitting(false);
+        return;
     }
-    // Không bắt buộc phải có participant, nhưng nếu có dòng participant thì userId phải được điền
 
     setIsSubmitting(true);
     const token = localStorage.getItem("authToken");
@@ -562,14 +576,43 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
       ? null
       : Number(formData.maxAttendees);
 
+    let timeToSend: string;
+    const dateTimeLocalString = formData.time; 
+
+    if (dateTimeLocalString) {
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dateTimeLocalString) && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(dateTimeLocalString) && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(dateTimeLocalString)) {
+          try {
+              const parsedDate = new Date(dateTimeLocalString);
+              if (isNaN(parsedDate.getTime())) throw new Error("Invalid date");
+              timeToSend = parsedDate.toISOString();
+
+          } catch(e){
+              toast.error("Định dạng thời gian không hợp lệ. Vui lòng kiểm tra lại.");
+              setIsSubmitting(false);
+              return;
+          }
+      } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dateTimeLocalString)) {
+           timeToSend = dateTimeLocalString + ":00.000Z";
+      } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(dateTimeLocalString)) {
+           timeToSend = dateTimeLocalString + ".000Z";
+      }
+      else { // Already ISOString with Z
+           timeToSend = dateTimeLocalString;
+      }
+    } else { 
+      toast.error("Thời gian là bắt buộc.");
+      setIsSubmitting(false);
+      return;
+    }
+
     const organizersForApi = activeOrganizers.map(({ name, roleName, positionName, ...rest }) => ({
         ...rest,
-        roleId: rest.roleId || null, // Gửi null nếu roleId là chuỗi rỗng
+        roleId: rest.roleId || null, 
         positionId: rest.positionId || null 
     }));
     const participantsForApi = activeParticipants.map(({ name, roleName, positionName, ...rest }) => ({
         ...rest,
-        roleId: rest.roleId || null, // Gửi null nếu roleId là chuỗi rỗng
+        roleId: rest.roleId || null, 
         positionId: rest.positionId || null
     }));
 
@@ -577,12 +620,12 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
       id: formData.id,
       name: formData.name,
       purpose: formData.purpose,
-      time: new Date(formData.time).toISOString(),
+      time: timeToSend,
       location: formData.location,
       content: formData.content,
       maxAttendees: finalMaxAttendees,
       organizers: organizersForApi,
-      participants: participantsForApi, // Sẽ là mảng rỗng nếu không có active participants
+      participants: participantsForApi, 
       status: formData.status || "PENDING",
     };
     
@@ -631,7 +674,6 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
   return (
     <div
       className="fixed inset-0 bg-black/30 bg-opacity-60 flex justify-center items-center z-50 p-4 transition-opacity duration-300 ease-in-out animate-fade-in"
-      onClick={onClose}
     >
       <div
         ref={modalContentRef}
@@ -782,13 +824,13 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
                                 />
                             </div>
                         </div>
-                         <div className="flex justify-end">
+                          <div className="flex justify-end">
                             <button type="button" onClick={() => handleRemoveMember("organizers", index)}
                                 className="bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded-md shadow-sm transition-colors cursor-pointer">
                                 Xóa
                             </button>
-                        </div>
-                    </div>
+                          </div>
+                      </div>
                 ))}
                 <button type="button" onClick={() => handleAddMember("organizers")}
                   className="mt-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-2 px-4 rounded-md shadow-sm transition-colors"
@@ -800,45 +842,45 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-medium text-gray-700 mb-3">Người Tham Gia</h3>
                 {formData.participants.map((participant, index) => (
-                     <div key={`part-${index}`} className="p-3 border rounded-md bg-gray-50 mb-3 space-y-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Họ tên NTG</label>
-                                <SearchableDropdown
-                                    options={usersWithPositionOptions}
-                                    selectedValue={participant.userId}
-                                    initialSearchTerm={participant.name}
-                                    onChange={(selectedId) => handleMemberChange("participants", index, "userId", selectedId)}
-                                    placeholder="-- Chọn User (có vị trí) --"
-                                    disabledOptions={busyUserIds}
-                                    isLoading={isLoadingUsers}
-                                    disabled={isDataLoading && !internalAllUsers.length}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Chức vụ (từ Profile)</label>
-                                <input type="text" value={participant.positionName} readOnly className="w-full p-2 border border-gray-200 bg-gray-100 rounded-md sm:text-sm"/>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-0.5">Vai trò NTG (trong sự kiện)</label>
-                                <SearchableDropdown
-                                    options={roleOptions}
-                                    selectedValue={participant.roleId}
-                                    initialSearchTerm={participant.roleName}
-                                    onChange={(selectedId) => handleMemberChange("participants", index, "roleId", selectedId)}
-                                    placeholder="-- Chọn Vai trò NTG (Tùy chọn) --"
-                                    isLoading={isLoadingRoles}
-                                    disabled={(isDataLoading && !internalRoles.length) || !participant.userId }
-                                />
+                      <div key={`part-${index}`} className="p-3 border rounded-md bg-gray-50 mb-3 space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                              <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Họ tên NTG</label>
+                                  <SearchableDropdown
+                                      options={usersWithPositionOptions}
+                                      selectedValue={participant.userId}
+                                      initialSearchTerm={participant.name}
+                                      onChange={(selectedId) => handleMemberChange("participants", index, "userId", selectedId)}
+                                      placeholder="-- Chọn User (có vị trí) --"
+                                      disabledOptions={busyUserIds}
+                                      isLoading={isLoadingUsers}
+                                      disabled={isDataLoading && !internalAllUsers.length}
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Chức vụ (từ Profile)</label>
+                                  <input type="text" value={participant.positionName} readOnly className="w-full p-2 border border-gray-200 bg-gray-100 rounded-md sm:text-sm"/>
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-0.5">Vai trò NTG (trong sự kiện)</label>
+                                  <SearchableDropdown
+                                      options={roleOptions}
+                                      selectedValue={participant.roleId}
+                                      initialSearchTerm={participant.roleName}
+                                      onChange={(selectedId) => handleMemberChange("participants", index, "roleId", selectedId)}
+                                      placeholder="-- Chọn Vai trò NTG (Tùy chọn) --"
+                                      isLoading={isLoadingRoles}
+                                      disabled={(isDataLoading && !internalRoles.length) || !participant.userId }
+                                  />
+                              </div>
+                          </div>
+                            <div className="flex justify-end">
+                              <button type="button" onClick={() => handleRemoveMember("participants", index)}
+                                  className="bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded-md shadow-sm transition-colors">
+                                  Xóa
+                              </button>
                             </div>
                         </div>
-                         <div className="flex justify-end">
-                            <button type="button" onClick={() => handleRemoveMember("participants", index)}
-                                className="bg-red-500 hover:bg-red-600 text-white text-xs py-1 px-2 rounded-md shadow-sm transition-colors">
-                                Xóa
-                            </button>
-                        </div>
-                    </div>
                 ))}
                 <button type="button" onClick={() => handleAddMember("participants")}
                   className="mt-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium py-2 px-4 rounded-md shadow-sm transition-colors"

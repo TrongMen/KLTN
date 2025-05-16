@@ -16,7 +16,7 @@ import {
   ListBulletIcon,
 } from "@radix-ui/react-icons";
 import { User as MainUserType } from "../../types/appTypes";
-import { MdQrCodeScanner, MdQrCode } from "react-icons/md"; // Import icons
+import { MdQrCodeScanner, MdQrCode } from "react-icons/md";
 import QRScanner from "../../modals/QRScanner";
 
 interface EventType {
@@ -54,34 +54,32 @@ interface EventType {
     avatar?: string;
   } | null;
   avatarUrl?: string | null;
-  qrCodeUrl?: string | null; 
+  qrCodeUrl?: string | null;
   progressStatus?: string;
+  date?: string; // Alias for time
 }
 
-const getWeekRange = (
-  refDate: Date
-): { startOfWeek: Date; endOfWeek: Date } => {
-  const d = new Date(refDate);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const start = new Date(d.setDate(diff));
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  return { startOfWeek: start, endOfWeek: end };
+type RegisterEventTemporalFilterOption = "all" | "upcoming" | "ongoing" | "ended" | "dateRange";
+
+const getEventTemporalStatus = (eventTime?: string | Date): "upcoming" | "ongoing" | "ended" | "unknown" => {
+    if (!eventTime) return "unknown";
+    try {
+        const eventDate = new Date(eventTime);
+        if (isNaN(eventDate.getTime())) return "unknown";
+
+        const now = new Date();
+        const todayDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const eventDayStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+
+        if (eventDayStart > todayDayStart) return "upcoming";
+        if (eventDayStart.getTime() === todayDayStart.getTime()) return "ongoing";
+        if (eventDayStart < todayDayStart) return "ended";
+        return "unknown";
+    } catch {
+        return "unknown";
+    }
 };
 
-const getMonthRange = (
-  refDate: Date
-): { startOfMonth: Date; endOfMonth: Date } => {
-  const d = new Date(refDate);
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  end.setHours(23, 59, 59, 999);
-  return { startOfMonth: start, endOfMonth: end };
-};
 
 interface RegisteredEventsTabProps {
   user: MainUserType | null;
@@ -134,9 +132,7 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
   }>({ isOpen: false, title: "", message: "", onConfirm: null });
   const [registerSearchTerm, setRegisterSearchTerm] = useState("");
   const [registerSortOrder, setRegisterSortOrder] = useState<"az" | "za">("az");
-  const [registerTimeFilter, setRegisterTimeFilter] = useState<
-    "all" | "today" | "thisWeek" | "thisMonth" | "dateRange"
-  >("all");
+  const [registerTimeFilter, setRegisterTimeFilter] = useState<RegisterEventTemporalFilterOption>("all");
   const [registerStartDateFilter, setRegisterStartDateFilter] =
     useState<string>("");
   const [registerEndDateFilter, setRegisterEndDateFilter] =
@@ -161,49 +157,48 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
     setIsLoadingRegisteredIds(isLoadingRegisteredIdsProp);
   }, [isLoadingRegisteredIdsProp]);
 
- const fetchRegisterAvailableEvents = useCallback(async (showToastOnSuccess = false) => {
-  setRegisterIsLoading(true);
-  setRegisterError(null);
-  try {
-    const token = localStorage.getItem("authToken");
-    const headers: HeadersInit = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
-    const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
-    const res = await fetch(url, { headers, cache: "no-store" });
-    if (!res.ok) {
-      let m = `Lỗi tải sự kiện có sẵn`;
-      try {
-        const d = await res.json();
-        m = d.message || m;
-      } catch (_) {}
-      throw new Error(`${m} (${res.status})`);
-    }
-    const data = await res.json();
-    if (data.code === 1000 && Array.isArray(data.result)) {
-      setRegisterAvailableEvents(
-        
-        data.result.filter((event: EventType) => !event.deleted)
-      );
-      if (showToastOnSuccess) {
-        toast.success("Đã làm mới danh sách sự kiện!");
+  const fetchRegisterAvailableEvents = useCallback(async (showToastOnSuccess = false) => {
+    setRegisterIsLoading(true);
+    setRegisterError(null);
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers: HeadersInit = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+      const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
+      const res = await fetch(url, { headers, cache: "no-store" });
+      if (!res.ok) {
+        let m = `Lỗi tải sự kiện có sẵn`;
+        try {
+          const d = await res.json();
+          m = d.message || m;
+        } catch (_) {}
+        throw new Error(`${m} (${res.status})`);
       }
-    } else {
+      const data = await res.json();
+      if (data.code === 1000 && Array.isArray(data.result)) {
+        setRegisterAvailableEvents(
+          data.result.filter((event: EventType) => !event.deleted)
+        );
+        if (showToastOnSuccess) {
+          toast.success("Đã làm mới danh sách sự kiện!");
+        }
+      } else {
+        setRegisterAvailableEvents([]);
+        throw new Error(data.message || "Dữ liệu sự kiện có sẵn không hợp lệ");
+      }
+    } catch (err: any) {
+      setRegisterError(
+        err.message || "Lỗi không xác định khi tải sự kiện có sẵn"
+      );
       setRegisterAvailableEvents([]);
-      throw new Error(data.message || "Dữ liệu sự kiện có sẵn không hợp lệ");
+      if (showToastOnSuccess) {
+        toast.error(`Làm mới thất bại: ${err.message || 'Lỗi không xác định'}`);
+      }
+    } finally {
+      setRegisterIsLoading(false);
     }
-  } catch (err: any) {
-    setRegisterError(
-      err.message || "Lỗi không xác định khi tải sự kiện có sẵn"
-    );
-    setRegisterAvailableEvents([]);
-    if (showToastOnSuccess) {
-      toast.error(`Làm mới thất bại: ${err.message || 'Lỗi không xác định'}`);
-    }
-  } finally {
-    setRegisterIsLoading(false);
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     if (user?.id) {
@@ -220,7 +215,7 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
     setIsRefreshingInternal(true);
     const toastId = toast.loading("Đang làm mới dữ liệu...");
     try {
-      await fetchRegisterAvailableEvents(false); // không toast ở đây nữa
+      await fetchRegisterAvailableEvents(false);
       await onMainRefreshTrigger();
       toast.success("Dữ liệu đã được làm mới!", { id: toastId });
     } catch (error: any) {
@@ -236,57 +231,7 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
 
   const processedRegisterEvents = useMemo(() => {
     let eventsToProcess = [...registerAvailableEvents];
-    if (registerTimeFilter !== "all") {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-      eventsToProcess = eventsToProcess.filter((event) => {
-        const dateStrToUse = event.time;
-        if (!dateStrToUse) return false;
-        try {
-          const eventDate = new Date(dateStrToUse);
-          if (isNaN(eventDate.getTime())) return false;
-          switch (registerTimeFilter) {
-            case "today":
-              return eventDate >= todayStart && eventDate <= todayEnd;
-            case "thisWeek":
-              const { startOfWeek, endOfWeek } = getWeekRange(new Date());
-              return eventDate >= startOfWeek && eventDate <= endOfWeek;
-            case "thisMonth":
-              const { startOfMonth, endOfMonth } = getMonthRange(new Date());
-              return eventDate >= startOfMonth && eventDate <= endOfMonth;
-            case "dateRange":
-              if (!registerStartDateFilter || !registerEndDateFilter)
-                return false;
-              const start = new Date(registerStartDateFilter);
-              start.setHours(0, 0, 0, 0);
-              const end = new Date(registerEndDateFilter);
-              end.setHours(23, 59, 59, 999);
-              return (
-                !isNaN(start.getTime()) &&
-                !isNaN(end.getTime()) &&
-                start <= end &&
-                eventDate >= start &&
-                eventDate <= end
-              );
-            default:
-              return true;
-          }
-        } catch {
-          return false;
-        }
-      });
-    }
-    if (registerSearchTerm.trim()) {
-      const lowerSearchTerm = registerSearchTerm.trim().toLowerCase();
-      eventsToProcess = eventsToProcess.filter(
-        (event) =>
-          event.name.toLowerCase().includes(lowerSearchTerm) ||
-          (event.location &&
-            event.location.toLowerCase().includes(lowerSearchTerm))
-      );
-    }
+
     if (registerTab === "available") {
       eventsToProcess = eventsToProcess.filter(
         (event) => !isRegistered(event.id) && !isCreatedByUser(event.id)
@@ -296,6 +241,63 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
         isRegistered(event.id)
       );
     }
+    
+    if (registerTimeFilter !== "all") {
+        const now = new Date();
+        const todayDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        eventsToProcess = eventsToProcess.filter(event => {
+            const dateStrToUse = event.time || event.date;
+
+            if (registerTimeFilter === "dateRange") {
+                if (!registerStartDateFilter || !registerEndDateFilter) return true;
+                if (!dateStrToUse) return false;
+                try {
+                    const eventDate = new Date(dateStrToUse);
+                    if (isNaN(eventDate.getTime())) return false;
+                    const startFilter = new Date(registerStartDateFilter); startFilter.setHours(0,0,0,0);
+                    const endFilter = new Date(registerEndDateFilter); endFilter.setHours(23,59,59,999);
+                    return !isNaN(startFilter.getTime()) && !isNaN(endFilter.getTime()) && startFilter <= endFilter &&
+                           eventDate >= startFilter && eventDate <= endFilter;
+                } catch (e) {
+                    console.error("Error parsing date for dateRange (Registered Events):", dateStrToUse, e);
+                    return false;
+                }
+            } else {
+                if (!dateStrToUse) return false;
+                try {
+                    const eventDate = new Date(dateStrToUse);
+                    if (isNaN(eventDate.getTime())) return false;
+                    const eventDayStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+
+                    switch (registerTimeFilter) {
+                        case "upcoming":
+                            return eventDayStart > todayDayStart;
+                        case "ongoing":
+                            return eventDayStart.getTime() === todayDayStart.getTime();
+                        case "ended":
+                            return eventDayStart < todayDayStart;
+                        default:
+                            return true;
+                    }
+                } catch (e) {
+                    console.error("Error parsing event date for temporal status (Registered Events):", dateStrToUse, e);
+                    return false;
+                }
+            }
+        });
+    }
+
+    if (registerSearchTerm.trim()) {
+      const lowerSearchTerm = registerSearchTerm.trim().toLowerCase();
+      eventsToProcess = eventsToProcess.filter(
+        (event) =>
+          event.name.toLowerCase().includes(lowerSearchTerm) ||
+          (event.location &&
+            event.location.toLowerCase().includes(lowerSearchTerm))
+      );
+    }
+    
     if (registerSortOrder === "za") {
       eventsToProcess.sort((a, b) =>
         b.name.localeCompare(a.name, "vi", { sensitivity: "base" })
@@ -309,7 +311,7 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
   }, [
     registerAvailableEvents,
     registerTab,
-    initialRegisteredEventIds,
+    initialRegisteredEventIds, // Dependency for isRegistered inside filter
     registerTimeFilter,
     registerStartDateFilter,
     registerEndDateFilter,
@@ -470,6 +472,13 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
 
   const handleUnregisterClick = (eventToUnregister: EventType) => {
     if (registerIsSubmitting || !currentUserId) return;
+
+    const eventStatus = getEventTemporalStatus(eventToUnregister.time || eventToUnregister.date);
+    if (eventStatus === "ended") {
+        toast.error("Không thể hủy đăng ký sự kiện đã diễn ra.");
+        return;
+    }
+
     setRegisterConfirmationState({
       isOpen: true,
       title: "Xác nhận hủy đăng ký",
@@ -515,6 +524,28 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
 
 const executeBatchUnregistration = async (ids: string[]) => {
   if (registerIsSubmitting || !currentUserId) return;
+
+  const eventsToUnregister = ids
+    .map(id => processedRegisterEvents.find(event => event.id === id))
+    .filter(event => event !== undefined) as EventType[];
+
+  const endedEventIdsInSelection = eventsToUnregister
+    .filter(event => getEventTemporalStatus(event.time || event.date) === "ended")
+    .map(event => event.id);
+
+  if (endedEventIdsInSelection.length > 0) {
+    toast.error(`Không thể hủy đăng ký các sự kiện đã diễn ra. (${endedEventIdsInSelection.length} sự kiện)`);
+    setRegisterSelectedToUnregister(prev => {
+        const next = new Set(prev);
+        endedEventIdsInSelection.forEach(id => next.delete(id));
+        return next;
+    });
+    if (ids.length === endedEventIdsInSelection.length) return; // All selected were ended
+    ids = ids.filter(id => !endedEventIdsInSelection.includes(id)); // Filter out ended events
+    if (ids.length === 0) return; // No valid events left to unregister
+  }
+
+
   setRegisterIsSubmitting("batch_unregister");
   const token = localStorage.getItem("authToken");
   if (!token) {
@@ -580,19 +611,22 @@ const executeBatchUnregistration = async (ids: string[]) => {
     okIds.forEach((id) => onRegistrationChange(id, false));
   }
   if (failIds.length > 0) {
-    setRegisterSelectedToUnregister(new Set(failIds)); // SỬA Ở ĐÂY
+    setRegisterSelectedToUnregister(new Set(failIds));
     toast.error(`Lỗi hủy ${failIds.length} sự kiện. Vui lòng thử lại.`, {
-      id: okCount === 0 ? loadId : undefined,
+      id: okCount === 0 && endedEventIdsInSelection.length === 0 ? loadId : undefined,
     });
   } else if (okCount > 0 && failIds.length === 0){
-    setRegisterSelectedToUnregister(new Set()); // SỬA Ở ĐÂY: Clear selection if all successful
+    setRegisterSelectedToUnregister(new Set());
   }
   
-  if (okCount === 0 && failIds.length === 0 && ids.length > 0) {
+  if (okCount === 0 && failIds.length === 0 && ids.length > 0 && endedEventIdsInSelection.length === 0) {
       toast.error(`Không thể hủy ${ids.length} sự kiện. Vui lòng thử lại.`, { id: loadId });
-  } else if (ids.length === 0 || (okCount > 0 && failIds.length === 0)) {
+  } else if (ids.length === 0 && endedEventIdsInSelection.length === 0) { // No events were attempted (e.g. all were ended and filtered out)
       toast.dismiss(loadId);
+  } else if (okCount > 0 && failIds.length === 0) {
+     toast.dismiss(loadId);
   }
+
   setRegisterIsSubmitting(null);
 };
   const handleBatchUnregister = () => {
@@ -605,16 +639,36 @@ const executeBatchUnregistration = async (ids: string[]) => {
       toast.error("Không thể xác định người dùng.");
       return;
     }
+
+    const eventsToUnregister = ids
+        .map(id => processedRegisterEvents.find(event => event.id === id))
+        .filter(event => event !== undefined) as EventType[];
+    
+    const endedEventNames = eventsToUnregister
+        .filter(event => getEventTemporalStatus(event.time || event.date) === "ended")
+        .map(event => event.name);
+
+    let messageContent = <>Hủy đăng ký <strong className="text-indigo-600">{ids.length} sự kiện</strong> đã chọn?</>;
+    if (endedEventNames.length > 0) {
+        messageContent = (
+            <>
+                <p>Hủy đăng ký <strong className="text-indigo-600">{ids.length - endedEventNames.length} sự kiện</strong> hợp lệ?</p>
+                <p className="text-xs text-orange-600 mt-1">
+                    (Sẽ bỏ qua {endedEventNames.length} sự kiện đã diễn ra: {endedEventNames.join(', ')})
+                </p>
+            </>
+        );
+    }
+     if (ids.length - endedEventNames.length === 0 && endedEventNames.length > 0) {
+        toast.error(`Tất cả ${endedEventNames.length} sự kiện bạn chọn đều đã diễn ra và không thể hủy đăng ký.`);
+        return;
+    }
+
+
     setRegisterConfirmationState({
       isOpen: true,
       title: "Xác nhận hủy hàng loạt",
-      message: (
-        <>
-          Hủy đăng ký{" "}
-          <strong className="text-indigo-600">{ids.length} sự kiện</strong> đã
-          chọn?
-        </>
-      ),
+      message: messageContent,
       onConfirm: () => {
         setRegisterConfirmationState({
           isOpen: false,
@@ -632,7 +686,7 @@ const executeBatchUnregistration = async (ids: string[]) => {
           onConfirm: null,
         }),
       confirmVariant: "danger",
-      confirmText: `Hủy (${ids.length})`,
+      confirmText: `Hủy (${ids.length - endedEventNames.length})`,
       cancelText: "Không",
     });
   };
@@ -859,6 +913,9 @@ const executeBatchUnregistration = async (ids: string[]) => {
               const alreadyRegistered = isRegistered(event.id);
               const isCreated = isCreatedByUser(event.id);
               const canAct = !!currentUserId;
+              const eventStatus = getEventTemporalStatus(event.time || event.date);
+              const isEventEnded = eventStatus === "ended";
+
               return (
                 <li
                   key={event.id}
@@ -899,9 +956,9 @@ const executeBatchUnregistration = async (ids: string[]) => {
                                     onChange={() => {
                                         if (!processing) handleSelectToUnregister(event.id);
                                     }}
-                                    disabled={processing}
+                                    disabled={processing || (isEventEnded && currentTab === "registered")}
                                     aria-label={`Chọn hủy ${event.name}`}
-                                    className="h-full w-full text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer"
+                                    className="h-full w-full text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                 />
                               </span>
                           )}
@@ -948,19 +1005,22 @@ const executeBatchUnregistration = async (ids: string[]) => {
                             e.stopPropagation();
                             handleRegisterClick(event);
                           }}
-                          disabled={alreadyRegistered || processing || !canAct}
+                          disabled={alreadyRegistered || processing || !canAct || isEventEnded}
                           className={`w-full cursor-pointer sm:w-auto px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium flex items-center justify-center gap-1 ${
-                            alreadyRegistered
+                            alreadyRegistered || isEventEnded
                               ? "bg-gray-400 cursor-not-allowed"
                               : processing || !canAct
                               ? "bg-blue-300 cursor-wait"
                               : "bg-blue-500 hover:bg-blue-600"
                           }`}
+                          title={isEventEnded ? "Sự kiện đã kết thúc" : alreadyRegistered ? "Đã đăng ký" : "Đăng ký"}
                         >
                           {alreadyRegistered ? (
                             <CheckCircledIcon />
                           ) : processing ? (
                             <ReloadIcon className="animate-spin" />
+                          ) : isEventEnded ? (
+                            <Cross2Icon />
                           ) : (
                             <Pencil1Icon />
                           )}
@@ -968,6 +1028,8 @@ const executeBatchUnregistration = async (ids: string[]) => {
                             ? "Đã đăng ký"
                             : processing
                             ? "..."
+                            : isEventEnded
+                            ? "Đã kết thúc"
                             : "Đăng ký"}
                         </button>
                       ))}
@@ -977,12 +1039,13 @@ const executeBatchUnregistration = async (ids: string[]) => {
                           e.stopPropagation();
                           handleUnregisterClick(event);
                         }}
-                        disabled={processing || !canAct}
+                        disabled={processing || !canAct || isEventEnded}
                         className={`w-full cursor-pointer sm:w-auto px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium flex items-center justify-center gap-1 ${
-                          processing || !canAct
-                            ? "bg-red-300 cursor-wait"
+                          processing || !canAct || isEventEnded
+                            ? "bg-red-300 cursor-not-allowed"
                             : "bg-red-500 hover:bg-red-600"
                         }`}
+                         title={isEventEnded ? "Không thể hủy sự kiện đã diễn ra" : "Hủy đăng ký"}
                       >
                         {processing ? (
                           <ReloadIcon className="animate-spin" />
@@ -1014,6 +1077,9 @@ const executeBatchUnregistration = async (ids: string[]) => {
               const alreadyRegistered = isRegistered(event.id);
               const isCreated = isCreatedByUser(event.id);
               const canAct = !!currentUserId;
+              const eventStatus = getEventTemporalStatus(event.time || event.date);
+              const isEventEnded = eventStatus === "ended";
+
               return (
                 <div
                   key={event.id}
@@ -1063,9 +1129,9 @@ const executeBatchUnregistration = async (ids: string[]) => {
                               onChange={() => {
                                   if (!processing) handleSelectToUnregister(event.id);
                               }}
-                              disabled={processing}
+                              disabled={processing || (isEventEnded && currentTab === "registered")}
                               aria-label={`Chọn hủy ${event.name}`}
-                              className="h-full w-full text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer"
+                              className="h-full w-full text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                           />
                         </span>
                       )}
@@ -1112,19 +1178,22 @@ const executeBatchUnregistration = async (ids: string[]) => {
                             e.stopPropagation();
                             handleRegisterClick(event);
                           }}
-                          disabled={alreadyRegistered || processing || !canAct}
+                          disabled={alreadyRegistered || processing || !canAct || isEventEnded}
                           className={`w-full cursor-pointer px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium flex items-center justify-center gap-1 ${
-                            alreadyRegistered
+                            alreadyRegistered || isEventEnded
                               ? "bg-gray-400 cursor-not-allowed"
                               : processing || !canAct
                               ? "bg-blue-300 cursor-wait"
                               : "bg-blue-500 hover:bg-blue-600"
                           }`}
+                          title={isEventEnded ? "Sự kiện đã kết thúc" : alreadyRegistered ? "Đã đăng ký" : "Đăng ký"}
                         >
                           {alreadyRegistered ? (
                             <CheckCircledIcon />
                           ) : processing ? (
                             <ReloadIcon className="animate-spin" />
+                          ) : isEventEnded ? (
+                            <Cross2Icon/>
                           ) : (
                             <Pencil1Icon />
                           )}
@@ -1132,6 +1201,8 @@ const executeBatchUnregistration = async (ids: string[]) => {
                             ? "Đã đăng ký"
                             : processing
                             ? "..."
+                            : isEventEnded
+                            ? "Đã kết thúc"
                             : "Đăng ký"}
                         </button>
                       ))}
@@ -1141,12 +1212,13 @@ const executeBatchUnregistration = async (ids: string[]) => {
                           e.stopPropagation();
                           handleUnregisterClick(event);
                         }}
-                        disabled={processing || !canAct}
+                        disabled={processing || !canAct || isEventEnded}
                         className={`w-full cursor-pointer px-3 py-1.5 rounded-md text-white shadow-sm transition text-xs font-medium flex items-center justify-center gap-1 ${
-                          processing || !canAct
-                            ? "bg-red-300 cursor-wait"
+                          processing || !canAct || isEventEnded
+                            ? "bg-red-300 cursor-not-allowed"
                             : "bg-red-500 hover:bg-red-600"
                         }`}
+                        title={isEventEnded ? "Không thể hủy sự kiện đã diễn ra" : "Hủy đăng ký"}
                       >
                         {processing ? (
                           <ReloadIcon className="animate-spin" />
@@ -1277,13 +1349,13 @@ const executeBatchUnregistration = async (ids: string[]) => {
               htmlFor="timeFilterRegEvents"
               className="block text-xs font-medium text-gray-600 mb-1"
             >
-              Lọc thời gian
+              Lọc theo trạng thái
             </label>
             <select
               id="timeFilterRegEvents"
               value={registerTimeFilter}
               onChange={(e) =>
-                setRegisterTimeFilter(e.target.value as any)
+                setRegisterTimeFilter(e.target.value as RegisterEventTemporalFilterOption)
               }
               className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-green-500 focus:border-green-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
               style={{
@@ -1293,11 +1365,11 @@ const executeBatchUnregistration = async (ids: string[]) => {
                 backgroundSize: "1.5em 1.5em",
               }}
             >
-              <option value="all">Tất cả</option>
-              <option value="today">Hôm nay</option>
-              <option value="thisWeek">Tuần này</option>
-              <option value="thisMonth">Tháng này</option>
-              <option value="dateRange">Khoảng ngày</option>
+              <option value="all">Tất cả thời gian</option>
+              <option value="upcoming">Sắp diễn ra</option>
+              <option value="ongoing">Đang diễn ra</option>
+              <option value="ended">Đã diễn ra</option>
+              <option value="dateRange">Khoảng ngày cụ thể</option>
             </select>
           </div>
           <div className="flex items-end justify-start sm:justify-end gap-2">
@@ -1373,13 +1445,11 @@ const executeBatchUnregistration = async (ids: string[]) => {
               : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
           }`}
         >
-          <MagnifyingGlassIcon /> Gợi ý (
-          {
+          <MagnifyingGlassIcon /> Gợi ý ({
             processedRegisterEvents.filter(
               (e) => !isRegistered(e.id) && !isCreatedByUser(e.id)
             ).length
-          }
-          )
+          })
         </button>
         <button
           onClick={() => setRegisterTab("registered")}
@@ -1389,8 +1459,7 @@ const executeBatchUnregistration = async (ids: string[]) => {
               : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
           }`}
         >
-          <CheckCircledIcon /> Đã đăng ký (
-          {initialRegisteredEventIds?.size ?? 0})
+          <CheckCircledIcon /> Đã đăng ký ({initialRegisteredEventIds?.size ?? 0})
         </button>
       </div>
       <div className="overflow-y-auto flex-grow pt-4 px-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">

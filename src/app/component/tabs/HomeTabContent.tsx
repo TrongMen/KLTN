@@ -5,7 +5,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User, NewsItem, EventDisplayInfo, EventMemberInfo } from "../types/appTypes";
+import { User, NewsItem, EventDisplayInfo,  } from "../types/appTypes";
+import {  EventMemberInfo } from "../types/homeType";
+
 import { EventDataForForm, DetailedApiUser, ApiRole } from "../types/typCreateEvent";
 import { useRouter } from "next/navigation";
 import {
@@ -31,7 +33,7 @@ type ConfirmationState = Omit<ConfirmationDialogProps, "onCancel"> & {
 
 type EventStatus = "upcoming" | "ongoing" | "ended";
 
-interface DetailedMember { // Dùng chung cho Organizer và Participant trong state của component này
+interface DetailedMember { 
   userId: string;
   fullName?: string;
   roleName?: string;

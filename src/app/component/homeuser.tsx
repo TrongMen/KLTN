@@ -1,4 +1,4 @@
-//UserHome.tsx
+// UserHome.tsx
 
 "use client";
 
@@ -15,9 +15,7 @@ import UserMenu from "./menu";
 import ContactModal from "./modals/ContactModal";
 import AboutModal from "./modals/AboutModal";
 import HomeTabContent from "./tabs/HomeTabContent";
-import MyEventsTabContent, {
-  EventType as MyEventType,
-} from "./tabs/MyEventsTabContent";
+import MyEventsTabContent from "./tabs/MyEventsTabContent";
 import AttendeesTabContent from "./tabs/AttendeesTabContentUser";
 import MembersTabContent from "./tabs/MembersTabContent";
 import ChatTabContent from "./tabs/ChatTabContent";
@@ -33,7 +31,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@radix-ui/react-icons";
-import { User, EventDisplayInfo, NewsItem } from "./types/homeType";
+// Đảm bảo các type này là nguồn duy nhất và chính xác từ appTypes
+import { User, EventDisplayInfo, NewsItem } from "./types/appTypes"; 
+import {  EventMemberInfo } from "./types/homeType"; 
+
+
 import {
   ChatMessageNotificationPayload,
   MainConversationType,
@@ -160,6 +162,16 @@ export default function UserHome() {
     useState<EventDataForForm | null>(null);
   const [isUpdateEventModalOpen, setIsUpdateEventModalOpen] =
     useState<boolean>(false);
+  const isMountedRef = useRef(true);
+
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
 
   useEffect(() => {
     const checkMobileView = () => setIsMobileView(window.innerWidth < 768);
@@ -172,7 +184,7 @@ export default function UserHome() {
     ? OTHER_TABS_PER_PAGE_MOBILE
     : OTHER_TABS_PER_PAGE_DESKTOP;
 
-  const fetchChatUserDetailsWithCache = useCallback(
+    const fetchChatUserDetailsWithCache = useCallback(
     async (
       userId: string,
       token: string | null
@@ -1210,12 +1222,11 @@ export default function UserHome() {
         const fmt: EventDisplayInfo[] = d.result
           .filter((e: any) => !e.deleted)
           .map((e: any) => ({
-            
             id: e.id,
             title: e.name || "N/A",
             name: e.name,
             date: e.time || e.createdAt || "",
-            time: e.time,
+            time: e.time, 
             location: e.location || "N/A",
             description: e.content || e.purpose || "",
             content: e.content,
@@ -1223,11 +1234,24 @@ export default function UserHome() {
             avatarUrl: e.avatarUrl || null,
             status: e.status,
             createdBy: e.createdBy,
-            organizers: e.organizers || [],
-            participants: e.participants || [],
+            organizers: (e.organizers || []).map((org: any): EventMemberInfo => ({
+                userId: org.userId,
+                roleId: org.roleId || "", 
+                positionId: org.positionId || "",
+                name: org.name, 
+                roleName: org.roleName,
+                positionName: org.positionName 
+            })),
+            participants: (e.participants || []).map((par: any): EventMemberInfo => ({
+                userId: par.userId,
+                roleId: par.roleId || "",
+                positionId: par.positionId || "",
+                name: par.name,
+                roleName: par.roleName,
+                positionName: par.positionName
+            })),
             attendees: e.attendees || [],
-            maxAttendees: e.maxAttendees || 0,
-            
+            maxAttendees: e.maxAttendees === null || e.maxAttendees === undefined ? null : e.maxAttendees,
           }));
         setAllEvents(fmt);
       } else throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
@@ -1239,6 +1263,7 @@ export default function UserHome() {
       setIsLoadingEvents(false);
     }
   }, [refreshToken, router]);
+
 
   const fetchRegisteredEventIds = useCallback(
     async (userIdParam: string, token: string | null) => {
@@ -1344,30 +1369,28 @@ export default function UserHome() {
     async (userIdParam: string, token: string | null) => {
       if (!userIdParam || !token) {
         setNotifications([]);
+        setIsLoadingNotifications(false); // Quan trọng: set loading false nếu không fetch
         return;
       }
       setIsLoadingNotifications(true);
       setErrorNotifications(null);
-      const limit = 10;
+      const limit = 20; // Tăng limit nếu cần
       let currentToken = token;
       try {
+        const url = `http://localhost:8080/identity/api/notifications?userId=${userIdParam}&limit=${limit}&sort=createdAt,desc`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
-        let res = await fetch(
-          `http://localhost:8080/identity/api/notifications?userId=${userIdParam}&limit=${limit}`,
-          { headers, cache: "no-store" }
-        );
+        let res = await fetch(url, { headers, cache: "no-store" });
+        
         if (res.status === 401 || res.status === 403) {
           const newToken = await refreshToken();
           if (newToken) {
             currentToken = newToken;
             localStorage.setItem("authToken", newToken);
             headers["Authorization"] = `Bearer ${newToken}`;
-            res = await fetch(
-              `http://localhost:8080/identity/api/notifications?userId=${userIdParam}&limit=${limit}`,
-              { headers, cache: "no-store" }
-            );
-          } else throw new Error("Unauthorized or Refresh Failed");
+            res = await fetch(url, { headers, cache: "no-store" });
+          } else throw new Error("Unauthorized or Refresh Failed for notifications");
         }
+
         if (!res.ok) {
           const status = res.status;
           let msg = `HTTP error ${status}`;
@@ -1391,19 +1414,26 @@ export default function UserHome() {
               userId: item.userId ?? null,
             })
           );
-          setNotifications(formattedNotifications);
-        } else
+          if (isMountedRef.current) {
+            setNotifications(formattedNotifications);
+          }
+        } else {
           throw new Error(data.message || "Lỗi định dạng dữ liệu thông báo");
+        }
       } catch (error: any) {
-        setErrorNotifications(error.message || "Lỗi tải thông báo.");
-        setNotifications([]);
+        if (isMountedRef.current) {
+          setErrorNotifications(error.message || "Lỗi tải thông báo.");
+          setNotifications([]);
+        }
         if (error.message?.includes("Unauthorized"))
           router.push("/login?sessionExpired=true");
       } finally {
-        setIsLoadingNotifications(false);
+        if (isMountedRef.current) {
+          setIsLoadingNotifications(false);
+        }
       }
     },
-    [refreshToken, router]
+    [refreshToken, router] 
   );
 
   useEffect(() => {
@@ -1516,54 +1546,84 @@ export default function UserHome() {
   useEffect(() => {
     if (user?.id) {
       const handlers = {
-        onNotificationReceived: (newNotif: NotificationItem) => {
-          toast(`🔔 ${newNotif.title || "Thông báo mới!"}`, { duration: 5000 });
-          setNotifications((prevN) => {
-            if (newNotif.id && prevN.some((n) => n.id === newNotif.id)) {
-              return prevN.map((n) => (n.id === newNotif.id ? newNotif : n));
+        onNotificationReceived: (data: any) => { // `data` là payload từ server
+            if (isMountedRef.current) {
+                console.log("SOCKET UserHome: Received notification raw data:", data); // Log dữ liệu thô
+                
+                // Kiểm tra xem data.id (ID từ DB) có được gửi không
+                const dbId = data.id; // ID này phải là ID trong database
+                const clientSideGeneratedId = `socket-user-${Date.now()}`;
+
+                const newNotification: NotificationItem = {
+                    id: dbId || clientSideGeneratedId, // Ưu tiên ID từ server, nếu không có thì tạo ID tạm
+                    title: data.title || "Thông báo mới",
+                    content: data.content || "Bạn có thông báo mới.",
+                    type: data.type || "GENERAL",
+                    read: data.read !== undefined ? data.read : false,
+                    createdAt: data.createdAt || new Date().toISOString(),
+                    relatedId: data.relatedId ?? null,
+                    userId: data.userId || user.id, 
+                };
+
+                if (!dbId) {
+                    console.warn("SOCKET UserHome: Notification received without a database ID. Using client-generated ID:", newNotification.id);
+                }
+
+                toast(`🔔 ${newNotification.title}`, { duration: 5000 });
+                setNotifications((prevNotifications) => {
+                    // Nếu thông báo đã tồn tại (dựa trên ID từ DB, nếu có), thì cập nhật
+                    if (dbId && prevNotifications.some(n => n.id === dbId)) {
+                        return prevNotifications.map(n => n.id === dbId ? { ...n, ...newNotification, read: n.read && newNotification.read } : n);
+                    }
+                    // Nếu là ID client tạo và đã tồn tại (khả năng thấp), bỏ qua để tránh trùng lặp không cần thiết
+                    if (!dbId && prevNotifications.some(n => n.id === newNotification.id)) {
+                        return prevNotifications;
+                    }
+                    // Thêm thông báo mới vào đầu danh sách
+                    return [newNotification, ...prevNotifications].slice(0, 20); // Giới hạn số lượng thông báo
+                });
             }
-            const updatedN = [newNotif, ...prevN].slice(0, 15);
-            return updatedN;
-          });
         },
         onGlobalChatNotificationReceived: (
           payload: ChatMessageNotificationPayload
         ) => {
-          setGlobalChatPayloadForTab(payload);
-          if (user && payload.senderId !== user.id) {
-            let displayContent = "";
-            if (payload.messageType === "TEXT" && payload.actualMessageContent)
-              displayContent = payload.actualMessageContent;
-            else if (payload.messageType === "FILE" && payload.fileName)
-              displayContent = `Đã gửi tệp: ${payload.fileName}`;
-            else if (payload.messageType === "IMAGE")
-              displayContent = "Đã gửi hình ảnh.";
-            else if (payload.messageType === "VIDEO")
-              displayContent = "Đã gửi video.";
-            else if (payload.messageType === "AUDIO")
-              displayContent = "Đã gửi âm thanh.";
-            else
-              displayContent =
-                payload.messageContentPreview || "Có tin nhắn mới";
-            const chatNotif: NotificationItem = {
-              id: `chat-${payload.messageId}-${Date.now()}`,
-              title: `Tin nhắn mới từ ${payload.senderName} (Nhóm: ${payload.groupName})`,
-              content:
-                displayContent.substring(0, 150) +
-                (displayContent.length > 150 ? "..." : ""),
-              type: "NEW_CHAT_MESSAGE",
-              read: false,
-              createdAt: payload.sentAt || new Date().toISOString(),
-              relatedId: payload.groupId,
-              userId: user.id,
-            };
-            toast(
-              `💬 ${payload.senderName}: ${displayContent.substring(0, 50)}${
-                displayContent.length > 50 ? "..." : ""
-              }`,
-              { duration: 4000 }
-            );
-            setNotifications((prevN) => [chatNotif, ...prevN].slice(0, 15));
+           if (isMountedRef.current) {
+            setGlobalChatPayloadForTab(payload);
+            if (user && payload.senderId !== user.id) {
+                let displayContent = "";
+                if (payload.messageType === "TEXT" && payload.actualMessageContent)
+                displayContent = payload.actualMessageContent;
+                else if (payload.messageType === "FILE" && payload.fileName)
+                displayContent = `Đã gửi tệp: ${payload.fileName}`;
+                else if (payload.messageType === "IMAGE")
+                displayContent = "Đã gửi hình ảnh.";
+                else if (payload.messageType === "VIDEO")
+                displayContent = "Đã gửi video.";
+                else if (payload.messageType === "AUDIO")
+                displayContent = "Đã gửi âm thanh.";
+                else
+                displayContent =
+                    payload.messageContentPreview || "Có tin nhắn mới";
+                const chatNotif: NotificationItem = {
+                id: `chat-${payload.messageId}-${Date.now()}`, // Chat notifications vẫn có thể dùng ID client vì chúng chỉ mang tính tạm thời
+                title: `Tin nhắn mới từ ${payload.senderName} (Nhóm: ${payload.groupName})`,
+                content:
+                    displayContent.substring(0, 150) +
+                    (displayContent.length > 150 ? "..." : ""),
+                type: "NEW_CHAT_MESSAGE",
+                read: false,
+                createdAt: payload.sentAt || new Date().toISOString(),
+                relatedId: payload.groupId,
+                userId: user.id,
+                };
+                toast(
+                `💬 ${payload.senderName}: ${displayContent.substring(0, 50)}${
+                    displayContent.length > 50 ? "..." : ""
+                }`,
+                { duration: 4000 }
+                );
+                setNotifications((prevN) => [chatNotif, ...prevN].slice(0, 20));
+            }
           }
         },
         onConnect: () => {
@@ -1581,7 +1641,7 @@ export default function UserHome() {
     return () => {
       disconnectSocket();
     };
-  }, [user, setGlobalChatPayloadForTab, setNotifications]);
+  }, [user, setGlobalChatPayloadForTab]); // Bỏ setNotifications khỏi dependencies nếu logic phức tạp hơn gây vòng lặp
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1750,6 +1810,19 @@ export default function UserHome() {
       toast.error("Vui lòng đăng nhập lại.");
       return;
     }
+    console.log("Attempting to mark as read, ID sent to API:", notificationId); 
+    
+    // Nếu ID là do client tạo (cho socket notifications chưa có DB ID), không gọi API
+    if (notificationId.startsWith("socket-user-")) {
+        console.warn("Attempted to mark a client-generated ID notification as read. Skipping API call.", notificationId);
+        // Cập nhật UI cục bộ nếu muốn (tạm thời coi như đã đọc)
+        // setNotifications((prev) =>
+        //   prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+        // );
+        // toast.info("Thông báo này sẽ được cập nhật trạng thái sau khi tải lại.");
+        return; 
+    }
+
     let currentToken = token;
     try {
       let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
@@ -1771,19 +1844,37 @@ export default function UserHome() {
           throw new Error("Không thể làm mới phiên đăng nhập.");
         }
       }
+      
       if (!res.ok) {
         let errorMsg = `Lỗi ${res.status}`;
         try {
+          // Cố gắng đọc JSON ngay cả khi lỗi, để lấy message từ server
           const errorData = await res.json();
           errorMsg = errorData.message || errorMsg;
-        } catch (_) {}
+          if (res.status === 404) { // Cụ thể hóa lỗi 404
+             errorMsg = "Lỗi không tìm thấy thông báo trên server.";
+          }
+        } catch (e) {
+            // Nếu không đọc được JSON, giữ lại thông báo lỗi HTTP gốc
+            if (res.status === 404) {
+                errorMsg = "Lỗi không tìm thấy thông báo trên server.";
+            }
+        }
         throw new Error(errorMsg);
       }
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-      );
+
+      // API call thành công (2xx status code)
+      if (isMountedRef.current) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+        );
+        toast.success("Đã đánh dấu là đã đọc!"); // Phản hồi cho người dùng
+      }
+
     } catch (error: any) {
-      toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
+      if (isMountedRef.current) {
+        toast.error(`${error.message || "Không thể đánh dấu đã đọc."}`);
+      }
       if (error.message?.includes("Unauthorized"))
         router.push("/login?sessionExpired=true");
     }
@@ -1826,8 +1917,9 @@ export default function UserHome() {
     if (user?.id && token) {
       fetchUserCreatedEvents(user.id, token);
       fetchRegisteredEventIds(user.id, token);
+      fetchNotifications(user.id, token); // Làm mới thông báo khi sự kiện chung được làm mới
     }
-  }, [user, fetchAllEvents, fetchUserCreatedEvents, fetchRegisteredEventIds]);
+  }, [user, fetchAllEvents, fetchUserCreatedEvents, fetchRegisteredEventIds, fetchNotifications]);
 
   const isPageLoading = !initializedRef.current || isLoadingUser;
 
@@ -1969,77 +2061,64 @@ export default function UserHome() {
   const showNextButton =
     currentTabSetPage < totalOtherTabPages - 1 && tabs.length > TABS_PER_PAGE;
 
-  const openModalForEventUpdate = (eventDataForForm: EventDataForForm) => {
-       setEventToEditInModal(eventDataForForm);
+  const openModalForEventUpdateHandler = (eventDataForForm: EventDataForForm) => {
+        setEventToEditInModal(eventDataForForm);
         setIsUpdateEventModalOpen(true);
     };
 
-  
-    
-
-
-
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
-      <Toaster toastOptions={{ duration: 3000 }} position="top-center" />{" "}
+      <Toaster toastOptions={{ duration: 3000 }} position="top-center" />
       <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
-        {" "}
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          {" "}
           <div className="text-lg sm:text-xl font-bold">
             Quản lý sự kiện
-          </div>{" "}
+          </div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-            {" "}
             <span
               className="cursor-pointer hover:text-gray-300 transition-colors"
               onClick={() => setShowAboutModal(true)}
             >
-              Giới thiệu{" "}
-            </span>{" "}
+              Giới thiệu
+            </span>
             <span
               className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
             >
-              Liên hệ{" "}
-            </span>{" "}
+              Liên hệ
+            </span>
             {initializedRef.current && !isLoadingUser && (
               <UserMenu user={user} onLogout={handleLogout} />
-            )}{" "}
+            )}
             {(!initializedRef.current || isLoadingUser) && (
               <span className="text-gray-400">Đang tải...</span>
-            )}{" "}
+            )}
             {initializedRef.current && !isLoadingUser && !user && (
               <Link href="/login">
-                {" "}
                 <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
-                  Đăng nhập{" "}
-                </span>{" "}
+                  Đăng nhập
+                </span>
               </Link>
-            )}{" "}
-          </div>{" "}
-        </div>{" "}
-      </nav>{" "}
+            )}
+          </div>
+        </div>
+      </nav>
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30 ">
-        {" "}
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
-          {" "}
           {tabs.length > 0 && (
             <div className="flex items-center grow justify-center min-w-0">
-              {" "}
               {showPrevButton && (
                 <button
                   onClick={handlePrevTabs}
                   className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0 cursor-pointer"
                   aria-label="Các tab trước"
                 >
-                  {" "}
-                  <ChevronLeftIcon className="h-5 w-5 text-gray-600" />{" "}
+                  <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
                 </button>
-              )}{" "}
+              )}
               {!showPrevButton && tabs.length > TABS_PER_PAGE && (
                 <div className="w-[36px] h-[36px] shrink-0"></div>
-              )}{" "}
+              )}
               <div
                 className={`flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible ${
                   !showPrevButton &&
@@ -2054,21 +2133,19 @@ export default function UserHome() {
                     : ""
                 }`}
               >
-                {" "}
                 {currentVisibleOtherTabs.map((tab) => (
                   <div
                     key={tab.id}
                     className="relative flex flex-col items-center"
                   >
-                    {" "}
                     <button
                       onClick={() => setActiveTab(tab.id as ActiveTab)}
                       className={`${getTabButtonClasses(tab.id as ActiveTab)} ${
                         isMobileView ? "px-2 text-[11px]" : ""
                       }`}
                     >
-                      {tab.label}{" "}
-                    </button>{" "}
+                      {tab.label}
+                    </button>
                     {activeTab === tab.id && (
                       <div
                         className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
@@ -2076,36 +2153,33 @@ export default function UserHome() {
                         )} border-r-[6px] border-r-transparent`}
                         style={{ left: "50%", transform: "translateX(-50%)" }}
                       ></div>
-                    )}{" "}
+                    )}
                   </div>
-                ))}{" "}
-              </div>{" "}
+                ))}
+              </div>
               {showNextButton && (
                 <button
                   onClick={handleNextTabs}
                   className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0 cursor-pointer"
                   aria-label="Các tab kế tiếp"
                 >
-                  {" "}
-                  <ChevronRightIcon className="h-5 w-5 text-gray-600" />{" "}
+                  <ChevronRightIcon className="h-5 w-5 text-gray-600" />
                 </button>
-              )}{" "}
+              )}
               {!showNextButton && tabs.length > TABS_PER_PAGE && (
                 <div className="w-[36px] h-[36px] shrink-0"></div>
-              )}{" "}
+              )}
             </div>
-          )}{" "}
-        </div>{" "}
-      </div>{" "}
+          )}
+        </div>
+      </div>
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
-        {" "}
         {isPageLoading ? (
           <p className="text-center text-gray-500 italic py-6">
-            Đang tải dữ liệu...{" "}
+            Đang tải dữ liệu...
           </p>
         ) : (
           <>
-            {" "}
             {activeTab === "home" && (
               <HomeTabContent
                 allEvents={allEvents}
@@ -2128,14 +2202,14 @@ export default function UserHome() {
                 timeFilterOption={timeFilterOption}
                 setTimeFilterOption={setTimeFilterOption}
                 refreshToken={refreshToken}
-                onRefreshEvents={fetchAllEvents} // Hoặc handleGlobalEventRefresh nếu logic giống nhau
+                onRefreshEvents={fetchAllEvents}
                 newsItems={newsItems}
                 isLoadingNews={isLoadingNews}
                 errorNews={errorNews}
                 refreshNewsList={refreshNewsList}
-                onOpenUpdateModal={openModalForEventUpdate} // Truyền hàm này
+                onOpenUpdateModal={openModalForEventUpdateHandler}
               />
-            )}{" "}
+            )}
             {activeTab === "news" && (
               <NewsTabContent
                 newsItems={newsItems}
@@ -2151,7 +2225,7 @@ export default function UserHome() {
                 onRegisterForEvent={handleRegister}
                 isRegisteringForEventId={isRegistering}
               />
-            )}{" "}
+            )}
             {user && activeTab === "myNews" && (
               <MyNewsTabContent
                 user={user}
@@ -2160,7 +2234,7 @@ export default function UserHome() {
                 }}
                 refreshToken={refreshToken}
               />
-            )}{" "}
+            )}
             {user && activeTab === "createEvent" && (
               <CreateEventForm
                 user={user}
@@ -2169,7 +2243,7 @@ export default function UserHome() {
                   setActiveTab("myEvents");
                 }}
               />
-            )}{" "}
+            )}
             {user && activeTab === "myEvents" && (
               <MyEventsTabContent
                 user={user}
@@ -2178,17 +2252,17 @@ export default function UserHome() {
                 createdEventIdsFromParent={createdEventIds}
                 onRegistrationChange={handleRegistrationChange}
                 onEventNeedsRefresh={handleGlobalEventRefresh}
-                onOpenUpdateModal={openModalForEventUpdate}
+                onOpenUpdateModal={openModalForEventUpdateHandler}
                 refreshToken={refreshToken}
               />
-            )}{" "}
+            )}
             {user && activeTab === "attendees" && (
               <AttendeesTabContent
                 user={user}
                 refreshToken={refreshToken}
                 onSessionExpired={handleSessionExpired}
               />
-            )}{" "}
+            )}
             {user && activeTab === "members" && (
               <MembersTabContent
                 user={user}
@@ -2197,9 +2271,9 @@ export default function UserHome() {
                 refreshToken={refreshToken}
                 onSessionExpired={handleSessionExpired}
               />
-            )}{" "}
+            )}
             {user && activeTab === "chatList" && (
-              <ChatTabContent
+               <ChatTabContent
                 currentUser={user}
                 globalChatMessagePayload={globalChatPayloadForTab}
                 conversations={chatConversations}
@@ -2245,24 +2319,23 @@ export default function UserHome() {
                 downloadingFileId={downloadingChatFileId}
                 setDownloadingFileId={setDownloadingChatFileId}
               />
-            )}{" "}
+            )}
             {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
               !user &&
               initializedRef.current &&
               !isLoadingUser && (
                 <p className="text-center text-red-500 py-6">
-                  Vui lòng đăng nhập để truy cập mục này.{" "}
+                  Vui lòng đăng nhập để truy cập mục này.
                 </p>
-              )}{" "}
+              )}
           </>
-        )}{" "}
-      </div>{" "}
+        )}
+      </div>
       {initializedRef.current && !isLoadingUser && user && (
         <div
           className="fixed bottom-6 right-6 z-50 group"
           ref={notificationContainerRef}
         >
-          {" "}
           <button
             ref={notificationButtonRef}
             onClick={handleNotificationClick}
@@ -2272,30 +2345,28 @@ export default function UserHome() {
             aria-expanded={showNotificationDropdown}
           >
             <span className="sr-only">Xem thông báo</span>
-            <BellIcon className="h-6 w-6" aria-hidden="true" />{" "}
+            <BellIcon className="h-6 w-6" aria-hidden="true" />
             {unreadNotificationCount > 0 && (
               <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white transform translate-x-1/4 -translate-y-1/4 ring-2 ring-white pointer-events-none">
-                {" "}
                 {unreadNotificationCount > 9
                   ? "9+"
-                  : unreadNotificationCount}{" "}
+                  : unreadNotificationCount}
               </span>
-            )}{" "}
-          </button>{" "}
+            )}
+          </button>
           {showNotificationDropdown && (
             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96">
-              {" "}
               <NotificationDropdown
                 notifications={notifications}
                 isLoading={isLoadingNotifications && notifications.length === 0}
                 error={errorNotifications}
                 onMarkAsRead={handleMarkAsRead}
                 onClose={() => setShowNotificationDropdown(false)}
-              />{" "}
+              />
             </div>
-          )}{" "}
+          )}
         </div>
-      )}{" "}
+      )}
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
         title={confirmationState.title}
@@ -2309,13 +2380,13 @@ export default function UserHome() {
         onCancel={() =>
           setConfirmationState((prev) => ({ ...prev, isOpen: false }))
         }
-      />{" "}
+      />
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
-      )}{" "}
+      )}
       {showAboutModal && (
         <AboutModal onClose={() => setShowAboutModal(false)} />
-      )}{" "}
+      )}
       <CreateNewsModal
         isOpen={isNewsModalOpen}
         onClose={handleCloseModal}
@@ -2324,8 +2395,8 @@ export default function UserHome() {
         initialData={editingNewsItem}
         user={user}
         refreshToken={refreshToken}
-      />{" "}
-      {user && eventToEditInModal && (
+      />
+      {user && eventToEditInModal && isUpdateEventModalOpen && (
         <ModalUpdateEvent
           isOpen={isUpdateEventModalOpen}
           onClose={() => {
@@ -2337,14 +2408,15 @@ export default function UserHome() {
           onSuccess={() => {
             handleGlobalEventRefresh();
             if (activeTab === "myEvents" && user?.id) {
-              const token = localStorage.getItem("authToken");
-              if (token) fetchUserCreatedEvents(user.id, token);
+                 const token = localStorage.getItem("authToken");
+                 if(token) {
+                 }
             }
             setIsUpdateEventModalOpen(false);
             setEventToEditInModal(null);
           }}
         />
-      )}{" "}
+      )}
     </div>
   );
 }

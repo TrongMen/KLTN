@@ -1803,45 +1803,71 @@ export default function HomeAdmin() {
   const handleNotificationClick = () =>
     setShowNotificationDropdown((prev) => !prev);
 
-  const handleMarkAsRead = async (notificationId: string) => {
-    let token = localStorage.getItem("authToken");
-    if (!token || !user?.id) {
-      toast.error("Vui lòng đăng nhập lại.");
-      return;
+const handleMarkAsRead = async (notificationId: string) => {
+  let token = localStorage.getItem("authToken");
+  if (!token || !user?.id) {
+    toast.error("Vui lòng đăng nhập lại.");
+    return;
+  }
+
+  console.log("ADMIN: Attempting to mark as read, ID sent to API:", notificationId);
+
+  if (notificationId.startsWith("socket-admin-")) {
+    console.warn(
+      "ADMIN: Attempted to mark a client-generated ID notification as read. Skipping API call.",
+      notificationId
+    );
+    return;
+  }
+
+  let currentToken = token;
+  try {
+    const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
+    let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
+    let res = await fetch(url, { method: "PUT", headers: headers });
+
+    if (res.status === 401 || res.status === 403) {
+      const newToken = await refreshToken();
+      if (newToken) {
+        currentToken = newToken;
+        localStorage.setItem("authToken", newToken);
+        headers["Authorization"] = `Bearer ${newToken}`;
+        res = await fetch(url, { method: "PUT", headers: headers });
+      } else {
+        throw new Error("Không thể làm mới phiên đăng nhập.");
+      }
     }
-    let currentToken = token;
-    try {
-      const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
-      let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
-      let res = await fetch(url, { method: "PUT", headers: headers });
-      if (res.status === 401 || res.status === 403) {
-        const newToken = await refreshToken();
-        if (newToken) {
-          currentToken = newToken;
-          localStorage.setItem("authToken", newToken);
-          headers["Authorization"] = `Bearer ${newToken}`;
-          res = await fetch(url, { method: "PUT", headers: headers });
-        } else {
-          throw new Error("Không thể làm mới phiên đăng nhập.");
+
+    if (!res.ok) {
+      let errorMsg = `Lỗi ${res.status}`;
+      try {
+        const errorData = await res.json();
+        errorMsg = errorData.message || errorMsg;
+        if (res.status === 404) {
+          errorMsg = "Lỗi không tìm thấy thông báo trên server.";
+        }
+      } catch (_) {
+        if (res.status === 404) {
+          errorMsg = "Lỗi không tìm thấy thông báo trên server.";
         }
       }
-      if (!res.ok) {
-        let errorMsg = `Lỗi ${res.status}`;
-        try {
-          const errorData = await res.json();
-          errorMsg = errorData.message || errorMsg;
-        } catch (_) {}
-        throw new Error(errorMsg);
-      }
+      throw new Error(errorMsg);
+    }
+
+    if (isMountedRef.current) {
       setNotifications((prev) =>
         prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
       );
-    } catch (error: any) {
-      toast.error(`Lỗi: ${error.message || "Không thể đánh dấu đã đọc."}`);
-      if (error.message?.includes("Unauthorized"))
-        router.push("/login?sessionExpired=true");
+      toast.success("Đã đánh dấu là đã đọc!");
     }
-  };
+  } catch (error: any) {
+    if (isMountedRef.current) {
+      toast.error(`${error.message || "Không thể đánh dấu đã đọc."}`);
+    }
+    if (error.message?.includes("Unauthorized"))
+      router.push("/login?sessionExpired=true");
+  }
+};
 
   const refreshNewsList = useCallback(() => {
     fetchNews();
@@ -2164,10 +2190,10 @@ export default function HomeAdmin() {
     currentTabSetPage < totalOtherTabPages - 1 &&
     otherTabsList.length > TABS_PER_PAGE;
 
-  const openModalForEventUpdate = (eventDataForForm: EventDataForForm) => {
-     setEventToEditInModal(eventDataForForm);
-      setIsUpdateEventModalOpen(true);
-  };
+  const openModalForEventUpdateHandler = (eventDataForForm: EventDataForForm) => {
+          setEventToEditInModal(eventDataForForm);
+          setIsUpdateEventModalOpen(true);
+      };
 
   
   return (
@@ -2290,7 +2316,7 @@ export default function HomeAdmin() {
           <>
             {activeTab === "home" && user && (
               <AdminHomeTabContent
-                allEvents={allEvents}
+                allEvents={allEvents} // Truyền allEvents đã có roleId (nếu appTypes.ts và fetchAllEvents đúng)
                 isLoadingEvents={isLoadingEvents}
                 errorEvents={errorEvents}
                 registeredEventIds={registeredEventIds}
@@ -2299,9 +2325,9 @@ export default function HomeAdmin() {
                 isLoadingRegisteredIds={isLoadingRegisteredIds}
                 isLoadingCreatedEventIds={isLoadingCreatedEventIds}
                 isRegistering={isRegistering}
-                onRegister={handleRegister}
-                onEventClick={handleEventClick}
-                selectedEvent={selectedEvent}
+                onRegister={handleRegister} // Hàm này trong UserHome cần EventDisplayInfo từ appTypes
+                onEventClick={handleEventClick} // Hàm này trong UserHome cần EventDisplayInfo từ appTypes
+                selectedEvent={selectedEvent} // selectedEvent là EventDisplayInfo từ appTypes
                 onBackToList={handleBackToList}
                 search={search}
                 setSearch={setSearch}
@@ -2315,7 +2341,7 @@ export default function HomeAdmin() {
                 isLoadingNews={isLoadingNews}
                 errorNews={errorNews}
                 refreshNewsList={refreshNewsList}
-                onOpenUpdateModal={openModalForEventUpdate}
+                onOpenUpdateModal={openModalForEventUpdateHandler}
               />
             )}
             {activeTab === "news" && (
@@ -2364,7 +2390,7 @@ export default function HomeAdmin() {
                 createdEventIdsFromParent={createdEventIds}
                 onRegistrationChange={handleRegistrationChange}
                 onEventNeedsRefresh={handleGlobalEventRefresh}
-                onOpenUpdateModal={openModalForEventUpdate}
+                onOpenUpdateModal={openModalForEventUpdateHandler}
                 refreshToken={refreshToken}
               />
             )}
@@ -2478,12 +2504,12 @@ export default function HomeAdmin() {
           {showNotificationDropdown && (
             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96 ">
               <NotificationDropdown
-                notifications={notifications}
-                isLoading={isLoadingNotifications}
-                error={errorNotifications}
-                onMarkAsRead={handleMarkAsRead}
-                onClose={() => setShowNotificationDropdown(false)}
-              />
+  notifications={notifications}
+  isLoading={isLoadingNotifications && notifications.length === 0}
+  error={errorNotifications}
+  onMarkAsRead={handleMarkAsRead}
+  onClose={() => setShowNotificationDropdown(false)}
+/>
             </div>
           )}
         </div>

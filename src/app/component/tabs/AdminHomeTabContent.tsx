@@ -4,7 +4,9 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
 import { User, NewsItem, EventDisplayInfo } from "../types/appTypes";
-// import { OrganizerInfo, ParticipantInfo } from "../types/appTypes";
+import {  EventMemberInfo } from "../types/homeType";
+import { EventDataForForm, DetailedApiUser, ApiRole } from "../types/typCreateEvent";
+
 import { useRouter } from "next/navigation";
 import {
   ReloadIcon,
@@ -29,7 +31,7 @@ type ConfirmationState = Omit<ConfirmationDialogProps, "onCancel"> & {
 
 type EventStatus = "upcoming" | "ongoing" | "ended";
 
-interface DetailedOrganizer {
+interface DetailedMember {
   userId: string;
   fullName?: string;
   roleName?: string;
@@ -154,7 +156,8 @@ interface AdminHomeTabContentProps {
   refreshNewsList: () => void;
   refreshToken?: () => Promise<string | null>;
   onRefreshEvents: () => Promise<void>;
-  onOpenUpdateModal: (event: EventDisplayInfo) => void;
+  onOpenUpdateModal: (eventData: EventDataForForm) => void;
+  
 }
 
 const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
@@ -204,10 +207,12 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   const [creatorName, setCreatorName] = useState<string | null>(null);
   const [isLoadingCreator, setIsLoadingCreator] = useState<boolean>(false);
   const [detailedOrganizers, setDetailedOrganizers] = useState<
-    DetailedOrganizer[] | null
+    DetailedMember[] | null
   >(null);
   const [isLoadingOrganizers, setIsLoadingOrganizers] =
     useState<boolean>(false);
+    const [detailedParticipants, setDetailedParticipants] = useState<DetailedMember[] | null>(null);
+    const [isLoadingParticipants, setIsLoadingParticipants] = useState<boolean>(false);
 
   const router = useRouter();
 
@@ -287,7 +292,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             };
           });
           const settledOrganizers = await Promise.all(organizerPromises);
-          setDetailedOrganizers(settledOrganizers as DetailedOrganizer[]);
+          setDetailedOrganizers(settledOrganizers as DetailedMember[]);
         } catch (error) {
           console.error("Lỗi tải thông tin ban tổ chức:", error);
           setDetailedOrganizers(
@@ -296,7 +301,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               roleName: org.roleName,
               positionName: org.positionName,
               fullName: "Lỗi tải tên",
-            })) as DetailedOrganizer[]
+            })) as DetailedMember[]
           );
         } finally {
           setIsLoadingOrganizers(false);

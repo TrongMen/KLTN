@@ -9,17 +9,17 @@ import React, {
 } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User as MainUserType } from "../types/appTypes"; // Điều chỉnh đường dẫn
+import { User as MainUserType } from "../types/appTypes";
 import {
   ApiRole,
   EventDataForForm as ModalEventType,
-} from "../types/typCreateEvent"; 
+} from "../types/typCreateEvent";
 
-import ConfirmationDialog from "../../../utils/ConfirmationDialog"; // Điều chỉnh đường dẫn
+import ConfirmationDialog from "../../../utils/ConfirmationDialog";
 import MyCreatedEventsTab, {
   EventType as MyCreatedEventType,
-} from "./event/MyEvent"; // EventType từ MyEvent
-import RegisteredEventsTab from "./event/RegisterEvent"; // EventType từ RegisterEvent có thể khác
+} from "./event/MyEvent";
+import RegisteredEventsTab from "./event/RegisterEvent";
 import {
   ReloadIcon,
   DownloadIcon,
@@ -33,13 +33,11 @@ import {
 
 
 interface Role {
-
   id: string;
   name?: string;
 }
 
 export interface PersonDetail {
-
   userId: string;
   id?: string;
   username?: string;
@@ -49,7 +47,7 @@ export interface PersonDetail {
   avatar?: string;
   positionId?: string;
   positionName?: string;
-  roles?: Role[]; 
+  roles?: Role[];
   generalRoleName?: string;
 }
 
@@ -63,20 +61,20 @@ export interface EventType {
   status: "APPROVED" | "PENDING" | "REJECTED" | string ;
   rejectionReason?: string | null;
   purpose?: string;
-  createdBy?: string | PersonDetail; // userId hoặc object đã enrich
+  createdBy?: string | PersonDetail;
   createdAt?: string;
-  organizers?: PersonDetail[]; // Danh sách người tổ chức đã enrich
-  participants?: PersonDetail[]; // Danh sách người tham gia đã enrich
-  attendees?: any[]; // Danh sách người thực sự tham dự (có thể khác participants)
+  organizers?: PersonDetail[];
+  participants?: PersonDetail[];
+  attendees?: any[];
   permissions?: string[];
   deleted?: boolean;
   deletedAt?: string | null;
-  deletedBy?: PersonDetail | null; // Thông tin người xóa
+  deletedBy?: PersonDetail | null;
   avatarUrl?: string | null;
   qrCodeUrl?: string | null;
   progressStatus?: string;
-  title?: string; // alias cho name
-  date?: string; // alias cho time
+  title?: string;
+  date?: string;
   maxAttendees?: number |null;
   currentAttendeesCount?: number;
 }
@@ -92,12 +90,10 @@ const getFilenameFromHeader = (header: string | null): string => {
       if (filename.toLowerCase().startsWith("utf-8''")) {
         filename = decodeURIComponent(filename.substring(7));
       } else {
-        // Thử decode với giả định là UTF-8 encoded
         filename = decodeURIComponent(escape(filename));
       }
     } catch (e) {
       try {
-        // Thử decode trực tiếp nếu cách trên lỗi (cho trường hợp không phải là UTF-8'' mà là plain UTF-8)
         filename = decodeURIComponent(filename);
       } catch (e2) {
         console.warn("Could not decode filename:", filename, e, e2);
@@ -114,14 +110,11 @@ const getFilenameFromHeader = (header: string | null): string => {
   return defaultFilename;
 };
 
-// Hàm lấy chi tiết user, được truyền xuống MyCreatedEventsTab
-// và dùng để enrich viewingEventDetails
 async function fetchUserDetailsAPI(
   userId: string
 ): Promise<Partial<PersonDetail> | null> {
   if (!userId) return null;
   try {
-    // API này không cần token nếu chỉ lấy thông tin public cơ bản
     const response = await fetch(
       `http://localhost:8080/identity/users/notoken/${userId}`
     );
@@ -129,7 +122,7 @@ async function fetchUserDetailsAPI(
       console.warn(
         `Failed to fetch user details for ${userId}: ${response.status}`
       );
-      return { userId, fullName: `ID: ${userId}` }; // Trả về thông tin cơ bản nếu lỗi
+      return { userId, fullName: `ID: ${userId}` };
     }
     const data = await response.json();
     if (data.code === 1000 && data.result) {
@@ -146,15 +139,14 @@ async function fetchUserDetailsAPI(
         username ||
         `ID: ${id}`;
       return {
-        userId: userId, // Giữ lại userId gốc được truyền vào
+        userId: userId,
         id: id,
         firstName,
         lastName,
         username,
         fullName,
         positionName: position?.name,
-        avatar: data.result.avatar, // Giả sử API trả về avatar
-        // Lấy vai trò chung đầu tiên nếu có (ví dụ: "Sinh viên", "Giảng viên")
+        avatar: data.result.avatar,
         generalRoleName:
           generalRoles && generalRoles.length > 0
             ? generalRoles[0].description || generalRoles[0].name
@@ -193,10 +185,10 @@ interface MyEventsTabContentProps {
   user: MainUserType | null;
   initialRegisteredEventIds: Set<string>;
   isLoadingRegisteredIds: boolean;
-  createdEventIdsFromParent: Set<string>; // IDs sự kiện user này đã tạo
-  onRegistrationChange: (eventId: string, registered: boolean) => void; // Callback khi đăng ký/hủy
-  onEventNeedsRefresh: () => void; // Callback khi cần refresh danh sách sự kiện chung
-  onOpenUpdateModal: (eventForModal: ModalEventType) => void; 
+  createdEventIdsFromParent: Set<string>;
+  onRegistrationChange: (eventId: string, registered: boolean) => void;
+  onEventNeedsRefresh: () => void;
+  onOpenUpdateModal: (eventForModal: ModalEventType) => void;
   refreshToken: () => Promise<string | null>;
 }
 
@@ -207,13 +199,13 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   createdEventIdsFromParent,
   onRegistrationChange,
   onEventNeedsRefresh,
-  onOpenUpdateModal: openModalCallback, // Đổi tên để tránh trùng với hàm nội bộ
+  onOpenUpdateModal: openModalCallback,
 }) => {
   const [mainTab, setMainTab] = useState<"myEvents" | "registerEvents">(
     "myEvents"
   );
-  const [myEvents, setMyEvents] = useState<EventType[]>([]); // Sự kiện do tôi tạo (raw từ API)
-  const [deletedEvents, setDeletedEvents] = useState<EventType[]>([]); // Sự kiện đã xóa (raw từ API)
+  const [myEvents, setMyEvents] = useState<EventType[]>([]);
+  const [deletedEvents, setDeletedEvents] = useState<EventType[]>([]);
   const [myLoading, setMyLoading] = useState<boolean>(true);
   const [deletedLoading, setDeletedLoading] = useState<boolean>(true);
   const [myError, setMyError] = useState<string>("");
@@ -230,10 +222,9 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  const [allSystemRoles, setAllSystemRoles] = useState<ApiRole[]>([]); // Vai trò trong sự kiện (Trưởng BTC, Thành viên...)
+  const [allSystemRoles, setAllSystemRoles] = useState<ApiRole[]>([]);
   const [isLoadingSystemRoles, setIsLoadingSystemRoles] =
     useState<boolean>(true);
-  // const [errorSystemRoles, setErrorSystemRoles] = useState<string | null>(null); // Không dùng trực tiếp
 
   const [deleteConfirmationState, setDeleteConfirmationState] = useState<{
     isOpen: boolean;
@@ -261,18 +252,17 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   const [enhancementController, setEnhancementController] =
     useState<AbortController | null>(null);
   const [isEnhancementPending, setIsEnhancementPending] = useState(false);
+  const [lastActiveMyCreatedSubTabKey, setLastActiveMyCreatedSubTabKey] = useState<string | null>(null);
 
 
-   const transformApiEventMemberToLocal = useCallback(
+  const transformApiEventMemberToLocal = useCallback(
     (apiMember: any): PersonDetail => {
-      
       const rolesArray: Role[] = [];
       if (apiMember.roleId && allSystemRoles.length > 0) {
         const foundRole = allSystemRoles.find((r) => r.id === apiMember.roleId);
         if (foundRole)
           rolesArray.push({ id: foundRole.id, name: foundRole.name });
       } else if (apiMember.roleName) {
-        
         rolesArray.push({
           id:
             apiMember.roleId ||
@@ -283,7 +273,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
 
       return {
         userId: apiMember.userId,
-       
         firstName: apiMember.firstName,
         lastName: apiMember.lastName,
         fullName:
@@ -293,8 +282,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         username: apiMember.username,
         positionId: apiMember.positionId,
         positionName: apiMember.positionName,
-        roles: rolesArray, 
-
+        roles: rolesArray,
       };
     },
     [allSystemRoles]
@@ -303,7 +291,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   useEffect(() => {
     const fetchRoles = async () => {
       setIsLoadingSystemRoles(true);
-      // setErrorSystemRoles(null);
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Chưa xác thực để tải vai trò.");
@@ -323,7 +310,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         else
           throw new Error(data.message || "Không thể tải danh sách vai trò.");
       } catch (error: any) {
-        // setErrorSystemRoles(error.message);
         toast.error(`Lỗi tải vai trò hệ thống: ${error.message}`);
         setAllSystemRoles([]);
       } finally {
@@ -362,7 +348,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       const data = await res.json();
       if (data.code === 1000 && Array.isArray(data.result)) {
         const transformedEvents = data.result.map((event: any) => ({
-          ...event, // Giữ lại các trường gốc từ API
+          ...event,
           organizers:
             event.organizers?.map(transformApiEventMemberToLocal) || [],
           participants:
@@ -379,11 +365,10 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     } finally {
       setMyLoading(false);
     }
-  }, [currentUserId, transformApiEventMemberToLocal, allSystemRoles]); // Thêm allSystemRoles làm dependency
+  }, [currentUserId, transformApiEventMemberToLocal, allSystemRoles]);
 
   const fetchDeletedEvents = useCallback(
     async (page = 0, size = 20) => {
-      // Tăng size nếu cần
       if (!currentUserId) {
         setDeletedError("Không tìm thấy thông tin người dùng.");
         setDeletedLoading(false);
@@ -431,11 +416,10 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       }
     },
     [currentUserId, transformApiEventMemberToLocal, allSystemRoles]
-  ); // Thêm allSystemRoles
+  );
 
   useEffect(() => {
     if (user?.id && !isLoadingSystemRoles) {
-      // Chỉ fetch khi có user và vai trò đã tải xong (hoặc lỗi)
       fetchMyEvents();
       fetchDeletedEvents();
     } else if (!user?.id) {
@@ -453,13 +437,11 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     try {
       if (!currentUserId)
         throw new Error("Không tìm thấy thông tin người dùng.");
-      // Chờ allSystemRoles tải xong trước khi fetch events nếu chưa có
       if (isLoadingSystemRoles) {
-        // Có thể thêm logic chờ ở đây hoặc để useEffect tự xử lý
       }
       await Promise.all([fetchMyEvents(), fetchDeletedEvents()]);
       toast.success("Dữ liệu đã được làm mới!", { id: toastId });
-      callOnEventNeedsRefresh(); // Thông báo cho component cha
+      callOnEventNeedsRefresh();
     } catch (error: any) {
       toast.error(
         `Làm mới thất bại: ${error.message || "Lỗi không xác định"}`,
@@ -477,33 +459,30 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     isLoadingSystemRoles,
   ]);
 
-  // Hàm mở modal chỉnh sửa, nhận event từ MyCreatedEventsTab
   const handleOpenUpdateModal = (eventFromMyCreatedTab: MyCreatedEventType) => {
     if (deletingEventId || restoringEventId) return;
-
-    // Ánh xạ từ MyCreatedEventType.organizers (PersonDetail[]) sang ModalEventType.organizers (OrganizerParticipantInput[])
     const organizersForModal: ModalEventType["organizers"] =
-      eventFromMyCreatedTab.organizers?.map((org) => ({ // Biến lặp là 'org'
+      eventFromMyCreatedTab.organizers?.map((org) => ({
         userId: org.userId,
-        roleId: org.roles?.[0]?.id || "",       // SỬA: org.roles thay vì par.roles và bỏ .roles thừa
-        roleName: org.roles?.[0]?.name || "",   // SỬA: org.roles thay vì par.roles và bỏ .roles thừa
-        positionId: org.positionId || "",      // SỬA: Sử dụng org.positionId đã được thêm vào PersonDetail
+        roleId: org.roles?.[0]?.id || "",
+        roleName: org.roles?.[0]?.name || "",
+        positionId: org.positionId || "",
         name:
           org.fullName ||
           `${org.lastName || ""} ${org.firstName || ""}`.trim() ||
-          org.username, // org.username tồn tại trên PersonDetail
+          org.username,
       })) || [];
 
     const participantsForModal: ModalEventType["participants"] =
-      eventFromMyCreatedTab.participants?.map((par) => ({ // Biến lặp là 'par'
+      eventFromMyCreatedTab.participants?.map((par) => ({
         userId: par.userId,
-        roleId: par.roles?.[0]?.id || "",       // Đúng: par.roles?.[0]?.id
-        roleName: par.roles?.[0]?.name || "",   // Đúng: par.roles?.[0]?.name
-        positionId: par.positionId || "",     // SỬA: Sử dụng par.positionId đã được thêm vào PersonDetail
+        roleId: par.roles?.[0]?.id || "",
+        roleName: par.roles?.[0]?.name || "",
+        positionId: par.positionId || "",
         name:
           par.fullName ||
           `${par.lastName || ""} ${par.firstName || ""}`.trim() ||
-          par.username, // par.username tồn tại trên PersonDetail
+          par.username,
       })) || [];
 
     const eventForModal: ModalEventType = {
@@ -513,20 +492,18 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       time: eventFromMyCreatedTab.time || "",
       location: eventFromMyCreatedTab.location || "",
       content: eventFromMyCreatedTab.content || "",
-      // SỬA LỖI TYPE CHO maxAttendees
-      maxAttendees: eventFromMyCreatedTab.maxAttendees ?? null, // SỬA: Dùng null thay vì ""
+      maxAttendees: eventFromMyCreatedTab.maxAttendees ?? null,
       status: eventFromMyCreatedTab.status as ModalEventType["status"],
       avatarUrl: eventFromMyCreatedTab.avatarUrl,
       organizers: organizersForModal,
       participants: participantsForModal,
     };
-    openModalCallback(eventForModal); // Gọi callback của component cha
+    openModalCallback(eventForModal);
   };
 
   const executeDeleteEvent = async (eventToDelete: EventType) => {
-    // ... (giữ nguyên logic xóa, đảm bảo cập nhật myEvents và deletedEvents)
     if (deletingEventId || !currentUserId) {
-      /*...*/ return;
+     return;
     }
     setDeletingEventId(eventToDelete.id);
     const token = localStorage.getItem("authToken");
@@ -566,7 +543,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         deleted: true,
         deletedAt: new Date().toISOString(),
         deletedBy: {
-          // Thông tin người xóa
           userId: currentUserId,
           id: user?.id,
           username: user?.username,
@@ -587,7 +563,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           (a, b) =>
             new Date(b.deletedAt!).getTime() - new Date(a.deletedAt!).getTime()
         )
-      ); // Sắp xếp lại
+      );
       if (viewingEventDetails?.id === eventToDelete.id) {
         setViewingEventDetails(null);
       }
@@ -600,7 +576,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   };
 
   const handleDeleteClick = (eventToDelete: EventType) => {
-    // ... (giữ nguyên logic confirmation)
     if (deletingEventId || restoringEventId) return;
     setDeleteConfirmationState({
       isOpen: true,
@@ -633,7 +608,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   };
 
   const executeRestoreEvent = async (eventToRestore: EventType) => {
-    // ... (giữ nguyên logic khôi phục, đảm bảo cập nhật myEvents và deletedEvents)
     if (restoringEventId) return;
     setRestoringEventId(eventToRestore.id);
     const token = localStorage.getItem("authToken");
@@ -668,8 +642,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         );
 
         const restoredEventFromApi: EventType = {
-          // Chuyển đổi lại nếu cần
-          ...apiResponse.result, // Dữ liệu mới nhất từ API
+          ...apiResponse.result,
           deleted: false,
           deletedAt: null,
           deletedBy: null,
@@ -707,7 +680,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   };
 
   const handleRestoreClick = (eventToRestore: EventType) => {
-    // ... (giữ nguyên logic confirmation)
     if (restoringEventId) return;
     setRestoreConfirmationState({
       isOpen: true,
@@ -737,7 +709,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   };
 
   const handleExportClick = async (eventId: string) => {
-    // ... (giữ nguyên logic xuất file)
     if (!eventId) {
       toast.error("Không tìm thấy ID sự kiện.");
       return;
@@ -787,7 +758,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
   const formatPersonForDisplay = useCallback(
     (person?: string | PersonDetail): string => {
       if (!person) return "Không rõ";
-      if (typeof person === "string") return `ID: ${person}`; // Nếu chỉ là userId
+      if (typeof person === "string") return `ID: ${person}`;
 
       let displayName =
         person.fullName ||
@@ -799,7 +770,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       const parts: string[] = [displayName];
       if (person.positionName) parts.push(person.positionName);
 
-      // Hiển thị vai trò trong sự kiện (nếu có)
       if (person.roles && person.roles.length > 0) {
         const roleNamesString = person.roles
           .map((role) => role.name)
@@ -812,7 +782,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           .join(", ");
         if (roleNamesString) parts.push(roleNamesString);
       } else if (person.generalRoleName) {
-        // Hoặc vai trò chung nếu không có vai trò sự kiện
         parts.push(person.generalRoleName);
       }
 
@@ -863,7 +832,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 isModified = true;
               }
             }
-            // Enrich vai trò nếu chỉ có roleId mà chưa có roleName (từ allSystemRoles)
             if (enrichedPerson.roles && enrichedPerson.roles.length > 0) {
               enrichedPerson.roles = enrichedPerson.roles.map((role) => {
                 if (role.id && !role.name && allSystemRoles.length > 0) {
@@ -912,52 +880,60 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       }
       return event;
     },
-    [allSystemRoles] // Thêm allSystemRoles để enrich roleName
+    [allSystemRoles]
   );
 
   const handleSetViewingEventDetails = useCallback(
-    (event: EventType | null) => {
-      if (enhancementController) enhancementController.abort();
+    (event: EventType | null, activeSubTabKeyFromChild?: string) => {
+      if (enhancementController) {
+        enhancementController.abort();
+        setEnhancementController(null);
+      }
+      setIsLoadingEventDetailsEnhancement(false);
+      setIsEnhancementPending(false);
+
       if (event) {
-        setViewingEventDetails(event); // Set ngay để UI không bị giật
+        if (activeSubTabKeyFromChild) {
+          setLastActiveMyCreatedSubTabKey(activeSubTabKeyFromChild);
+        }
+
+        setViewingEventDetails(event);
         setIsLoadingEventDetailsEnhancement(true);
         setIsEnhancementPending(true);
-        const controller = new AbortController();
-        setEnhancementController(controller);
+
+        const newController = new AbortController();
+        setEnhancementController(newController);
 
         if (!isLoadingSystemRoles) {
-          // Chỉ enrich khi roles đã tải (hoặc lỗi)
           (async () => {
             try {
               const enhancedEvent = await enhanceEventDetailsWithNames(event);
-              if (!controller.signal.aborted) {
+              if (!newController.signal.aborted) {
                 setViewingEventDetails(enhancedEvent);
                 setIsEnhancementPending(false);
               }
             } catch (error: any) {
-              if (error.name !== "AbortError" && !controller.signal.aborted) {
-                console.error("Error enhancing event details:", error);
+              if (error.name !== "AbortError" && !newController.signal.aborted) {
+                console.error("Lỗi khi làm giàu chi tiết sự kiện:", error);
               }
             } finally {
-              if (!controller.signal.aborted) {
+              if (!newController.signal.aborted) {
                 setIsLoadingEventDetailsEnhancement(false);
-                if (enhancementController === controller)
-                  setEnhancementController(null);
+                if (enhancementController === newController) {
+                    setEnhancementController(null);
+                }
               }
             }
           })();
         }
       } else {
         setViewingEventDetails(null);
-        setIsLoadingEventDetailsEnhancement(false);
-        setIsEnhancementPending(false);
-        setEnhancementController(null);
+        // lastActiveMyCreatedSubTabKey is not reset here
       }
     },
     [enhanceEventDetailsWithNames, isLoadingSystemRoles, enhancementController]
   );
 
-  // Effect để re-enhance khi allSystemRoles tải xong và đang có event được xem
   useEffect(() => {
     if (viewingEventDetails && isEnhancementPending && !isLoadingSystemRoles) {
       setIsLoadingEventDetailsEnhancement(true);
@@ -977,22 +953,19 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           }
         } catch (error: any) {
           if (error.name !== "AbortError" && !controller.signal.aborted) {
-            console.error("Error re-enhancing event details:", error);
+            console.error("Lỗi khi làm giàu lại chi tiết sự kiện:", error);
           }
         } finally {
           if (!controller.signal.aborted) {
             setIsLoadingEventDetailsEnhancement(false);
             setIsEnhancementPending(false);
-            if (enhancementController === controller)
-              setEnhancementController(null);
+            if (enhancementController === controller) {
+                setEnhancementController(null);
+            }
           }
         }
       })();
-      return () => {
-        controller.abort();
-      };
     } else if (isEnhancementPending && !isLoadingSystemRoles) {
-      // Roles đã tải nhưng có thể rỗng/lỗi
       setIsLoadingEventDetailsEnhancement(false);
       setIsEnhancementPending(false);
     }
@@ -1000,33 +973,28 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     allSystemRoles,
     isLoadingSystemRoles,
     viewingEventDetails,
-    enhanceEventDetailsWithNames,
     isEnhancementPending,
-    enhancementController,
+    enhanceEventDetailsWithNames,
   ]);
 
+
   const renderEventDetails = (event: EventType) => {
-    // ... (Giữ nguyên logic renderEventDetails, sử dụng formatPersonForDisplay)
-    // Đảm bảo nó hiển thị PersonDetail.fullName hoặc các trường tên khác
     if (
       isLoadingEventDetailsEnhancement &&
-      !event.organizers?.every((o) => o.fullName)
+      (!event.organizers?.every((o) => o.fullName) ||
+      (typeof event.createdBy === 'string' && !personDetailsCacheRef.current[event.createdBy]?.fullName)
+      )
     ) {
-      // Chỉ hiện loading nếu chưa có tên
       return (
         <div className="p-4 bg-white rounded-lg shadow border text-center min-h-[400px] flex flex-col justify-center items-center">
           <button
-            onClick={() => {
-              setViewingEventDetails(null);
-              setIsLoadingEventDetailsEnhancement(false);
-              if (enhancementController) enhancementController.abort();
-            }}
+            onClick={() => handleSetViewingEventDetails(null)}
             className="self-start mb-6 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer group font-medium"
           >
-            <ChevronLeftIcon className="h-5 w-5 mr-1.5 group-hover:-translate-x-1 transition-transform duration-150" />{" "}
+            <ChevronLeftIcon className="h-5 w-5 mr-1.5 group-hover:-translate-x-1 transition-transform duration-150" />
             Quay lại
           </button>
-          <ReloadIcon className="w-10 h-10 animate-spin text-indigo-500 mx-auto my-4" />{" "}
+          <ReloadIcon className="w-10 h-10 animate-spin text-indigo-500 mx-auto my-4" />
           <p>Đang tải chi tiết...</p>
         </div>
       );
@@ -1038,39 +1006,36 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     const vietnameseStatus = getVietnameseEventStatus(event.status);
     let statusColorClass = "text-gray-600 bg-gray-200 border-gray-300";
     if (event.status) {
-      /* ... */
-    } // Logic màu status giữ nguyên
+        const upperStatus = event.status.toUpperCase();
+        if (upperStatus === "APPROVED") statusColorClass = "text-green-700 bg-green-100 border-green-300";
+        else if (upperStatus === "PENDING") statusColorClass = "text-yellow-700 bg-yellow-100 border-yellow-300";
+        else if (upperStatus === "REJECTED") statusColorClass = "text-red-700 bg-red-100 border-red-300";
+        else if (upperStatus === "CANCELLED") statusColorClass = "text-neutral-700 bg-neutral-200 border-neutral-300";
+    }
 
     let creatorDisplay = "Không rõ";
     if (event.createdBy) {
       if (typeof event.createdBy === "string") {
-        // Nếu là userId
         const details = personDetailsCacheRef.current[event.createdBy];
         creatorDisplay = details?.fullName || `ID: ${event.createdBy}`;
       } else {
-        // Nếu là object PersonDetail
         creatorDisplay = formatPersonForDisplay(event.createdBy);
       }
     }
     if (creatorDisplay.startsWith("ID:") && creatorDisplay.length < 10)
-      creatorDisplay = "Không rõ"; // Dọn dẹp
+      creatorDisplay = "Không rõ";
 
     return (
       <div className="p-4 bg-white rounded-lg shadow border">
         <button
-          onClick={() => {
-            setViewingEventDetails(null);
-            setIsLoadingEventDetailsEnhancement(false);
-            if (enhancementController) enhancementController.abort();
-          }}
+          onClick={() => handleSetViewingEventDetails(null)}
           className="mb-6 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer group font-medium"
         >
-          <ChevronLeftIcon className="h-5 w-5 mr-1.5 group-hover:-translate-x-1 transition-transform duration-150" />{" "}
+          <ChevronLeftIcon className="h-5 w-5 mr-1.5 group-hover:-translate-x-1 transition-transform duration-150" />
           Quay lại danh sách
         </button>
         <>
           <div className="flex flex-col lg:flex-row gap-6 xl:gap-8">
-            {/* ... Avatar ... */}
             <div className="flex-shrink-0 lg:w-2/5 xl:w-1/3">
               {event.avatarUrl ? (
                 <div className="aspect-[4/3] relative w-full">
@@ -1092,7 +1057,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3 leading-tight">
                 {eventName}
               </h1>
-              {/* ... Status ... */}
               {!isDeletedEvent && event.status && (
                 <div className="mb-5">
                   <span
@@ -1104,12 +1068,11 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
               {isDeletedEvent && (
                 <p className="text-red-600 font-semibold text-sm mt-1 mb-3">
-                  <ExclamationTriangleIcon className="inline-block mr-1 h-4 w-4" />{" "}
+                  <ExclamationTriangleIcon className="inline-block mr-1 h-4 w-4" />
                   Sự kiện này đã bị xóa.
                 </p>
               )}
               <div className="space-y-4 text-base text-gray-700">
-                {/* ... Time, Location, MaxAttendees ... */}
                 {(event.time || event.date) && (
                   <div className="flex items-start">
                     <RadixCalendarIcon className="w-5 h-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" />
@@ -1135,7 +1098,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 )}
                 {event.location && (
                   <div className="flex items-start">
-                    {" "}
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       className="h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1"
@@ -1154,7 +1116,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                         strokeLinejoin="round"
                         d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                       />
-                    </svg>{" "}
+                    </svg>
                     <div>
                       <p className="font-semibold text-gray-800">Địa điểm:</p>
                       <p className="text-gray-600">{event.location}</p>
@@ -1183,7 +1145,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                       </p>
                       <p className="text-gray-600">
                         {event.currentAttendeesCount ??
-                          (event.attendees?.length || 0)}{" "}
+                          (event.attendees?.length || 0)}
                         / {event.maxAttendees}
                       </p>
                     </div>
@@ -1192,7 +1154,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               </div>
             </div>
           </div>
-          
+
           {(event.purpose || event.content) && !isDeletedEvent && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <h4 className="text-xl font-semibold text-gray-800 mb-3">
@@ -1220,7 +1182,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
             </div>
           )}
-          {/* ... Organizers, Participants ... */}
           {!isDeletedEvent &&
             event.organizers &&
             event.organizers.length > 0 && (
@@ -1231,7 +1192,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 <ul className="space-y-2 text-sm">
                   {event.organizers.map((org, index) => (
                     <li
-                      key={org.userId || index}
+                      key={org.userId || `org-${index}`}
                       className="p-3 bg-gray-50 rounded-md border text-gray-700"
                     >
                       {formatPersonForDisplay(org)}
@@ -1250,7 +1211,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 <ul className="space-y-2 text-sm">
                   {event.participants.map((par, index) => (
                     <li
-                      key={par.userId || index}
+                      key={par.userId || `par-${index}`}
                       className="p-3 bg-gray-50 rounded-md border text-gray-700"
                     >
                       {formatPersonForDisplay(par)}
@@ -1259,7 +1220,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 </ul>
               </div>
             )}
-          {/* ... Deleted Info ... */}
           {isDeletedEvent && event.deletedAt && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <h4 className="text-xl font-semibold text-gray-800 mb-3">
@@ -1268,7 +1228,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               <p className="text-sm text-gray-600">
                 <strong className="font-medium text-gray-900">
                   Thời gian xóa:
-                </strong>{" "}
+                </strong>
                 {new Date(event.deletedAt).toLocaleString("vi-VN", {
                   dateStyle: "full",
                   timeStyle: "short",
@@ -1278,7 +1238,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 <p className="text-sm text-gray-600 mt-1">
                   <strong className="font-medium text-gray-900">
                     Người xóa:
-                  </strong>{" "}
+                  </strong>
                   {formatPersonForDisplay(event.deletedBy)}
                   {event.deletedBy.avatar && (
                     <img
@@ -1291,7 +1251,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
             </div>
           )}
-          {/* ... Other Info (Creator, CreatedAt) ... */}
           {(creatorDisplay !== "Không rõ" || event.createdAt) && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <h4 className="text-xl font-semibold text-gray-800 mb-3">
@@ -1301,7 +1260,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 <p className="text-sm text-gray-700 mb-1">
                   <strong className="font-medium text-gray-900">
                     Tạo bởi:
-                  </strong>{" "}
+                  </strong>
                   {creatorDisplay}
                 </p>
               )}
@@ -1309,7 +1268,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 <p className="text-sm text-gray-600">
                   <strong className="font-medium text-gray-900">
                     Ngày tạo:
-                  </strong>{" "}
+                  </strong>
                   {new Date(event.createdAt).toLocaleString("vi-VN", {
                     dateStyle: "long",
                     timeStyle: "short",
@@ -1318,7 +1277,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               )}
             </div>
           )}
-          {/* ... Action Buttons ... */}
           <div className="mt-10 pt-6 border-t-2 border-gray-300 flex flex-col sm:flex-row justify-end gap-3">
             {mainTab === "myEvents" &&
               !isDeletedEvent &&
@@ -1420,11 +1378,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 </button>
               )}
             <button
-              onClick={() => {
-                setViewingEventDetails(null);
-                setIsLoadingEventDetailsEnhancement(false);
-                if (enhancementController) enhancementController.abort();
-              }}
+              onClick={() => handleSetViewingEventDetails(null)}
               className="w-full cursor-pointer sm:w-auto px-6 py-2.5 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
             >
               Đóng
@@ -1441,9 +1395,8 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         <button
           onClick={() => {
             setMainTab("myEvents");
-            setViewingEventDetails(null);
-            setIsLoadingEventDetailsEnhancement(false);
-            if (enhancementController) enhancementController.abort();
+            handleSetViewingEventDetails(null);
+            // setLastActiveMyCreatedSubTabKey(null); // Uncomment if you want MyCreatedEventsTab to always default when "My Events" is clicked
           }}
           className={`pb-2 font-semibold cursor-pointer text-base md:text-lg transition-colors duration-150 ${
             mainTab === "myEvents"
@@ -1456,9 +1409,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         <button
           onClick={() => {
             setMainTab("registerEvents");
-            setViewingEventDetails(null);
-            setIsLoadingEventDetailsEnhancement(false);
-            if (enhancementController) enhancementController.abort();
+            handleSetViewingEventDetails(null);
           }}
           className={`pb-2 font-semibold cursor-pointer text-base md:text-lg transition-colors duration-150 ${
             mainTab === "registerEvents"
@@ -1476,15 +1427,16 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           <MyCreatedEventsTab
             user={user}
             currentUserId={currentUserId}
-            myEvents={myEvents} // Truyền myEvents (raw)
-            deletedEvents={deletedEvents} // Truyền deletedEvents (raw)
+            myEvents={myEvents}
+            deletedEvents={deletedEvents}
             myLoading={myLoading}
             deletedLoading={deletedLoading}
             myError={myError}
             deletedError={deletedError}
-            viewingEventDetails={null} // MyCreatedEventsTab không quản lý viewingEventDetails này
-            setViewingEventDetails={handleSetViewingEventDetails} // Prop để MyCreatedEventsTab có thể mở chi tiết
-            onOpenUpdateModal={handleOpenUpdateModal} // Prop để mở modal chỉnh sửa
+            viewingEventDetails={null}
+            initialActiveSubTabKey={lastActiveMyCreatedSubTabKey}
+            setViewingEventDetails={handleSetViewingEventDetails}
+            onOpenUpdateModal={handleOpenUpdateModal}
             onDeleteClick={handleDeleteClick}
             onRestoreClick={handleRestoreClick}
             onExportClick={handleExportClick}
@@ -1493,7 +1445,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
             deletingEventId={deletingEventId}
             isExporting={isExporting}
             handleRefresh={handleRefreshLocal}
-            fetchOrganizerDetailsById={fetchUserDetailsAPI} // Truyền hàm lấy chi tiết user
+            fetchOrganizerDetailsById={fetchUserDetailsAPI}
           />
         ) : (
           <RegisteredEventsTab

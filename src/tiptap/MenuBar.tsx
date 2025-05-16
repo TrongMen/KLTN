@@ -182,7 +182,7 @@ const MenuBar: React.FC<MenuBarProps> = ({ editor, disabled = false }) => {
         ))}
       </select>
 
-      <select
+      {/* <select
         value={currentFontSize}
         onChange={handleFontSizeChange}
         disabled={disabled}
@@ -194,7 +194,7 @@ const MenuBar: React.FC<MenuBarProps> = ({ editor, disabled = false }) => {
             {size.label}
           </option>
         ))}
-      </select>
+      </select> */}
 
       <div className="w-[1px] h-5 bg-gray-300 mx-1"></div>
 

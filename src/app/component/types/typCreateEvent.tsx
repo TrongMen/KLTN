@@ -46,7 +46,8 @@ export type ApiPosition = {
 // Member of an event (organizer or participant)
 export type EventMember = {
   userId: string;
-  roleId?: string;       // Event-specific Role ID (e.g., Organizer Role ID, Participant Role ID)
+  roleId?: string;
+         
   positionId?: string;   // User's Position ID at the time of adding
   roleName?: string;     // Event-specific Role Name
   positionName?: string; // User's Position Name
@@ -94,7 +95,15 @@ export interface DetailedApiUser extends User {
 }
 
 
-export interface OrganizerParticipantInput {
+export interface OrganizerInput {
+  userId: string;
+  roleId: string;
+  positionId: string;
+  name?: string;
+  roleName?: string;
+}
+
+export interface ParticipantInput {
   userId: string;
   roleId: string;
   positionId: string;
@@ -103,20 +112,20 @@ export interface OrganizerParticipantInput {
 
 }
 
-// Type cho dữ liệu sự kiện nhận từ API hoặc để điền form khi edit
+
+
 export interface EventDataForForm {
-  id: string; // Bắt buộc khi edit
+  id: string; 
   name: string;
   purpose: string;
-  time: string; // Sẽ cần xử lý định dạng giữa API (ISO) và input (datetime-local)
+  time: string; 
   location: string;
   content: string;
-  organizers: OrganizerParticipantInput[];
-  participants: OrganizerParticipantInput[];
+  organizers: OrganizerInput[];
+  participants: ParticipantInput[];
   maxAttendees: number | null ; 
-  status?: "PENDING" | "APPROVED" | "REJECTED"; // Trạng thái của sự kiện
+  status?: "PENDING" | "APPROVED" | "REJECTED"; 
   createdBy?: string;
-  // Thêm các trường khác nếu API trả về và bạn muốn hiển thị/sử dụng
-  // attendees?: any[]; // Giữ nguyên như hiện tại
+  
   avatarUrl?: string | null;
 }

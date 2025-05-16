@@ -513,7 +513,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
                 <button onClick={handleBulkDeleteAttendees} disabled={isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaTrashAlt /> Xóa </button>
                 <button onClick={handleExportAttendees} disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaFileDownload /> {isExporting ? "Đang xuất..." : "Xuất DS"} </button>
                 <button onClick={handleShowEventQrCode} disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaQrcode /> {isLoadingEventQr ? "Tải QR..." : "QR Sự kiện"} </button>
-                <button onClick={() => { if (!selectedEvent) { toast.error("Vui lòng chọn sự kiện."); return; } if (!canPerformAttendanceActions) { toast.error("Chỉ điểm danh QR cho sự kiện đang diễn ra."); return;} setIsQrScannerOpen(true); }} disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !selectedEvent} className="px-3 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <MdQrCodeScanner /> {isProcessingCheckIn ? "Xử lý..." : "Điểm danh QR"} </button>
+                <button onClick={() => { if (!selectedEvent) { toast.error("Vui lòng chọn sự kiện."); return; } if (!canPerformAttendanceActions) { toast.error("Chỉ điểm danh QR cho sự kiện đang diễn ra."); return;} setIsQrScannerOpen(true); }} disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !selectedEvent} className="px-3 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <MdQrCodeScanner /> {isProcessingCheckIn ? "Xử lý..." : "Quét QR điểm danh"} </button>
                 <button onClick={() => { if (selectedEvent) fetchAttendeesForEvent(selectedEvent.id, true);}} disabled={isLoadingAttendees || !selectedEvent || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer" title="Làm mới danh sách người tham dự" >
                   <FaSyncAlt className={isLoadingAttendees ? "animate-spin" : ""} /> DS Tham Dự
                 </button>
@@ -582,19 +582,19 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="flex justify-between items-center p-4 border-b">
               <h3 className="text-lg font-semibold">Quét mã QR điểm danh</h3>
-              <button onClick={() => setIsQrScannerOpen(false)} className="text-gray-400 hover:text-gray-600" disabled={isProcessingCheckIn}>
+              <button onClick={() => setIsQrScannerOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer" disabled={isProcessingCheckIn}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
             </div>
             <div className="p-4">
               {isProcessingCheckIn ? (
                 <div className="text-center py-10">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-2"></div> <p>Đang xử lý điểm danh...</p>
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-2"><p>Đang xử lý điểm danh...</p></div> 
                 </div>
               ) : ( <QRScanner onScanSuccess={handleCheckInScanSuccess} onScanError={handleCheckInScanError} /> )}
             </div>
             {!isProcessingCheckIn && (<div className="p-4 border-t flex justify-end">
-              <button onClick={() => setIsQrScannerOpen(false)} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-sm">Hủy</button>
+              <button onClick={() => setIsQrScannerOpen(false)} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-sm cursor-pointer">Hủy</button>
             </div>)}
           </div>
         </div>

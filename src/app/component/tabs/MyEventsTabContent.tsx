@@ -13,7 +13,7 @@ import { User as MainUserType } from "../types/appTypes"; // Điều chỉnh đ�
 import {
   ApiRole,
   EventDataForForm as ModalEventType,
-} from "../types/typCreateEvent"; // EventDataForForm dùng cho Modal
+} from "../types/typCreateEvent"; 
 
 import ConfirmationDialog from "../../../utils/ConfirmationDialog"; // Điều chỉnh đường dẫn
 import MyCreatedEventsTab, {
@@ -31,8 +31,7 @@ import {
   CalendarIcon as RadixCalendarIcon,
 } from "@radix-ui/react-icons";
 
-// Kiểu OrganizerInfo và ParticipantInfo này nên nhất quán với EventType trong MyEvent.tsx
-// và có thể ánh xạ sang OrganizerParticipantInput của ModalUpdateEvent
+
 interface Role {
 
   id: string;
@@ -40,17 +39,18 @@ interface Role {
 }
 
 export interface PersonDetail {
-  // Dùng cho createdBy, deletedBy, organizers, participants sau khi enrich
+
   userId: string;
-  id?: string; // Có thể là userId
+  id?: string;
   username?: string;
   firstName?: string;
   lastName?: string;
   fullName?: string;
   avatar?: string;
+  positionId?: string;
   positionName?: string;
-  roles?: Role[]; // Vai trò trong sự kiện, có thể khác vai trò chung của user
-  generalRoleName?: string; // Vai trò chung của user (ví dụ: "Sinh viên", "Giảng viên")
+  roles?: Role[]; 
+  generalRoleName?: string;
 }
 
 export interface EventType {
@@ -60,7 +60,7 @@ export interface EventType {
   location?: string;
   content?: string;
   description?: string;
-  status: "APPROVED" | "PENDING" | "REJECTED" | string;
+  status: "APPROVED" | "PENDING" | "REJECTED" | string ;
   rejectionReason?: string | null;
   purpose?: string;
   createdBy?: string | PersonDetail; // userId hoặc object đã enrich
@@ -196,7 +196,8 @@ interface MyEventsTabContentProps {
   createdEventIdsFromParent: Set<string>; // IDs sự kiện user này đã tạo
   onRegistrationChange: (eventId: string, registered: boolean) => void; // Callback khi đăng ký/hủy
   onEventNeedsRefresh: () => void; // Callback khi cần refresh danh sách sự kiện chung
-  onOpenUpdateModal: (eventForModal: ModalEventType) => void; // Callback để mở modal với dữ liệu đã map
+  onOpenUpdateModal: (eventForModal: ModalEventType) => void; 
+  refreshToken: () => Promise<string | null>;
 }
 
 const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
@@ -261,18 +262,17 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     useState<AbortController | null>(null);
   const [isEnhancementPending, setIsEnhancementPending] = useState(false);
 
-  // Hàm chuyển đổi thành viên từ API sự kiện (organizer/participant trong event object)
-  // sang kiểu PersonDetail dùng trong state của MyEventsTabContent
-  const transformApiEventMemberToLocal = useCallback(
+
+   const transformApiEventMemberToLocal = useCallback(
     (apiMember: any): PersonDetail => {
-      // apiMember là một phần tử trong mảng event.organizers hoặc event.participants từ API get event
+      
       const rolesArray: Role[] = [];
       if (apiMember.roleId && allSystemRoles.length > 0) {
         const foundRole = allSystemRoles.find((r) => r.id === apiMember.roleId);
         if (foundRole)
           rolesArray.push({ id: foundRole.id, name: foundRole.name });
       } else if (apiMember.roleName) {
-        // Fallback nếu chỉ có roleName
+        
         rolesArray.push({
           id:
             apiMember.roleId ||
@@ -283,7 +283,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
 
       return {
         userId: apiMember.userId,
-        // Các trường tên (firstName, lastName, fullName) sẽ được enrich sau nếu cần
+       
         firstName: apiMember.firstName,
         lastName: apiMember.lastName,
         fullName:
@@ -291,9 +291,10 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           `${apiMember.lastName || ""} ${apiMember.firstName || ""}`.trim() ||
           apiMember.username,
         username: apiMember.username,
+        positionId: apiMember.positionId,
         positionName: apiMember.positionName,
-        roles: rolesArray, // Vai trò trong sự kiện
-        // avatar: apiMember.avatar, // API get event có thể không trả về avatar của từng member
+        roles: rolesArray, 
+
       };
     },
     [allSystemRoles]
@@ -482,29 +483,27 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
 
     // Ánh xạ từ MyCreatedEventType.organizers (PersonDetail[]) sang ModalEventType.organizers (OrganizerParticipantInput[])
     const organizersForModal: ModalEventType["organizers"] =
-      eventFromMyCreatedTab.organizers?.map((org) => ({
+      eventFromMyCreatedTab.organizers?.map((org) => ({ // Biến lặp là 'org'
         userId: org.userId,
-        roleId: org.roles?.[0]?.id || "",
-        roleName: org.roles?.[0]?.name || "",
-        positionId: org.positionName
-          ? personDetailsCacheRef.current[org.userId]?.id || ""
-          : "", // 
+        roleId: org.roles?.[0]?.id || "",       // SỬA: org.roles thay vì par.roles và bỏ .roles thừa
+        roleName: org.roles?.[0]?.name || "",   // SỬA: org.roles thay vì par.roles và bỏ .roles thừa
+        positionId: org.positionId || "",      // SỬA: Sử dụng org.positionId đã được thêm vào PersonDetail
         name:
           org.fullName ||
           `${org.lastName || ""} ${org.firstName || ""}`.trim() ||
-          org.username,
+          org.username, // org.username tồn tại trên PersonDetail
       })) || [];
 
     const participantsForModal: ModalEventType["participants"] =
-      eventFromMyCreatedTab.participants?.map((par) => ({
+      eventFromMyCreatedTab.participants?.map((par) => ({ // Biến lặp là 'par'
         userId: par.userId,
-        roleId: par.roles?.[0]?.id || "",
-         roleName: par.roles?.[0]?.name || "",
-        positionId: par.positionName ? "" : "", // Tương tự, cần cách lấy positionId
+        roleId: par.roles?.[0]?.id || "",       // Đúng: par.roles?.[0]?.id
+        roleName: par.roles?.[0]?.name || "",   // Đúng: par.roles?.[0]?.name
+        positionId: par.positionId || "",     // SỬA: Sử dụng par.positionId đã được thêm vào PersonDetail
         name:
           par.fullName ||
           `${par.lastName || ""} ${par.firstName || ""}`.trim() ||
-          par.username,
+          par.username, // par.username tồn tại trên PersonDetail
       })) || [];
 
     const eventForModal: ModalEventType = {
@@ -514,8 +513,9 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       time: eventFromMyCreatedTab.time || "",
       location: eventFromMyCreatedTab.location || "",
       content: eventFromMyCreatedTab.content || "",
-      maxAttendees: eventFromMyCreatedTab.maxAttendees ?? "",
-      status: eventFromMyCreatedTab.status as ModalEventType["status"], 
+      // SỬA LỖI TYPE CHO maxAttendees
+      maxAttendees: eventFromMyCreatedTab.maxAttendees ?? null, // SỬA: Dùng null thay vì ""
+      status: eventFromMyCreatedTab.status as ModalEventType["status"],
       avatarUrl: eventFromMyCreatedTab.avatarUrl,
       organizers: organizersForModal,
       participants: participantsForModal,
@@ -1335,7 +1335,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                       deletingEventId === event.id ||
                       restoringEventId === event.id
                     }
-                    className={`w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                    className={`w-full sm:w-auto bg-indigo-600 cursor-pointer hover:bg-indigo-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
                       deletingEventId === event.id ||
                       restoringEventId === event.id
                         ? "opacity-50 cursor-wait"
@@ -1350,7 +1350,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                       deletingEventId === event.id ||
                       restoringEventId === event.id
                     }
-                    className={`w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                    className={`w-full cursor-pointer sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
                       deletingEventId === event.id ||
                       restoringEventId === event.id
                         ? "opacity-50 cursor-wait"
@@ -1377,7 +1377,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 <button
                   onClick={() => handleRestoreClick(event)}
                   disabled={restoringEventId === event.id}
-                  className={`w-full sm:w-auto bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                  className={`w-full sm:w-auto cursor-pointer bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
                     restoringEventId === event.id
                       ? "opacity-50 cursor-wait"
                       : ""
@@ -1403,7 +1403,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                     deletingEventId === event.id ||
                     restoringEventId === event.id
                   }
-                  className={`w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
+                  className={`w-full cursor-pointer sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-md text-sm font-medium flex items-center shadow-sm transition-colors ${
                     isExporting ||
                     deletingEventId === event.id ||
                     restoringEventId === event.id
@@ -1425,7 +1425,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                 setIsLoadingEventDetailsEnhancement(false);
                 if (enhancementController) enhancementController.abort();
               }}
-              className="w-full sm:w-auto px-6 py-2.5 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
+              className="w-full cursor-pointer sm:w-auto px-6 py-2.5 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400"
             >
               Đóng
             </button>

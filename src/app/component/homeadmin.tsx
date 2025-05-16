@@ -15,7 +15,7 @@ import ContactModal from "../component/modals/ContactModal";
 import AboutModal from "../component/modals/AboutModal";
 import AdminHomeTabContent from "../component/tabs/AdminHomeTabContent";
 import ApprovalTabContent from "../component/tabs/ApprovalTabContent";
-// import AttendeesTabContent from "../component/tabs/AttendeesTabContent";
+import MyNewsTabContent from "./tabs/MyNewsTabContent";
 import AttendeesTabContent from "../component/tabs/AttendeesTabContentUser";
 import MembersTabContent from "../component/tabs/MembersTabContent";
 import RolesTabContent from "../component/tabs/RolesTabContent";
@@ -69,6 +69,7 @@ type ActiveTab =
   | "myNews"
   | "createEvent"
   | "approval"
+  | "myNews"
   | "myEvents"
   | "attendees"
   | "members"
@@ -168,8 +169,8 @@ export default function HomeAdmin() {
   const [errorChatMessages, setErrorChatMessages] = useState<string | null>(
     null
   );
-    const [eventToEditInModal, setEventToEditInModal] =
-      useState<EventDataForForm | null>(null);
+  const [eventToEditInModal, setEventToEditInModal] =
+    useState<EventDataForForm | null>(null);
   const [chatMediaMessages, setChatMediaMessages] = useState<Message[]>([]);
   const [chatFileMessages, setChatFileMessages] = useState<Message[]>([]);
   const [chatAudioMessages, setChatAudioMessages] = useState<Message[]>([]);
@@ -181,8 +182,8 @@ export default function HomeAdmin() {
   const [errorChatAudio, setErrorChatAudio] = useState<string | null>(null);
   const [isProcessingChatAction, setIsProcessingChatAction] =
     useState<boolean>(false);
-      const [isUpdateEventModalOpen, setIsUpdateEventModalOpen] =
-        useState<boolean>(false);
+  const [isUpdateEventModalOpen, setIsUpdateEventModalOpen] =
+    useState<boolean>(false);
   const [downloadingChatFileId, setDownloadingChatFileId] = useState<
     string | null
   >(null);
@@ -820,6 +821,93 @@ export default function HomeAdmin() {
     []
   );
 
+    const handleDisbandGroupChatAPI = useCallback(
+      async (groupId: string, leaderId: string): Promise<void> => {
+        if (!groupId || !leaderId) {
+          toast.error("Thiếu thông tin để giải tán nhóm.");
+          return;
+        }
+        if (!user || user.id !== leaderId) {
+          toast.error("Chỉ có trưởng nhóm mới có thể giải tán nhóm.");
+          return;
+        }
+  
+        setIsProcessingChatAction(true);
+        const toastId = toast.loading("Đang giải tán nhóm...");
+  
+        try {
+          const token = localStorage.getItem("authToken");
+          if (!token) {
+            throw new Error("Yêu cầu xác thực.");
+          }
+  
+          const response = await fetch(
+            `http://localhost:8080/identity/api/events/group-chats/${groupId}/deactivate?leaderId=${leaderId}`,
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+  
+          if (!response.ok) {
+            let errorMessage = `Lỗi ${response.status}`;
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.message || errorMessage;
+            } catch (e) {
+              errorMessage =
+                response.statusText ||
+                `Lỗi máy chủ khi giải tán nhóm. Mã lỗi: ${response.status}`;
+            }
+            throw new Error(errorMessage);
+          }
+          const responseText = await response.text();
+          if (responseText) {
+            try {
+              const responseData = JSON.parse(responseText);
+              if (responseData.code !== 1000 && responseData.message) {
+                throw new Error(
+                  responseData.message ||
+                    "Giải tán nhóm không thành công từ máy chủ."
+                );
+              } else if (responseData.code !== 1000 && !responseData.message) {
+                throw new Error(
+                  "Giải tán nhóm không thành công, phản hồi không rõ ràng từ máy chủ."
+                );
+              }
+            } catch (e: any) {
+              console.error(
+                "Lỗi phân tích phản hồi JSON khi giải tán nhóm:",
+                e.message
+              );
+              throw new Error(
+                "Phản hồi không hợp lệ từ máy chủ sau khi giải tán nhóm."
+              );
+            }
+          }
+  
+          toast.success("Đã giải tán nhóm thành công!", { id: toastId });
+  
+          setChatConversations((prevConversations) =>
+            prevConversations.filter((c) => String(c.id) !== String(groupId))
+          );
+  
+          if (selectedChatConversation?.id === groupId) {
+            setSelectedChatConversation(null);
+          }
+        } catch (error: any) {
+          toast.error(`Giải tán nhóm thất bại: ${error.message}`, {
+            id: toastId,
+          });
+          console.error("Lỗi giải tán nhóm:", error);
+        } finally {
+          setIsProcessingChatAction(false);
+        }
+      },
+      [user, selectedChatConversation?.id]
+    );
   const handleSendMessageChatAPI = useCallback(
     async (
       groupId: string,
@@ -1869,6 +1957,15 @@ export default function HomeAdmin() {
       setEditingNewsItem(null);
     }
   };
+  const handleNewsActionSuccess = (createdOrUpdatedItem?: NewsItem) => {
+    setIsNewsModalOpen(false);
+    setEditingNewsItem(null);
+    refreshNewsList();
+    if (activeTab === "myNews" || activeTab === "news") {
+      // NewsTabContent and MyNewsTabContent might need a signal to refresh if they don't rely on `newsItems` prop from UserHome
+      // For now, refreshNewsList updates the main newsItems state which should flow down or trigger re-renders.
+    }
+  };
 
   const handleSessionExpired = useCallback(() => {
     router.push("/login?sessionExpired=true");
@@ -1921,6 +2018,12 @@ export default function HomeAdmin() {
         specificText = activeTab === tabName ? "" : "text-yellow-800";
         specificHoverBg =
           activeTab === tabName ? "hover:bg-yellow-600" : "hover:bg-yellow-200";
+        break;
+      case "myNews":
+        specificBg = activeTab === tabName ? "bg-red-600" : "bg-red-100";
+        specificText = activeTab === tabName ? "" : "text-red-800";
+        specificHoverBg =
+          activeTab === tabName ? "hover:bg-red-700" : "hover:bg-red-200";
         break;
       case "myEvents":
         specificBg = activeTab === tabName ? "bg-sky-600" : "bg-sky-100";
@@ -1979,6 +2082,8 @@ export default function HomeAdmin() {
         return "border-t-blue-600";
       case "approval":
         return "border-t-yellow-500";
+      case "myNews":
+        return "border-t-red-600";
       case "myEvents":
         return "border-t-sky-600";
       case "attendees":
@@ -2007,6 +2112,7 @@ export default function HomeAdmin() {
       { id: "news", label: "📰 Bảng tin" },
       { id: "createEvent", label: "➕ Tạo sự kiện", requiresAuth: true },
       { id: "approval", label: "📅 Phê duyệt" },
+      { id: "myNews", label: "📰 Tin tức của tôi" },
       { id: "myEvents", label: "🛠 Sự kiện / Đăng ký", requiresAuth: true },
       { id: "attendees", label: "✅ Điểm danh" },
       { id: "members", label: "👥 Quản lý thành viên" },
@@ -2057,74 +2163,53 @@ export default function HomeAdmin() {
   const showNextButton =
     currentTabSetPage < totalOtherTabPages - 1 &&
     otherTabsList.length > TABS_PER_PAGE;
-  const openModalForEventUpdate = (eventData: MyEventType) => {
-    const eventForModal: EventDataForForm = {
-      id: eventData.id,
-      name: eventData.name || eventData.title || "",
-      purpose: eventData.purpose || "",
-      time: eventData.time || eventData.date || "",
-      location: eventData.location || "",
-      content: eventData.content || eventData.description || "",
-      organizers: (eventData.organizers || []).map((o) => ({
-        userId: o.userId,
-        roleId: (o as any).roleId || "",
-        positionId: (o as any).positionId || "",
-      })),
-      participants: (eventData.participants || []).map((p) => ({
-        userId: p.userId,
-        roleId: p.roleId || "",
-        positionId: (p as any).positionId || "",
-      })),
-      maxAttendees:
-        eventData.maxAttendees === undefined ? null : eventData.maxAttendees,
-      status: eventData.status as EventDataForForm["status"],
-      avatarUrl: eventData.avatarUrl || null,
-      createdBy:
-        typeof eventData.createdBy === "string"
-          ? eventData.createdBy
-          : undefined,
-    };
-    setEventToEditInModal(eventForModal);
-    setIsUpdateEventModalOpen(true);
+
+  const openModalForEventUpdate = (eventDataForForm: EventDataForForm) => {
+     setEventToEditInModal(eventDataForForm);
+      setIsUpdateEventModalOpen(true);
   };
+
+  
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
-          <Toaster toastOptions={{ duration: 4000 }} position="top-center" />
-          <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
-            <div className="max-w-7xl mx-auto flex justify-between items-center">
-              <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện (Admin)</div>
-              <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
-                <span
-                  className="cursor-pointer hover:text-gray-300 transition-colors"
-                  onClick={() => setShowAboutModal(true)}
-                >
-                  Giới thiệu
+      <Toaster toastOptions={{ duration: 4000 }} position="top-center" />
+      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="text-lg sm:text-xl font-bold">
+            Quản lý sự kiện (Admin)
+          </div>
+          <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
+            <span
+              className="cursor-pointer hover:text-gray-300 transition-colors"
+              onClick={() => setShowAboutModal(true)}
+            >
+              Giới thiệu
+            </span>
+            <span
+              className="cursor-pointer hover:text-gray-300"
+              onClick={() => setShowContactModal(true)}
+            >
+              Liên hệ
+            </span>
+            {initializedRef.current && !isLoadingUser && (
+              <UserMenu user={user} onLogout={handleLogout} />
+            )}
+            {(!initializedRef.current || isLoadingUser) && (
+              <span className="text-gray-400">Đang tải...</span>
+            )}
+            {initializedRef.current && !isLoadingUser && !user && (
+              <Link href="/login">
+                <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
+                  Đăng nhập
                 </span>
-                <span
-                  className="cursor-pointer hover:text-gray-300"
-                  onClick={() => setShowContactModal(true)}
-                >
-                  Liên hệ
-                </span>
-                {initializedRef.current && !isLoadingUser && (
-                  <UserMenu user={user} onLogout={handleLogout} />
-                )}
-                {(!initializedRef.current || isLoadingUser) && (
-                  <span className="text-gray-400">Đang tải...</span>
-                )}
-                {initializedRef.current && !isLoadingUser && !user && (
-                  <Link href="/login">
-                    <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
-                      Đăng nhập
-                    </span>
-                  </Link>
-                )}
-              </div>
-            </div>
-          </nav>
+              </Link>
+            )}
+          </div>
+        </div>
+      </nav>
 
-       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30 "> 
-        <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3"> 
+      <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30 ">
+        <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
           {otherTabsList.length > 0 && (
             <div className="flex items-center grow justify-center min-w-0">
               {showPrevButton && (
@@ -2205,24 +2290,32 @@ export default function HomeAdmin() {
           <>
             {activeTab === "home" && user && (
               <AdminHomeTabContent
-                currentUserId={user.id}
-                events={allEvents}
-                isLoading={isLoadingEvents}
-                error={errorEvents}
+                allEvents={allEvents}
+                isLoadingEvents={isLoadingEvents}
+                errorEvents={errorEvents}
+                registeredEventIds={registeredEventIds}
+                createdEventIds={createdEventIds}
+                user={user}
+                isLoadingRegisteredIds={isLoadingRegisteredIds}
+                isLoadingCreatedEventIds={isLoadingCreatedEventIds}
+                isRegistering={isRegistering}
+                onRegister={handleRegister}
+                onEventClick={handleEventClick}
+                selectedEvent={selectedEvent}
+                onBackToList={handleBackToList}
                 search={search}
                 setSearch={setSearch}
                 sortOption={sortOption}
                 setSortOption={setSortOption}
                 timeFilterOption={timeFilterOption}
                 setTimeFilterOption={setTimeFilterOption}
-                startDateFilter={startDateFilter}
-                setStartDateFilter={setStartDateFilter}
-                endDateFilter={endDateFilter}
-                setEndDateFilter={setEndDateFilter}
-                selectedEvent={selectedEvent}
-                onEventClick={handleEventClick}
-                onBackToList={handleBackToList}
+                refreshToken={refreshToken}
                 onRefreshEvents={fetchAllEvents}
+                newsItems={newsItems}
+                isLoadingNews={isLoadingNews}
+                errorNews={errorNews}
+                refreshNewsList={refreshNewsList}
+                onOpenUpdateModal={openModalForEventUpdate}
               />
             )}
             {activeTab === "news" && (
@@ -2253,6 +2346,16 @@ export default function HomeAdmin() {
             {activeTab === "approval" && user && (
               <ApprovalTabContent user={user} refreshToken={refreshToken} />
             )}
+            {user && activeTab === "myNews" && (
+              <MyNewsTabContent
+                user={user}
+                onNewsChange={() => {
+                  fetchNews();
+                }}
+                refreshToken={refreshToken}
+              />
+            )}
+
             {activeTab === "myEvents" && user && (
               <MyEventsTabContent
                 user={user}
@@ -2262,15 +2365,15 @@ export default function HomeAdmin() {
                 onRegistrationChange={handleRegistrationChange}
                 onEventNeedsRefresh={handleGlobalEventRefresh}
                 onOpenUpdateModal={openModalForEventUpdate}
-
+                refreshToken={refreshToken}
               />
             )}
             {activeTab === "attendees" && user && (
-              <AttendeesTabContent  user={user}                             // Truyền thông tin người dùng hiện tại
-    refreshToken={refreshToken}             // Truyền hàm làm mới token
-    onSessionExpired={handleSessionExpired}
-    
-    />
+              <AttendeesTabContent
+                user={user} // Truyền thông tin người dùng hiện tại
+                refreshToken={refreshToken} // Truyền hàm làm mới token
+                onSessionExpired={handleSessionExpired}
+              />
             )}
             {activeTab === "members" && user && (
               <MembersTabContent
@@ -2325,6 +2428,7 @@ export default function HomeAdmin() {
                 getDisplayName={getChatDisplayName}
                 handleRemoveMember={handleRemoveMemberChatAPI}
                 handleLeaveGroup={handleLeaveGroupChatAPI}
+                handleDisbandGroupAPI={handleDisbandGroupChatAPI}
                 handleSendMessageAPI={handleSendMessageChatAPI}
                 handleSendFileAPI={handleSendFileChatAPI}
                 handleDeleteMessageAPI={handleDeleteMessageChatAPI}
@@ -2413,31 +2517,32 @@ export default function HomeAdmin() {
       <CreateNewsModal
         isOpen={isNewsModalOpen}
         onClose={handleCloseModal}
-        onSubmit={handleNewsFormSubmit}
-        isSubmitting={isSubmittingNews}
+        onActionSuccess={handleNewsActionSuccess}
         editMode={!!editingNewsItem}
         initialData={editingNewsItem}
+        user={user}
+        refreshToken={refreshToken}
       />
       {user && eventToEditInModal && (
-              <ModalUpdateEvent
-                isOpen={isUpdateEventModalOpen}
-                onClose={() => {
-                  setIsUpdateEventModalOpen(false);
-                  setEventToEditInModal(null);
-                }}
-                user={user}
-                editingEvent={eventToEditInModal}
-                onSuccess={() => {
-                  handleGlobalEventRefresh();
-                  if (activeTab === "myEvents" && user?.id) {
-                    const token = localStorage.getItem("authToken");
-                    if (token) fetchUserCreatedEvents(user.id, token);
-                  }
-                  setIsUpdateEventModalOpen(false);
-                  setEventToEditInModal(null);
-                }}
-              />
-            )}
+        <ModalUpdateEvent
+          isOpen={isUpdateEventModalOpen}
+          onClose={() => {
+            setIsUpdateEventModalOpen(false);
+            setEventToEditInModal(null);
+          }}
+          user={user}
+          editingEvent={eventToEditInModal}
+          onSuccess={() => {
+            handleGlobalEventRefresh();
+            if (activeTab === "myEvents" && user?.id) {
+              const token = localStorage.getItem("authToken");
+              if (token) fetchUserCreatedEvents(user.id, token);
+            }
+            setIsUpdateEventModalOpen(false);
+            setEventToEditInModal(null);
+          }}
+        />
+      )}
     </div>
   );
 }

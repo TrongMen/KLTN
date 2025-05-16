@@ -737,6 +737,94 @@ export default function UserHome() {
     []
   );
 
+  const handleDisbandGroupChatAPI = useCallback(
+    async (groupId: string, leaderId: string): Promise<void> => {
+      if (!groupId || !leaderId) {
+        toast.error("Thiếu thông tin để giải tán nhóm.");
+        return;
+      }
+      if (!user || user.id !== leaderId) {
+        toast.error("Chỉ có trưởng nhóm mới có thể giải tán nhóm.");
+        return;
+      }
+
+      setIsProcessingChatAction(true);
+      const toastId = toast.loading("Đang giải tán nhóm...");
+
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          throw new Error("Yêu cầu xác thực.");
+        }
+
+        const response = await fetch(
+          `http://localhost:8080/identity/api/events/group-chats/${groupId}/deactivate?leaderId=${leaderId}`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          let errorMessage = `Lỗi ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage;
+          } catch (e) {
+            errorMessage =
+              response.statusText ||
+              `Lỗi máy chủ khi giải tán nhóm. Mã lỗi: ${response.status}`;
+          }
+          throw new Error(errorMessage);
+        }
+        const responseText = await response.text();
+        if (responseText) {
+          try {
+            const responseData = JSON.parse(responseText);
+            if (responseData.code !== 1000 && responseData.message) {
+              throw new Error(
+                responseData.message ||
+                  "Giải tán nhóm không thành công từ máy chủ."
+              );
+            } else if (responseData.code !== 1000 && !responseData.message) {
+              throw new Error(
+                "Giải tán nhóm không thành công, phản hồi không rõ ràng từ máy chủ."
+              );
+            }
+          } catch (e: any) {
+            console.error(
+              "Lỗi phân tích phản hồi JSON khi giải tán nhóm:",
+              e.message
+            );
+            throw new Error(
+              "Phản hồi không hợp lệ từ máy chủ sau khi giải tán nhóm."
+            );
+          }
+        }
+
+        toast.success("Đã giải tán nhóm thành công!", { id: toastId });
+
+        setChatConversations((prevConversations) =>
+          prevConversations.filter((c) => String(c.id) !== String(groupId))
+        );
+
+        if (selectedChatConversation?.id === groupId) {
+          setSelectedChatConversation(null);
+        }
+      } catch (error: any) {
+        toast.error(`Giải tán nhóm thất bại: ${error.message}`, {
+          id: toastId,
+        });
+        console.error("Lỗi giải tán nhóm:", error);
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    [user, selectedChatConversation?.id]
+  );
+
   const handleSendMessageChatAPI = useCallback(
     async (
       groupId: string,
@@ -1120,6 +1208,7 @@ export default function UserHome() {
         const fmt: EventDisplayInfo[] = d.result
           .filter((e: any) => !e.deleted)
           .map((e: any) => ({
+            
             id: e.id,
             title: e.name || "N/A",
             name: e.name,
@@ -1136,7 +1225,7 @@ export default function UserHome() {
             participants: e.participants || [],
             attendees: e.attendees || [],
             maxAttendees: e.maxAttendees || 0,
-            event: e.event,
+            
           }));
         setAllEvents(fmt);
       } else throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
@@ -1589,7 +1678,7 @@ export default function UserHome() {
       message: (
         <>
           Đăng ký sự kiện <br />{" "}
-          <strong className="text-indigo-600">"{event.title}"</strong>?
+          <strong className="text-indigo-600">"{event.title}"</strong>?{" "}
         </>
       ),
       onConfirm: () => {
@@ -1716,14 +1805,11 @@ export default function UserHome() {
     setIsNewsModalOpen(false);
     setEditingNewsItem(null);
   };
-  
   const handleNewsActionSuccess = (createdOrUpdatedItem?: NewsItem) => {
     setIsNewsModalOpen(false);
     setEditingNewsItem(null);
     refreshNewsList();
     if (activeTab === "myNews" || activeTab === "news") {
-      // NewsTabContent and MyNewsTabContent might need a signal to refresh if they don't rely on `newsItems` prop from UserHome
-      // For now, refreshNewsList updates the main newsItems state which should flow down or trigger re-renders.
     }
   };
 
@@ -1881,115 +1967,77 @@ export default function UserHome() {
   const showNextButton =
     currentTabSetPage < totalOtherTabPages - 1 && tabs.length > TABS_PER_PAGE;
 
-  const openModalForEventUpdate = (eventData: MyEventType) => {
-    const eventForModal: EventDataForForm = {
-      id: eventData.id,
-      name: eventData.name || eventData.title || "",
-      purpose: eventData.purpose || "",
-      time: eventData.time || eventData.date || "",
-      location: eventData.location || "",
-      content: eventData.content || eventData.description || "",
-      organizers: (eventData.organizers || []).map((o) => ({
-        userId: o.userId,
-        roleId: (o as any).roleId || "",
-        positionId: (o as any).positionId || "",
-      })),
-      participants: (eventData.participants || []).map((p) => ({
-        userId: p.userId,
-        roleId: p.roleId || "",
-        positionId: (p as any).positionId || "",
-      })),
-      maxAttendees:
-        eventData.maxAttendees === undefined ? null : eventData.maxAttendees,
-      status: eventData.status as EventDataForForm["status"],
-      avatarUrl: eventData.avatarUrl || null,
-      createdBy:
-        typeof eventData.createdBy === "string"
-          ? eventData.createdBy
-          : undefined,
+  const openModalForEventUpdate = (eventDataForForm: EventDataForForm) => {
+       setEventToEditInModal(eventDataForForm);
+        setIsUpdateEventModalOpen(true);
     };
-    setEventToEditInModal(eventForModal);
-    setIsUpdateEventModalOpen(true);
-  };
 
-  const openModalForEventUpdateHome = (eventData: EventDisplayInfo | MyEventType) => {  
-    const eventForModal: EventDataForForm = {
-        id: eventData.id,
-        name: eventData.name || (eventData as EventDisplayInfo).title || "", 
-        purpose: eventData.purpose || "",
-        time: eventData.time || eventData.date || "",
-        location: eventData.location || "",
-        content: eventData.content || (eventData as EventDisplayInfo).description || "",
-        organizers: (eventData.organizers || []).map(o => ({ 
-            userId: o.userId, 
-            roleId: (o as any).roleId || '', 
-            positionId: (o as any).positionId || '' 
-        })),
-        participants: (eventData.participants || []).map(p => ({ 
-            userId: p.userId, 
-            roleId: p.roleId || '', 
-            positionId: (p as any).positionId || '' 
-        })),
-        maxAttendees: eventData.maxAttendees === undefined ? null : eventData.maxAttendees,
-        status: eventData.status as EventDataForForm['status'], 
-        avatarUrl: eventData.avatarUrl || null,
-        createdBy: typeof eventData.createdBy === 'string' ? eventData.createdBy : undefined,
-    };
-    setEventToEditInModal(eventForModal);
-    setIsUpdateEventModalOpen(true);
-  };
+  
+    
+
+
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
-      <Toaster toastOptions={{ duration: 3000 }} position="top-center" />
+      <Toaster toastOptions={{ duration: 3000 }} position="top-center" />{" "}
       <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
+        {" "}
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
+          {" "}
+          <div className="text-lg sm:text-xl font-bold">
+            Quản lý sự kiện
+          </div>{" "}
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
+            {" "}
             <span
               className="cursor-pointer hover:text-gray-300 transition-colors"
               onClick={() => setShowAboutModal(true)}
             >
-              Giới thiệu
-            </span>
+              Giới thiệu{" "}
+            </span>{" "}
             <span
               className="cursor-pointer hover:text-gray-300"
               onClick={() => setShowContactModal(true)}
             >
-              Liên hệ
-            </span>
+              Liên hệ{" "}
+            </span>{" "}
             {initializedRef.current && !isLoadingUser && (
               <UserMenu user={user} onLogout={handleLogout} />
-            )}
+            )}{" "}
             {(!initializedRef.current || isLoadingUser) && (
               <span className="text-gray-400">Đang tải...</span>
-            )}
+            )}{" "}
             {initializedRef.current && !isLoadingUser && !user && (
               <Link href="/login">
+                {" "}
                 <span className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded cursor-pointer">
-                  Đăng nhập
-                </span>
+                  Đăng nhập{" "}
+                </span>{" "}
               </Link>
-            )}
-          </div>
-        </div>
-      </nav>
+            )}{" "}
+          </div>{" "}
+        </div>{" "}
+      </nav>{" "}
       <div className="max-w-7xl mx-auto bg-white shadow-md rounded-xl p-4 mb-6 border border-gray-200 sticky top-20 z-30 ">
+        {" "}
         <div className="flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-5 justify-center pb-3">
+          {" "}
           {tabs.length > 0 && (
             <div className="flex items-center grow justify-center min-w-0">
+              {" "}
               {showPrevButton && (
                 <button
                   onClick={handlePrevTabs}
                   className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0 cursor-pointer"
                   aria-label="Các tab trước"
                 >
-                  <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
+                  {" "}
+                  <ChevronLeftIcon className="h-5 w-5 text-gray-600" />{" "}
                 </button>
-              )}
+              )}{" "}
               {!showPrevButton && tabs.length > TABS_PER_PAGE && (
                 <div className="w-[36px] h-[36px] shrink-0"></div>
-              )}
+              )}{" "}
               <div
                 className={`flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible ${
                   !showPrevButton &&
@@ -2004,19 +2052,21 @@ export default function UserHome() {
                     : ""
                 }`}
               >
+                {" "}
                 {currentVisibleOtherTabs.map((tab) => (
                   <div
                     key={tab.id}
                     className="relative flex flex-col items-center"
                   >
+                    {" "}
                     <button
                       onClick={() => setActiveTab(tab.id as ActiveTab)}
                       className={`${getTabButtonClasses(tab.id as ActiveTab)} ${
                         isMobileView ? "px-2 text-[11px]" : ""
                       }`}
                     >
-                      {tab.label}
-                    </button>
+                      {tab.label}{" "}
+                    </button>{" "}
                     {activeTab === tab.id && (
                       <div
                         className={`absolute top-full mt-1.5 w-0 h-0 border-l-[6px] border-l-transparent border-t-[8px] ${getActiveIndicatorColor(
@@ -2024,33 +2074,36 @@ export default function UserHome() {
                         )} border-r-[6px] border-r-transparent`}
                         style={{ left: "50%", transform: "translateX(-50%)" }}
                       ></div>
-                    )}
+                    )}{" "}
                   </div>
-                ))}
-              </div>
+                ))}{" "}
+              </div>{" "}
               {showNextButton && (
                 <button
                   onClick={handleNextTabs}
                   className="p-2 rounded-full hover:bg-gray-200 transition-colors shrink-0 cursor-pointer"
                   aria-label="Các tab kế tiếp"
                 >
-                  <ChevronRightIcon className="h-5 w-5 text-gray-600" />
+                  {" "}
+                  <ChevronRightIcon className="h-5 w-5 text-gray-600" />{" "}
                 </button>
-              )}
+              )}{" "}
               {!showNextButton && tabs.length > TABS_PER_PAGE && (
                 <div className="w-[36px] h-[36px] shrink-0"></div>
-              )}
+              )}{" "}
             </div>
-          )}
-        </div>
-      </div>
+          )}{" "}
+        </div>{" "}
+      </div>{" "}
       <div className="max-w-7xl mx-auto bg-white shadow-lg rounded-xl p-4 sm:p-6 min-h-[400px]">
+        {" "}
         {isPageLoading ? (
           <p className="text-center text-gray-500 italic py-6">
-            Đang tải dữ liệu...
+            Đang tải dữ liệu...{" "}
           </p>
         ) : (
           <>
+            {" "}
             {activeTab === "home" && (
               <HomeTabContent
                 allEvents={allEvents}
@@ -2078,9 +2131,9 @@ export default function UserHome() {
                 isLoadingNews={isLoadingNews}
                 errorNews={errorNews}
                 refreshNewsList={refreshNewsList}
-                onOpenUpdateModal={openModalForEventUpdateHome}
+                onOpenUpdateModal={openModalForEventUpdate}
               />
-            )}
+            )}{" "}
             {activeTab === "news" && (
               <NewsTabContent
                 newsItems={newsItems}
@@ -2096,7 +2149,7 @@ export default function UserHome() {
                 onRegisterForEvent={handleRegister}
                 isRegisteringForEventId={isRegistering}
               />
-            )}
+            )}{" "}
             {user && activeTab === "myNews" && (
               <MyNewsTabContent
                 user={user}
@@ -2105,7 +2158,7 @@ export default function UserHome() {
                 }}
                 refreshToken={refreshToken}
               />
-            )}
+            )}{" "}
             {user && activeTab === "createEvent" && (
               <CreateEventForm
                 user={user}
@@ -2114,7 +2167,7 @@ export default function UserHome() {
                   setActiveTab("myEvents");
                 }}
               />
-            )}
+            )}{" "}
             {user && activeTab === "myEvents" && (
               <MyEventsTabContent
                 user={user}
@@ -2124,15 +2177,16 @@ export default function UserHome() {
                 onRegistrationChange={handleRegistrationChange}
                 onEventNeedsRefresh={handleGlobalEventRefresh}
                 onOpenUpdateModal={openModalForEventUpdate}
+                refreshToken={refreshToken}
               />
-            )}
+            )}{" "}
             {user && activeTab === "attendees" && (
-               <AttendeesTabContent
-                  user={user}               
-                  refreshToken={refreshToken}  
-                  onSessionExpired={handleSessionExpired} 
+              <AttendeesTabContent
+                user={user}
+                refreshToken={refreshToken}
+                onSessionExpired={handleSessionExpired}
               />
-            )}
+            )}{" "}
             {user && activeTab === "members" && (
               <MembersTabContent
                 user={user}
@@ -2141,7 +2195,7 @@ export default function UserHome() {
                 refreshToken={refreshToken}
                 onSessionExpired={handleSessionExpired}
               />
-            )}
+            )}{" "}
             {user && activeTab === "chatList" && (
               <ChatTabContent
                 currentUser={user}
@@ -2180,6 +2234,7 @@ export default function UserHome() {
                 getDisplayName={getChatDisplayName}
                 handleRemoveMember={handleRemoveMemberChatAPI}
                 handleLeaveGroup={handleLeaveGroupChatAPI}
+                handleDisbandGroupAPI={handleDisbandGroupChatAPI}
                 handleSendMessageAPI={handleSendMessageChatAPI}
                 handleSendFileAPI={handleSendFileChatAPI}
                 handleDeleteMessageAPI={handleDeleteMessageChatAPI}
@@ -2188,23 +2243,24 @@ export default function UserHome() {
                 downloadingFileId={downloadingChatFileId}
                 setDownloadingFileId={setDownloadingChatFileId}
               />
-            )}
+            )}{" "}
             {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
               !user &&
               initializedRef.current &&
               !isLoadingUser && (
                 <p className="text-center text-red-500 py-6">
-                  Vui lòng đăng nhập để truy cập mục này.
+                  Vui lòng đăng nhập để truy cập mục này.{" "}
                 </p>
-              )}
+              )}{" "}
           </>
-        )}
-      </div>
+        )}{" "}
+      </div>{" "}
       {initializedRef.current && !isLoadingUser && user && (
         <div
           className="fixed bottom-6 right-6 z-50 group"
           ref={notificationContainerRef}
         >
+          {" "}
           <button
             ref={notificationButtonRef}
             onClick={handleNotificationClick}
@@ -2214,26 +2270,30 @@ export default function UserHome() {
             aria-expanded={showNotificationDropdown}
           >
             <span className="sr-only">Xem thông báo</span>
-            <BellIcon className="h-6 w-6" aria-hidden="true" />
+            <BellIcon className="h-6 w-6" aria-hidden="true" />{" "}
             {unreadNotificationCount > 0 && (
               <span className="absolute top-0 right-0 flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white transform translate-x-1/4 -translate-y-1/4 ring-2 ring-white pointer-events-none">
-                {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                {" "}
+                {unreadNotificationCount > 9
+                  ? "9+"
+                  : unreadNotificationCount}{" "}
               </span>
-            )}
-          </button>
+            )}{" "}
+          </button>{" "}
           {showNotificationDropdown && (
             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96">
+              {" "}
               <NotificationDropdown
                 notifications={notifications}
                 isLoading={isLoadingNotifications && notifications.length === 0}
                 error={errorNotifications}
                 onMarkAsRead={handleMarkAsRead}
                 onClose={() => setShowNotificationDropdown(false)}
-              />
+              />{" "}
             </div>
-          )}
+          )}{" "}
         </div>
-      )}
+      )}{" "}
       <ConfirmationDialog
         isOpen={confirmationState.isOpen}
         title={confirmationState.title}
@@ -2247,13 +2307,13 @@ export default function UserHome() {
         onCancel={() =>
           setConfirmationState((prev) => ({ ...prev, isOpen: false }))
         }
-      />
+      />{" "}
       {showContactModal && (
         <ContactModal onClose={() => setShowContactModal(false)} />
-      )}
+      )}{" "}
       {showAboutModal && (
         <AboutModal onClose={() => setShowAboutModal(false)} />
-      )}
+      )}{" "}
       <CreateNewsModal
         isOpen={isNewsModalOpen}
         onClose={handleCloseModal}
@@ -2262,7 +2322,7 @@ export default function UserHome() {
         initialData={editingNewsItem}
         user={user}
         refreshToken={refreshToken}
-      />
+      />{" "}
       {user && eventToEditInModal && (
         <ModalUpdateEvent
           isOpen={isUpdateEventModalOpen}
@@ -2282,7 +2342,7 @@ export default function UserHome() {
             setEventToEditInModal(null);
           }}
         />
-      )}
+      )}{" "}
     </div>
   );
 }

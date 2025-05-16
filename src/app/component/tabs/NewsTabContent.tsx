@@ -461,12 +461,7 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
                     >
                       {item.title || "Tiêu đề không có"}
                     </h3>
-                    <p
-                      onClick={() => handleOpenDetailModal(item)}
-                      className="text-sm text-gray-600 mb-3 line-clamp-3 flex-grow cursor-pointer"
-                    >
-                       {item.summary || item.content?.replace(/<[^>]+>/g, '').substring(0, 100) + (item.content?.replace(/<[^>]+>/g, '').length > 100 ? '...' : '') || ''}
-                    </p>
+                  
                     <div className="mt-auto pt-3 border-t border-gray-100">
                       <p className="text-xs text-gray-500 mb-1.5">
                         {new Date(

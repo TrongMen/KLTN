@@ -13,7 +13,9 @@ import Image from "next/image";
 import type {
   User,
   EventDataForForm,
-  OrganizerParticipantInput,
+  OrganizerInput,
+  ParticipantInput,
+  
   DetailedApiUser,
   ApiRole,
 } from "../types/typCreateEvent";
@@ -156,8 +158,8 @@ interface EventFormDataState {
   time: string;
   location: string;
   content: string;
-  organizers: OrganizerParticipantInput[];
-  participants: OrganizerParticipantInput[];
+  organizers: [];
+  participants: ParticipantInput[];
   maxAttendees: number | string;
   id?: string;
   status?: "PENDING" | "APPROVED" | "REJECTED";

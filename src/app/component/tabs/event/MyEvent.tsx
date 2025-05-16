@@ -47,7 +47,7 @@ export interface EventType { // Đảm bảo kiểu này nhất quán
   location?: string;
   content?: string;
   description?: string; // Giữ lại nếu có
-  status: "APPROVED" | "PENDING" | "REJECTED" | string;
+  status: "APPROVED" | "PENDING" | "REJECTED" | string | undefined;
   rejectionReason?: string | null;
   purpose?: string;
   createdBy?: string; // Hoặc một object chi tiết hơn nếu API trả về
@@ -555,20 +555,20 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                     <div className="mt-2 pt-2 border-t border-gray-100 flex justify-end gap-2">
                         {currentTabType !== "deleted" && (
                             <button onClick={(e) => { e.stopPropagation(); handleEditClick(event); }} disabled={isProcessing} title="Chỉnh sửa"
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 ${isProcessing ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"}`}>
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 cursor-pointer ${isProcessing ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"}`}>
                                 <Pencil1Icon className="w-3 h-3" /> <span className="hidden sm:inline">Sửa</span>
                             </button>
                         )}
                         {currentTabType !== "deleted" && (
                             <button onClick={(e) => { e.stopPropagation(); onDeleteClick(event); }} disabled={isProcessing} title="Xóa"
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 ${isProcessing ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-red-100 text-red-700 hover:bg-red-200"}`}>
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 cursor-pointer ${isProcessing ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-red-100 text-red-700 hover:bg-red-200"}`}>
                                 {isDeletingThis ? <ReloadIcon className="w-3 h-3 animate-spin"/> : <TrashIcon className="w-3 h-3"/>}
                                 <span className="hidden sm:inline">{isDeletingThis ? "Đang xóa..." : "Xóa"}</span>
                             </button>
                         )}
                         {currentTabType === "deleted" && (
                             <button onClick={(e) => { e.stopPropagation(); onRestoreClick(event); }} disabled={isProcessing} title="Khôi phục"
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 ${isProcessing ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"}`}>
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 cursor-pointer ${isProcessing ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"}`}>
                                 {isRestoringThis ? <ReloadIcon className="w-3 h-3 animate-spin"/> : <ArchiveIcon className="w-3 h-3"/>}
                                 <span className="hidden sm:inline">{isRestoringThis ? "Đang..." : "Khôi phục"}</span>
                             </button>

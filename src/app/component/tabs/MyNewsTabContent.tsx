@@ -960,9 +960,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
                     <h3 className="font-semibold text-base text-gray-800 line-clamp-2 mb-1">
                       {item.title}
                     </h3>
-                    <p className="text-xs text-gray-500 mb-2 line-clamp-2">
-                      {item.summary}
-                    </p>
+                 
                   </div>
                   <div className="mt-auto pt-2 border-t border-gray-100 text-xs space-y-1">
                     <p className="text-gray-500 flex items-center gap-1">

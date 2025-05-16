@@ -777,7 +777,7 @@ const ApprovalTabContent: React.FC<ApprovalTabContentProps> = ({
       <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-200 pb-2 flex-shrink-0">
         <button
           onClick={() => setActiveSubTab("events")}
-          className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors duration-150 ${
+          className={`px-4 py-2 text-sm font-medium rounded-t-md transition-colors duration-150 cursor-pointer ${
             activeSubTab === "events"
               ? "border-b-2 border-yellow-500 text-yellow-600 bg-yellow-50"
               : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"

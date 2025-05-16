@@ -18,7 +18,7 @@ import {
 } from "@radix-ui/react-icons";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import ConfirmationDialog from "../../../../utils/ConfirmationDialog";
-import { User as MainUserType, Participant } from "../../homeuser";
+import { User as MainUserType, Participant } from "../../types/appTypes";
 import { MainConversationType, Message } from "./ChatTabContentTypes";
 
 export interface GroupChatDetailViewProps {
@@ -54,6 +54,7 @@ export interface GroupChatDetailViewProps {
   filteredParticipants: Participant[];
   confirmRemoveMember: (member: Participant) => void;
   confirmLeaveGroup: () => void;
+  confirmDisbandGroup: () => void;
   handleSendMessage: () => Promise<void>;
   triggerFileInput: () => void;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -81,6 +82,11 @@ export interface GroupChatDetailViewProps {
     onCancel: () => void;
   };
   leaveConfirmationState: {
+    isOpen: boolean;
+    onConfirm: (() => void) | null;
+    onCancel: () => void;
+  };
+  disbandConfirmationState: {
     isOpen: boolean;
     onConfirm: (() => void) | null;
     onCancel: () => void;
@@ -124,6 +130,7 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
   filteredParticipants,
   confirmRemoveMember,
   confirmLeaveGroup,
+  confirmDisbandGroup,
   handleSendMessage,
   triggerFileInput,
   handleFileChange,
@@ -143,6 +150,7 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
   isLoadingDetails,
   removeConfirmationState,
   leaveConfirmationState,
+  disbandConfirmationState,
   deleteMessageConfirmationState,
 }) => {
   const isLeader =
@@ -152,7 +160,7 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
     const isCurrentUser = participant.id === currentUser?.id;
     const isGroupLeader = participant.id === conversation.groupLeaderId;
     let displayName =
-      participant.name || `User (${participant.id.substring(0, 4)}...)`;
+      participant.name || `User (${String(participant.id).substring(0, 4)}...)`;
     if (isGroupLeader && isCurrentUser) {
       return `${displayName} (Trưởng nhóm, Bạn)`;
     } else if (isGroupLeader) {
@@ -639,7 +647,7 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
                         </button>
                         <button
                           onClick={() => setActiveInfoTab("files")}
-                          className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1  cursor-pointer ${
+                          className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-1  cursor-pointer ${
                             activeInfoTab === "files"
                               ? "border-purple-500 text-purple-600"
                               : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -822,14 +830,26 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
                     </div>
                   </div>
                   <div className="mt-auto pt-4">
-                    {!isLeader && conversation.isGroup && currentUser && (
-                      <button
-                        onClick={confirmLeaveGroup}
-                        disabled={isProcessingAction}
-                        className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded border border-red-200 font-medium mb-3 cursor-pointer disabled:opacity-50"
-                      >
-                        <ExitIcon /> Rời khỏi nhóm
-                      </button>
+                    {conversation.isGroup && currentUser && (
+                        <>
+                            {isLeader ? (
+                                <button
+                                    onClick={confirmDisbandGroup}
+                                    disabled={isProcessingAction}
+                                    className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded border border-red-700 font-medium mb-3 cursor-pointer disabled:opacity-50"
+                                >
+                                    <TrashIcon /> Giải tán nhóm
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={confirmLeaveGroup}
+                                    disabled={isProcessingAction}
+                                    className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded border border-red-200 font-medium mb-3 cursor-pointer disabled:opacity-50"
+                                >
+                                    <ExitIcon /> Rời khỏi nhóm
+                                </button>
+                            )}
+                        </>
                     )}
                   </div>
                 </>
@@ -865,6 +885,16 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
         confirmVariant="danger"
         onConfirm={leaveConfirmationState.onConfirm || (() => {})}
         onCancel={leaveConfirmationState.onCancel}
+      />
+      <ConfirmationDialog
+        isOpen={disbandConfirmationState.isOpen}
+        title="Xác nhận giải tán nhóm"
+        message={<>Bạn có chắc chắn muốn giải tán nhóm chat <strong>"{conversation.name}"</strong> không? <br/> Hành động này không thể hoàn tác và sẽ xóa toàn bộ lịch sử chat.</>}
+        confirmText="Giải tán nhóm"
+        cancelText="Hủy bỏ"
+        confirmVariant="danger"
+        onConfirm={disbandConfirmationState.onConfirm || (() => {})}
+        onCancel={disbandConfirmationState.onCancel}
       />
       <ConfirmationDialog
         isOpen={deleteMessageConfirmationState.isOpen}

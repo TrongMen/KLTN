@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-// Bỏ DOMException khỏi import này
 import { BrowserMultiFormatReader, Result, NotFoundException, Exception } from '@zxing/library';
+import { toast } from 'react-hot-toast';
 
 interface QrScannerProps {
   onScanSuccess: (result: string) => void;
@@ -26,6 +26,7 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [isScannerActive, setIsScannerActive] = useState<boolean>(false);
   const [isLoadingDevices, setIsLoadingDevices] = useState<boolean>(true);
+  const [userHasInitiatedScan, setUserHasInitiatedScan] = useState<boolean>(false);
 
   useEffect(() => {
     codeReader.current = new BrowserMultiFormatReader();
@@ -36,7 +37,7 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
     };
   }, []);
 
-  const stopCamera = useCallback(() => {
+  const stopCamera = useCallback((resetInitiation = true) => {
     if (codeReader.current) {
       codeReader.current.reset();
     }
@@ -48,9 +49,12 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
       videoRef.current.srcObject = null;
     }
     setIsScannerActive(false);
+    if (resetInitiation) {
+        setUserHasInitiatedScan(false);
+    }
   }, []);
 
-  useEffect(() => {
+  const loadDevices = useCallback(() => {
     setPermissionError(null);
     setIsLoadingDevices(true);
 
@@ -58,22 +62,18 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
       setIsLoadingDevices(false);
       return;
     }
-
     if (typeof navigator.mediaDevices?.enumerateDevices !== 'function') {
       const noApiError = "API MediaDevices không được hỗ trợ trên trình duyệt này.";
       setPermissionError(noApiError);
       onScanError(noApiError);
       setIsLoadingDevices(false);
-      setIsScannerActive(false);
       return;
     }
-
     if (!window.isSecureContext) {
-      const insecureContextError = "Truy cập camera yêu cầu kết nối HTTPS. Vui lòng đảm bảo trang web được tải qua HTTPS.";
+      const insecureContextError = "Truy cập camera yêu cầu kết nối HTTPS.";
       setPermissionError(insecureContextError);
       onScanError(insecureContextError);
       setIsLoadingDevices(false);
-      setIsScannerActive(false);
       return;
     }
 
@@ -82,56 +82,45 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
         if (videoInputDevices.length > 0) {
           setDevices(videoInputDevices);
           const currentSelectedExists = selectedDeviceId && videoInputDevices.some(d => d.deviceId === selectedDeviceId);
-          if (!currentSelectedExists && videoInputDevices[0]) {
+          if (!currentSelectedExists || !selectedDeviceId) {
             setSelectedDeviceId(videoInputDevices[0].deviceId);
-          } else if (!selectedDeviceId && videoInputDevices[0]) {
-             setSelectedDeviceId(videoInputDevices[0].deviceId);
           }
         } else {
           const noDeviceError = "Không tìm thấy thiết bị camera nào.";
           setPermissionError(noDeviceError);
           onScanError(noDeviceError);
-          setIsScannerActive(false);
         }
       })
       .catch(err => {
-        let errorMsg = "Lỗi khi truy cập camera.";
-        // Sử dụng DOMException toàn cục (global)
+        let errorMsg = "Lỗi khi truy cập danh sách camera.";
         if (err instanceof DOMException) {
           if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-            errorMsg = "Quyền truy cập camera bị từ chối. Vui lòng cấp quyền trong cài đặt trình duyệt.";
-          } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-            errorMsg = "Không tìm thấy thiết bị camera nào.";
-          } else if (err.message.toLowerCase().includes("enumerate devices") || err.name === "NotSupportedError") {
-            errorMsg = "Không thể liệt kê thiết bị camera. Có thể trang không được tải qua HTTPS, trình duyệt không hỗ trợ, hoặc quyền bị chặn.";
+            errorMsg = "Quyền truy cập camera bị từ chối để liệt kê thiết bị.";
           } else {
             errorMsg = `Lỗi camera (${err.name}): ${err.message}`;
           }
         } else if (err instanceof Error) {
-           if (err.message.toLowerCase().includes("enumerate devices")) {
-               errorMsg = "Không thể liệt kê thiết bị camera. Có thể trang không được tải qua HTTPS hoặc trình duyệt không hỗ trợ đầy đủ API.";
-          } else {
-              errorMsg = `Lỗi camera: ${err.message}`;
-          }
+          errorMsg = `Lỗi camera: ${err.message}`;
         }
         setPermissionError(errorMsg);
         onScanError(errorMsg);
-        setIsScannerActive(false);
       })
       .finally(() => {
         setIsLoadingDevices(false);
       });
   }, [onScanError, selectedDeviceId]);
 
+
   useEffect(() => {
-    if (!selectedDeviceId || !videoRef.current || permissionError || isLoadingDevices) {
-      if (isScannerActive && codeReader.current) {
-        codeReader.current.reset();
+    loadDevices();
+  }, [loadDevices]);
+
+
+  useEffect(() => {
+    if (!userHasInitiatedScan || !selectedDeviceId || !videoRef.current || permissionError || isLoadingDevices) {
+      if (isScannerActive) { 
+        stopCamera(false); // Giữ userHasInitiatedScan nếu chỉ là lỗi tạm thời hoặc đang loading
       }
-      if(isScannerActive && !selectedDeviceId && !isLoadingDevices && devices.length === 0){
-        setPermissionError("Không có camera nào được chọn hoặc sẵn sàng.");
-      }
-      setIsScannerActive(false);
       return;
     }
 
@@ -148,76 +137,93 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
 
         if (result) {
           onScanSuccess(result.getText());
-          stopCamera();
+          stopCamera(true);
         }
-        // Sử dụng DOMException toàn cục (global)
         if (err && !(err instanceof NotFoundException)) {
           if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === "PermissionDeniedError")) {
-            const permError = "Quyền truy cập camera đã bị thu hồi hoặc bị từ chối trong quá trình quét.";
+            const permError = "Quyền truy cập camera đã bị thu hồi hoặc bị từ chối.";
             setPermissionError(permError);
             onScanError(permError);
-            stopCamera();
+            stopCamera(true);
           } else if (err instanceof Error && (err.message.includes("video input is missing") || err.message.includes("already playing"))) {
-            // Bỏ qua
           } else if (err instanceof DOMException && err.name === "TrackStartError") {
-            const trackError = "Lỗi khởi động track video. Camera có thể đang được sử dụng bởi ứng dụng khác.";
+            const trackError = "Lỗi khởi động camera. Thiết bị có thể đang được sử dụng.";
             setPermissionError(trackError);
             onScanError(trackError);
-            stopCamera();
-          } else {
-            // onScanError(`Lỗi khi đang quét: ${err ? err.message : 'Unknown scan error'}`);
+            stopCamera(true);
           }
         }
       }
     ).then(() => {
-        if (!didUnmount) setIsScannerActive(true);
+        if (!didUnmount) {
+          setIsScannerActive(true);
+          toast.success("Camera đã được kết nối và sẵn sàng quét!", {
+            duration: 3000,
+            icon: '📷'
+          });
+        }
     }).catch(err => {
       if (didUnmount) return;
       let errorMsg = "Không thể bắt đầu quét từ camera đã chọn.";
-        // Sử dụng DOMException toàn cục (global)
         if (err instanceof DOMException) {
             if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
                 errorMsg = "Quyền truy cập camera bị từ chối cho thiết bị này.";
             } else if (err.name === "NotFoundError" || (err.message && err.message.includes("Requested device not found"))) {
-                errorMsg = "Không tìm thấy camera đã chọn (ID: " + selectedDeviceId + ").";
+                errorMsg = "Không tìm thấy camera đã chọn.";
             } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
-                 errorMsg = "Không thể đọc dữ liệu từ camera. Camera có thể đang được sử dụng bởi ứng dụng khác hoặc có vấn đề phần cứng.";
+                  errorMsg = "Không thể đọc dữ liệu từ camera. Thiết bị có thể đang được sử dụng.";
             } else if (err.message && !err.message.includes("video input is missing")){
                 errorMsg = `Lỗi camera (${err.name}): ${err.message}`;
             } else {
-                return;
+                return; 
             }
         } else if (err instanceof Error) {
-             if (err.message && !err.message.includes("video input is missing")) {
+              if (err.message && !err.message.includes("video input is missing")) {
                 errorMsg = `Lỗi camera: ${err.message}`;
             } else {
-                 return;
+                return;
             }
         }
       setPermissionError(errorMsg);
       onScanError(errorMsg);
-      stopCamera();
+      stopCamera(true);
     });
 
     return () => {
       didUnmount = true;
-      if (codeReader.current) {
-        codeReader.current.reset();
-      }
+      stopCamera(false); 
     };
-  }, [selectedDeviceId, onScanSuccess, onScanError, permissionError, isLoadingDevices, stopCamera]);
+  }, [userHasInitiatedScan, selectedDeviceId, permissionError, isLoadingDevices, onScanSuccess, onScanError, stopCamera]);
+
+
+  const handleStartScan = () => {
+    setPermissionError(null); 
+    if (devices.length === 0 && !isLoadingDevices) {
+        const noDeviceError = "Không tìm thấy thiết bị camera nào để bắt đầu quét.";
+        setPermissionError(noDeviceError);
+        onScanError(noDeviceError);
+        setUserHasInitiatedScan(false);
+        return;
+    }
+    if (!selectedDeviceId && devices.length > 0) {
+        setSelectedDeviceId(devices[0].deviceId);
+    }
+    setUserHasInitiatedScan(true);
+  };
 
   const handleSwitchCamera = () => {
     if (devices.length <= 1 || isLoadingDevices) return;
-
-    stopCamera();
-    setPermissionError(null);
+    
+    stopCamera(false); // Giữ userHasInitiatedScan để camera tự động khởi động lại
+    setPermissionError(null); 
 
     const currentIndex = devices.findIndex(device => device.deviceId === selectedDeviceId);
     const nextIndex = (currentIndex + 1) % devices.length;
+    
     if (devices[nextIndex]) {
         const newDeviceId = devices[nextIndex].deviceId;
         setSelectedDeviceId(newDeviceId);
+        // useEffect sẽ tự động khởi động lại camera với selectedDeviceId mới nếu userHasInitiatedScan là true
     } else {
         onScanError("Không thể chuyển camera, thiết bị kế tiếp không hợp lệ.");
     }
@@ -225,22 +231,23 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
 
   useEffect(() => {
     return () => {
-      stopCamera();
+      stopCamera(true);
     };
   }, [stopCamera]);
 
-  if (isLoadingDevices && !permissionError) {
-    return <p className="text-center text-gray-500 italic py-5">Đang tải thiết bị camera...</p>;
-  }
 
+  if (isLoadingDevices && !devices.length && !permissionError) {
+    return <p className="text-center text-gray-500 italic py-5">Đang tải danh sách camera...</p>;
+  }
+  
   return (
     <div className="scanner-container w-full">
       <div
         className='relative w-full bg-black rounded-md border border-gray-400 shadow-inner'
         style={{
-          paddingBottom: '75%',
+          paddingBottom: '75%', 
           minHeight: '200px',
-          maxHeight: '400px'
+          maxHeight: '400px' 
         }}
       >
         <video
@@ -265,14 +272,28 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
             )}
           </div>
         </div>
+         {!isScannerActive && !permissionError && !isLoadingDevices && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-50">
+                {devices.length > 0 ? (
+                    <button
+                        onClick={handleStartScan}
+                        className="px-6 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition-colors text-base cursor-pointer"
+                    >
+                        Bắt đầu quét QR
+                    </button>
+                ) : (
+                    <p className="text-white text-center">Không tìm thấy camera.<br/>Vui lòng kiểm tra kết nối.</p>
+                )}
+            </div>
+        )}
       </div>
 
-      {devices.length > 1 && !permissionError && (
+      {isScannerActive && devices.length > 1 && !permissionError && (
         <div className="mt-3 flex justify-center">
           <button
             onClick={handleSwitchCamera}
             disabled={isLoadingDevices}
-            className="flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors disabled:opacity-50"
+            className="flex items-center cursor-pointer justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors disabled:opacity-50"
             title="Đổi camera"
           >
             <CameraSwitchIcon />
@@ -308,9 +329,6 @@ const QRScanner = ({ onScanSuccess, onScanError }: QrScannerProps) => {
           to {
             top: calc(97% - 3px);
           }
-        }
-        video {
-          /* transform: scaleX(-1); */
         }
       `}</style>
     </div>

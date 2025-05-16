@@ -77,6 +77,7 @@ export interface EventDisplayInfo {
   currentAttendeesCount?: number;
 }
 
+
 export interface EventDisplayInfoGuest {
   id: string;
   title: string;
@@ -145,24 +146,6 @@ export interface Conversation {
 }
 
 
-export interface EventInfo {
-  id: string;
-  name: string;
-  time?: string;
-  location?: string;
-  description?: string;
-  content?: string;
-  status?: string;
-  purpose?: string;
-  createdBy?: string;
-  createdAt?: string;
-  attendees?: any[];
-  organizers?: any[];
-  participants?: any[];
-  permissions?: string[];
-  rejectionReason?: string | null;
-  avatarUrl?: string | null;
-}
 
 export interface Attendee {
   id?: string;
@@ -230,4 +213,5 @@ export interface PersonDetail {
   profileRoleName?: string;     
   eventSpecificRoleName?: string;
   eventSpecificPositionName?: string;
+  maxAttendees?: number | null;
 }

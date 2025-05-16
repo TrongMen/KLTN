@@ -1,217 +1,42 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useCallback } from "react";
-import Image from "next/image";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
+import Image from "next/image";
+import { User, NewsItem, EventDisplayInfo } from "../types/appTypes";
+// import { OrganizerInfo, ParticipantInfo } from "../types/appTypes";
 import { useRouter } from "next/navigation";
 import {
-  EventDisplayInfo as MainEvent,
-  User as AppUser,
-} from "../types/appTypes";
-import ModalUpdateEvent from "../modals/ModalUpdateEvent";
-import ConfirmationDialog, {
-  ConfirmationDialogProps,
-} from "../../../utils/ConfirmationDialog";
-import { EventDataForForm } from "../types/typCreateEvent";
-import { OrganizerParticipantInput } from "../types/typCreateEvent";
-import {
   ReloadIcon,
+  Pencil1Icon,
   CheckCircledIcon,
   ClockIcon,
   CalendarIcon,
   ArchiveIcon,
   ListBulletIcon,
   GridIcon,
-  InfoCircledIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   TrashIcon,
-  Pencil2Icon,
-  PersonIcon,
 } from "@radix-ui/react-icons";
+import ConfirmationDialog, {
+  ConfirmationDialogProps,
+} from "../../../utils/ConfirmationDialog";
 
-export interface Role {
-  id: string;
-  name?: string;
-}
-
-export interface User {
-  id: string;
-  roles?: Role[];
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-  dob?: string;
-  avatar?: string;
-  email?: string;
-  gender?: boolean;
-}
-
-interface OrganizerInfo {
-  userId: string;
-  roleName?: string;
-  roleId?: string;
-  positionName?: string;
-  firstName?: string;
-  lastName?: string;
-  fullName?: string;
-  resolvedName?: string;
-}
-
-interface ParticipantInfo {
-  userId: string;
-  roleName?: string;
-  roleId?: string;
-  positionName?: string;
-  fullName?: string;
-  lastName?: string;
-  firstName?: string;
-  resolvedName?: string;
-}
-
-export interface EventDisplayInfo {
-  id: string;
-  title: string;
-  name?: string;
-  date: string;
-  time?: string;
-  location: string;
-  description: string;
-  content?: string;
-  purpose?: string;
-  speaker?: string;
-  image?: string;
-  avatarUrl?: string | null;
-  createdAt?: string;
-  status: "APPROVED" | "PENDING" | "REJECTED" | string;
-  createdBy?: string;
-  organizers?: OrganizerInfo[];
-  participants?: ParticipantInfo[];
-  attendees?: {
-    userId: string;
-    fullName?: string;
-    studentCode?: string;
-    checkedInAt?: string | null;
-    attending?: boolean;
-  }[];
-  maxAttendees?: number | null;
-  currentAttendeesCount?: number;
-}
-
-interface ApiResponse {
-  code: number;
-  message?: string;
-  result: any;
-}
-
-interface UserInfoFromApi {
-  id: string;
-  fullName?: string;
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-}
-
-interface AdminHomeTabContentProps {
-  events: EventDisplayInfo[];
-  isLoading: boolean;
-  error: string | null;
-  search: string;
-  setSearch: (value: string) => void;
-  sortOption: string;
-  setSortOption: (value: string) => void;
-  timeFilterOption: string;
-  setTimeFilterOption: (value: string) => void;
-  startDateFilter: string;
-  setStartDateFilter: (value: string) => void;
-  endDateFilter: string;
-  setEndDateFilter: (value: string) => void;
-  selectedEvent: EventDisplayInfo | null;
-  onEventClick: (event: EventDisplayInfo) => void;
-  onBackToList: () => void;
-  onRefreshEvents: () => Promise<void>;
-  currentUserId: string | null;
-  currentUser: AppUser | null;
-}
-
-type EventStatus = "upcoming" | "ongoing" | "ended";
 type ConfirmationState = Omit<ConfirmationDialogProps, "onCancel"> & {
   onConfirm: (() => Promise<void>) | null;
 };
 
-interface MemberWithName extends OrganizerInfo, ParticipantInfo {
-  fetchedFullName?: string;
+type EventStatus = "upcoming" | "ongoing" | "ended";
+
+interface DetailedOrganizer {
+  userId: string;
+  fullName?: string;
+  roleName?: string;
+  positionName?: string;
 }
 
-const fetchUserFullNameById = async (userId: string): Promise<string> => {
-  if (!userId || userId.trim() === "") return "Không xác định";
-  try {
-    const response = await fetch(
-      `http://localhost:8080/identity/users/notoken/${userId}`
-    );
-    if (!response.ok) {
-      try {
-        const errorData = await response.json();
-        return `ID: ${userId} (Lỗi ${response.status}: ${
-          errorData.message || "Không rõ"
-        })`;
-      } catch (e) {
-        return `ID: ${userId} (Lỗi ${response.status})`;
-      }
-    }
-    const apiResponseData: ApiResponse = await response.json();
-    if (apiResponseData && apiResponseData.result) {
-      const userData = apiResponseData.result as UserInfoFromApi;
-      const fullName =
-        `${userData.lastName || ""} ${userData.firstName || ""}`.trim() ||
-        userData.username;
-      return fullName || `ID: ${userId}`;
-    } else {
-      return `ID: ${userId} (Dữ liệu không hợp lệ: ${
-        apiResponseData.message || "N/A"
-      })`;
-    }
-  } catch (error) {
-    console.error("Lỗi fetch tên user ID:", userId, error);
-    return `ID: ${userId} (Lỗi xử lý)`;
-  }
-};
-
-const UserDisplayNameById: React.FC<{
-  userId: string | null | undefined;
-  prefix?: string;
-  defaultText?: string;
-}> = ({ userId, prefix = "", defaultText = "Đang tải..." }) => {
-  const [displayName, setDisplayName] = useState<string>(() =>
-    userId ? defaultText : "N/A"
-  );
-  useEffect(() => {
-    if (userId && userId.trim() !== "") {
-      setDisplayName(defaultText);
-      let isActive = true;
-      fetchUserFullNameById(userId)
-        .then((name) => {
-          if (isActive) setDisplayName(name);
-        })
-        .catch(() => {
-          if (isActive) setDisplayName(`ID: ${userId} (Lỗi)`);
-        });
-      return () => {
-        isActive = false;
-      };
-    } else {
-      setDisplayName("N/A");
-    }
-  }, [userId, defaultText]);
-  return (
-    <>
-      {prefix}
-      {displayName}
-    </>
-  );
-};
-
-const getEventStatus = (eventDateStr?: string): EventStatus => {
+const getEventStatus = (eventDateStr: string | undefined): EventStatus => {
   if (!eventDateStr) return "upcoming";
   try {
     const now = new Date();
@@ -231,7 +56,6 @@ const getEventStatus = (eventDateStr?: string): EventStatus => {
     else if (eventDateStart > todayStart) return "upcoming";
     else return "ongoing";
   } catch (e) {
-    console.error("Lỗi parse ngày (getEventStatus):", eventDateStr, e);
     return "upcoming";
   }
 };
@@ -250,6 +74,7 @@ const getStatusBadgeClasses = (status: EventStatus): string => {
       return `${base} bg-gray-100 text-gray-600`;
   }
 };
+
 const getStatusText = (status: EventStatus): string => {
   switch (status) {
     case "ongoing":
@@ -262,6 +87,7 @@ const getStatusText = (status: EventStatus): string => {
       return "";
   }
 };
+
 const getStatusIcon = (status: EventStatus) => {
   switch (status) {
     case "ongoing":
@@ -274,30 +100,7 @@ const getStatusIcon = (status: EventStatus) => {
       return null;
   }
 };
-const getApprovalStatusBadgeColor = (status?: string) => {
-  switch (status?.toUpperCase()) {
-    case "APPROVED":
-      return "bg-green-100 text-green-800 border border-green-200";
-    case "PENDING":
-      return "bg-yellow-100 text-yellow-800 border border-yellow-200";
-    case "REJECTED":
-      return "bg-red-100 text-red-800 border border-red-200";
-    default:
-      return "bg-gray-100 text-gray-800 border border-gray-200";
-  }
-};
-const getApprovalStatusText = (status?: string) => {
-  switch (status?.toUpperCase()) {
-    case "APPROVED":
-      return "Đã duyệt";
-    case "PENDING":
-      return "Chờ duyệt";
-    case "REJECTED":
-      return "Bị từ chối";
-    default:
-      return status || "Không rõ";
-  }
-};
+
 const getWeekRange = (
   refDate: Date
 ): { startOfWeek: Date; endOfWeek: Date } => {
@@ -311,6 +114,7 @@ const getWeekRange = (
   end.setHours(23, 59, 59, 999);
   return { startOfWeek: start, endOfWeek: end };
 };
+
 const getMonthRange = (
   refDate: Date
 ): { startOfMonth: Date; endOfMonth: Date } => {
@@ -321,400 +125,198 @@ const getMonthRange = (
   end.setHours(23, 59, 59, 999);
   return { startOfMonth: start, endOfMonth: end };
 };
-const formatFullDateTime = (
-  dateString?: string,
-  timeString?: string
-): string => {
-  if (!dateString) return "Chưa xác định";
-  const datePart = new Date(dateString);
-  if (isNaN(datePart.getTime())) return "Ngày không hợp lệ";
-  let finalDate = datePart;
-  if (timeString) {
-    const timeRegex = /^\d{2}:\d{2}(:\d{2})?$/;
-    if (timeString.match(timeRegex)) {
-      const [hours, minutes, seconds] = timeString.split(":").map(Number);
-      if (
-        hours >= 0 &&
-        hours <= 23 &&
-        minutes >= 0 &&
-        minutes <= 59 &&
-        (seconds === undefined || (seconds >= 0 && seconds <= 59))
-      ) {
-        finalDate.setHours(hours, minutes, seconds || 0, 0);
-      }
-    } else {
-      try {
-        const timeDate = new Date(`1970-01-01T${timeString}`);
-        if (!isNaN(timeDate.getTime())) {
-          finalDate.setHours(
-            timeDate.getHours(),
-            timeDate.getMinutes(),
-            timeDate.getSeconds()
-          );
-        }
-      } catch (e) {}
-    }
-  }
-  const showTime =
-    timeString &&
-    !isNaN(finalDate.getTime()) &&
-    (finalDate.getHours() !== 0 ||
-      finalDate.getMinutes() !== 0 ||
-      finalDate.getSeconds() !== 0);
-  return finalDate.toLocaleString("vi-VN", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    ...(showTime && { hour: "2-digit", minute: "2-digit", hour12: false }),
-  });
-};
 
 const ITEMS_PER_PAGE_OPTIONS = [6, 12, 18, 24, 36];
-const AttendeesIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className={className || "h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1"}
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-    strokeWidth={2}
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.268-.25-1.857M7 20v-2c0-.653.084-1.268.25-1.857m0 0A5.002 5.002 0 0112 15a5.002 5.002 0 014.745 3.143M12 13a3 3 0 100-6 3 3 0 000 6z"
-    />
-  </svg>
-);
+
+interface AdminHomeTabContentProps {
+  allEvents: EventDisplayInfo[];
+  isLoadingEvents: boolean;
+  errorEvents: string | null;
+  registeredEventIds: Set<string>;
+  createdEventIds: Set<string>;
+  user: User | null;
+  isLoadingRegisteredIds: boolean;
+  isLoadingCreatedEventIds: boolean;
+  isRegistering: string | null;
+  onRegister: (event: EventDisplayInfo) => void;
+  onEventClick: (event: EventDisplayInfo) => void;
+  selectedEvent: EventDisplayInfo | null;
+  onBackToList: () => void;
+  search: string;
+  setSearch: (value: string) => void;
+  sortOption: string;
+  setSortOption: (value: string) => void;
+  timeFilterOption: string;
+  setTimeFilterOption: (value: string) => void;
+  newsItems: NewsItem[];
+  isLoadingNews: boolean;
+  errorNews: string | null;
+  refreshNewsList: () => void;
+  refreshToken?: () => Promise<string | null>;
+  onRefreshEvents: () => Promise<void>;
+  onOpenUpdateModal: (event: EventDisplayInfo) => void;
+}
 
 const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
-  events,
-  isLoading,
-  error,
+  allEvents,
+  isLoadingEvents,
+  errorEvents,
+  registeredEventIds,
+  createdEventIds,
+  user,
+  isLoadingRegisteredIds,
+  isLoadingCreatedEventIds,
+  isRegistering,
+  onRegister,
+  onEventClick,
+  selectedEvent,
+  onBackToList,
   search,
   setSearch,
   sortOption,
   setSortOption,
   timeFilterOption,
   setTimeFilterOption,
-  startDateFilter,
-  setStartDateFilter,
-  endDateFilter,
-  setEndDateFilter,
-  selectedEvent,
-  onEventClick,
-  onBackToList,
+  newsItems,
+  isLoadingNews,
+  errorNews,
+  refreshNewsList,
+  refreshToken,
   onRefreshEvents,
-  currentUserId,
-  currentUser,
+  onOpenUpdateModal,
 }) => {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
+  const [startDateFilter, setStartDateFilter] = useState<string>("");
+  const [endDateFilter, setEndDateFilter] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(
-    ITEMS_PER_PAGE_OPTIONS[1]
+    ITEMS_PER_PAGE_OPTIONS[0]
   );
-  const [isRefreshingLocal, setIsRefreshingLocal] = useState<boolean>(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] =
-    useState<EventDisplayInfo | null>(null);
-  const [detailedCreatedByName, setDetailedCreatedByName] = useState<
-    string | null
-  >(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [confirmationDialogState, setConfirmationDialogState] =
+    useState<ConfirmationState>({
+      isOpen: false,
+      title: "",
+      message: "",
+      onConfirm: null,
+      confirmVariant: "primary",
+    });
+  const [creatorName, setCreatorName] = useState<string | null>(null);
+  const [isLoadingCreator, setIsLoadingCreator] = useState<boolean>(false);
   const [detailedOrganizers, setDetailedOrganizers] = useState<
-    MemberWithName[]
-  >([]);
-  const [detailedParticipants, setDetailedParticipants] = useState<
-    MemberWithName[]
-  >([]);
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
-  const [eventToEdit, setEventToEdit] = useState<EventDataForForm | null>(null);
-  const [isRegistering, setIsRegistering] = useState<boolean>(false);
+    DetailedOrganizer[] | null
+  >(null);
+  const [isLoadingOrganizers, setIsLoadingOrganizers] =
+    useState<boolean>(false);
+
+  const router = useRouter();
 
   useEffect(() => {
-    if (selectedEvent) {
-      if (selectedEvent.createdBy) {
-        setDetailedCreatedByName("Đang tải...");
-        fetchUserFullNameById(selectedEvent.createdBy)
-          .then(setDetailedCreatedByName)
-          .catch(() =>
-            setDetailedCreatedByName(`ID: ${selectedEvent.createdBy} (Lỗi)`)
-          );
-      } else {
-        setDetailedCreatedByName("N/A");
-      }
-
-      const fetchMemberDetails = async (
-        members: (OrganizerInfo | ParticipantInfo)[] | undefined
-      ): Promise<MemberWithName[]> => {
-        if (!members || members.length === 0) return [];
-        const initialMembers = members.map((m) => ({
-          ...m,
-          fetchedFullName: "Đang tải...",
-        }));
-        const settledMembers = await Promise.all(
-          members.map(async (member) => {
-            if (!member.userId)
-              return { ...member, fetchedFullName: "Thiếu ID" };
-            try {
-              const name = await fetchUserFullNameById(member.userId);
-              return { ...member, fetchedFullName: name };
-            } catch {
-              return {
-                ...member,
-                fetchedFullName: `ID: ${member.userId} (Lỗi)`,
-              };
-            }
-          })
-        );
-        return settledMembers;
-      };
-      fetchMemberDetails(selectedEvent.organizers).then(setDetailedOrganizers);
-      fetchMemberDetails(selectedEvent.participants).then(
-        setDetailedParticipants
-      );
+    if (selectedEvent && selectedEvent.createdBy) {
+      setIsLoadingCreator(true);
+      setCreatorName(null);
+      fetch(
+        `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.code === 1000 && data.result) {
+            const userDetail = data.result;
+            setCreatorName(
+              [userDetail.lastName, userDetail.firstName]
+                .filter(Boolean)
+                .join(" ")
+                .trim() ||
+                userDetail.username ||
+                `ID: ${selectedEvent.createdBy}`
+            );
+          } else {
+            setCreatorName(`ID: ${selectedEvent.createdBy}`);
+          }
+        })
+        .catch(() => setCreatorName(`ID: ${selectedEvent.createdBy} (lỗi)`))
+        .finally(() => setIsLoadingCreator(false));
     } else {
-      setDetailedCreatedByName(null);
-      setDetailedOrganizers([]);
-      setDetailedParticipants([]);
+      setCreatorName(null);
     }
   }, [selectedEvent]);
 
-  const handleConfirmDelete = async () => {
-    if (!showDeleteConfirm || !currentUserId) {
-      toast.error("Lỗi không xác định hoặc thiếu thông tin.");
-      setShowDeleteConfirm(null);
-      return;
-    }
-    const eventToDelete = showDeleteConfirm;
-    const toastId = toast.loading("Đang xoá...");
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      toast.error("Yêu cầu xác thực.", { id: toastId });
-      setShowDeleteConfirm(null);
-      return;
-    }
-    try {
-      const url = `http://localhost:8080/identity/api/events/${eventToDelete.id}?deletedById=${currentUserId}`;
-      const response = await fetch(url, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) {
-        let errMsg = `Lỗi ${response.status}`;
+  useEffect(() => {
+    if (
+      selectedEvent &&
+      selectedEvent.organizers &&
+      selectedEvent.organizers.length > 0
+    ) {
+      const organizersToFetch = selectedEvent.organizers;
+      const fetchDetails = async () => {
+        setIsLoadingOrganizers(true);
+        setDetailedOrganizers(null);
         try {
-          const errData = await response.json();
-          errMsg = errData.message || errMsg;
-        } catch (e) {}
-        throw new Error(errMsg);
-      }
-      const responseData = await response.json().catch(() => null);
-      if (
-        response.status === 204 ||
-        (responseData && responseData.code === 1000)
-      ) {
-        toast.success(responseData?.message || "Đã xoá sự kiện thành công!", {
-          id: toastId,
-        });
-        onRefreshEvents();
-        onBackToList();
-      } else {
-        throw new Error(responseData?.message || "Xoá thất bại.");
-      }
-    } catch (error: any) {
-      toast.error(`Lỗi: ${error.message}`, { id: toastId });
-      console.error("Lỗi xoá:", error);
-    } finally {
-      setShowDeleteConfirm(null);
-    }
-  };
-
-  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newStartDate = e.target.value;
-    setStartDateFilter(newStartDate);
-    setCurrentPage(1);
-    if (endDateFilter && newStartDate > endDateFilter) {
-      setEndDateFilter("");
-      toast("Ngày bắt đầu không thể sau ngày kết thúc.", { icon: "⚠️" });
-    }
-  };
-  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newEndDate = e.target.value;
-    if (startDateFilter && newEndDate < startDateFilter) {
-      toast.error("Ngày kết thúc không thể trước ngày bắt đầu.");
-    } else {
-      setEndDateFilter(newEndDate);
-      setCurrentPage(1);
-    }
-  };
-  const handleItemsPerPageChange = (
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    setItemsPerPage(Number(e.target.value));
-    setCurrentPage(1);
-  };
-  const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-    }
-  };
-  const handleRefresh = async () => {
-    setIsRefreshingLocal(true);
-    try {
-      await onRefreshEvents();
-      toast.success("Đã làm mới!");
-    } catch (error) {
-      console.error("Lỗi làm mới:", error);
-      toast.error("Không thể làm mới.");
-    } finally {
-      setIsRefreshingLocal(false);
-    }
-  };
-
-  const handleEditEvent = (event: EventDisplayInfo) => {
-    const organizersForModal: OrganizerParticipantInput[] = (
-      event.organizers || []
-    ).map((org) => {
-      let roleId = "";
-      let roleName = org.roleName || ""; // Ưu tiên roleName dạng string từ API sự kiện
-      if (
-        org.roleName &&
-        Array.isArray(org.roleName) &&
-        org.roleName.length > 0
-      ) {
-        // Fallback nếu roleName là mảng Role
-        roleId = org.roleName[0].id;
-        roleName = org.roleName[0].name || roleName;
-      } else if (typeof org.roleId === "string") {
-        // Nếu API sự kiện có roleId trực tiếp
-        roleId = org.roleId;
-      }
-      return {
-        userId: org.userId,
-        name: org.fullName || org.resolvedName || "",
-        roleId: roleId,
-        roleName: roleName,
-        positionId: "",
-      };
-    });
-    const participantsForModal: OrganizerParticipantInput[] = (
-      event.participants || []
-    ).map((par) => {
-      let roleId = "";
-      let roleName = par.roleName || "";
-      if (par.roleId && Array.isArray(par.roleId) && par.roleId.length > 0) {
-        // Kiểu cũ participant có roleId là mảng Role[]
-        roleId = par.roleId[0].id;
-        roleName = par.roleId[0].name || roleName;
-      } else if (typeof par.roleId === "string") {
-        // Nếu API trả về roleId là string
-        roleId = par.roleId;
-      }
-      return {
-        userId: par.userId,
-        name: par.fullName || par.resolvedName || "",
-        roleId: roleId,
-        roleName: roleName,
-        positionId: "",
-      };
-    });
-
-    const eventForModal: EventDataForForm = {
-      id: event.id,
-      name: event.title || event.name || "",
-      purpose: event.purpose || "",
-      time: event.time || event.date, // ModalUpdateEvent sẽ xử lý format
-      location: event.location || "",
-      content: event.content || event.description || "",
-      maxAttendees: event.maxAttendees ?? null,
-      status: event.status as EventDataForForm["status"],
-      avatarUrl: event.avatarUrl,
-      organizers: organizersForModal,
-      participants: participantsForModal,
-    };
-    setEventToEdit(eventForModal);
-    setIsUpdateModalOpen(true);
-  };
-
-  const handleEventUpdatedSuccessfully = async () => {
-    setIsUpdateModalOpen(false);
-    setEventToEdit(null);
-    toast.success("Sự kiện đã được cập nhật thành công.");
-    await onRefreshEvents();
-    if (selectedEvent && eventToEdit && selectedEvent.id === eventToEdit.id) {
-      const refreshedEvent = events.find((e) => e.id === eventToEdit.id);
-      if (refreshedEvent) onEventClick(refreshedEvent);
-      else onBackToList();
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!selectedEvent || !currentUserId) {
-      toast.error("Thiếu thông tin sự kiện/người dùng.");
-      return;
-    }
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      toast.error("Yêu cầu đăng nhập.");
-      return;
-    }
-    const isAlreadyRegistered = selectedEvent.attendees?.some(
-      (att) => att.userId === currentUserId && att.attending !== false
-    );
-    if (isAlreadyRegistered) {
-      toast.error("Bạn đã đăng ký sự kiện này.");
-      return;
-    }
-
-    setIsRegistering(true);
-    const toastId = toast.loading("Đang đăng ký...");
-    try {
-      const apiUrl = `http://localhost:8080/identity/api/events/${selectedEvent.id}/attendees?userId=${currentUserId}`;
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-      const responseData = await response.json();
-      if (!response.ok) {
-        throw new Error(responseData.message || `Lỗi ${response.status}`);
-      }
-      if (responseData.code === 1000) {
-        toast.success(responseData.message || "Đăng ký thành công!", {
-          id: toastId,
-        });
-        if (responseData.result) {
-          const updatedEventData = responseData.result as EventDisplayInfo;
-          onEventClick({
-            ...selectedEvent,
-            attendees: updatedEventData.attendees,
-            currentAttendeesCount:
-              updatedEventData.currentAttendeesCount ??
-              updatedEventData.attendees?.length,
-            participants:
-              updatedEventData.participants ?? selectedEvent.participants,
+          const organizerPromises = organizersToFetch.map(async (org) => {
+            const response = await fetch(
+              `http://localhost:8080/identity/users/notoken/${org.userId}`
+            );
+            if (!response.ok) {
+              return {
+                userId: org.userId,
+                roleName: org.roleName,
+                positionName: org.positionName,
+                fullName: `ID: ${org.userId.substring(0, 8)}...`,
+              };
+            }
+            const data = await response.json();
+            if (data.code === 1000 && data.result) {
+              const userDetail = data.result;
+              const fullName =
+                [userDetail.lastName, userDetail.firstName]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim() || userDetail.username;
+              return {
+                userId: org.userId,
+                roleName: org.roleName,
+                positionName: org.positionName,
+                fullName: fullName || `ID: ${org.userId.substring(0, 8)}...`,
+              };
+            }
+            return {
+              userId: org.userId,
+              roleName: org.roleName,
+              positionName: org.positionName,
+              fullName: `ID: ${org.userId.substring(0, 8)}...`,
+            };
           });
-        } else {
-          onRefreshEvents();
+          const settledOrganizers = await Promise.all(organizerPromises);
+          setDetailedOrganizers(settledOrganizers as DetailedOrganizer[]);
+        } catch (error) {
+          console.error("Lỗi tải thông tin ban tổ chức:", error);
+          setDetailedOrganizers(
+            organizersToFetch.map((org) => ({
+              userId: org.userId,
+              roleName: org.roleName,
+              positionName: org.positionName,
+              fullName: "Lỗi tải tên",
+            })) as DetailedOrganizer[]
+          );
+        } finally {
+          setIsLoadingOrganizers(false);
         }
-      } else {
-        throw new Error(responseData.message || "Đăng ký thất bại.");
-      }
-    } catch (error: any) {
-      console.error("Lỗi đăng ký:", error);
-      toast.error(`Lỗi: ${error.message}`, { id: toastId });
-    } finally {
-      setIsRegistering(false);
+      };
+      fetchDetails();
+    } else {
+      setDetailedOrganizers(null);
+      setIsLoadingOrganizers(false);
     }
-  };
+  }, [selectedEvent]);
 
   const processedEvents = useMemo(() => {
-    let evts = [...events];
+    if (!allEvents || !Array.isArray(allEvents)) return [];
+    let evts = [...allEvents];
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
+
     if (timeFilterOption === "upcoming")
       evts = evts.filter((e) => getEventStatus(e.date) === "upcoming");
     else if (timeFilterOption === "ongoing")
@@ -725,8 +327,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       evts = evts.filter((e) => {
         try {
           const d = new Date(e.date);
-          const ed = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-          return !isNaN(ed.getTime()) && ed.getTime() === todayStart.getTime();
+          return !isNaN(d.getTime()) && d >= todayStart && d <= todayEnd;
         } catch {
           return false;
         }
@@ -771,56 +372,56 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             }
           });
         } else if (start > end) {
-          console.warn("Start date after end date.");
+          console.warn("Start date is after end date.");
         }
       } catch (e) {
-        console.error("Date range parse error:", e);
+        console.error("Error parsing date range:", e);
       }
     }
+
     if (search) {
-      const sL = search.toLowerCase().trim();
+      const l = search.toLowerCase();
       evts = evts.filter(
         (e) =>
-          (e.title && e.title.toLowerCase().includes(sL)) ||
-          (e.location && e.location.toLowerCase().includes(sL)) ||
-          (e.status &&
-            getApprovalStatusText(e.status).toLowerCase().includes(sL)) ||
-          (e.createdBy && e.createdBy.toLowerCase().includes(sL))
+          e.title.toLowerCase().includes(l) ||
+          (e.location && e.location.toLowerCase().includes(l))
       );
     }
-    evts.sort((a, b) => {
-      const pA = a.status?.toUpperCase() === "PENDING";
-      const pB = b.status?.toUpperCase() === "PENDING";
-      if (pA && !pB) return -1;
-      if (!pA && pB) return 1;
-      if (sortOption === "za")
-        return b.title.localeCompare(a.title, "vi", { sensitivity: "base" });
-      if (sortOption === "az")
-        return a.title.localeCompare(b.title, "vi", { sensitivity: "base" });
-      else {
+
+    if (sortOption === "za")
+      evts.sort((a, b) =>
+        b.title.localeCompare(a.title, "vi", { sensitivity: "base" })
+      );
+    else if (sortOption === "az")
+      evts.sort((a, b) =>
+        a.title.localeCompare(b.title, "vi", { sensitivity: "base" })
+      );
+    else {
+      evts.sort((a, b) => {
         try {
-          const dA = a.createdAt
-            ? new Date(a.createdAt).getTime()
-            : a.date
-            ? new Date(a.date).getTime()
-            : 0;
-          const dB = b.createdAt
-            ? new Date(b.createdAt).getTime()
-            : b.date
-            ? new Date(b.date).getTime()
-            : 0;
-          if (isNaN(dA) && isNaN(dB)) return 0;
-          if (isNaN(dA)) return 1;
-          if (isNaN(dB)) return -1;
-          return dB - dA;
+          const statusA = getEventStatus(a.date);
+          const statusB = getEventStatus(b.date);
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          if (isNaN(dateA) && isNaN(dateB)) return 0;
+          if (isNaN(dateA)) return 1;
+          if (isNaN(dateB)) return -1;
+          if (statusA === "ongoing" && statusB !== "ongoing") return -1;
+          if (statusB === "ongoing" && statusA !== "ongoing") return 1;
+          if (statusA === "upcoming" && statusB === "ended") return -1;
+          if (statusB === "upcoming" && statusA === "ended") return 1;
+          if (statusA === "upcoming" && statusB === "upcoming")
+            return dateA - dateB;
+          if (statusA === "ended" && statusB === "ended") return dateB - dateA;
+          return dateB - dateA;
         } catch {
           return 0;
         }
-      }
-    });
+      });
+    }
     return evts;
   }, [
-    events,
+    allEvents,
     search,
     timeFilterOption,
     sortOption,
@@ -830,44 +431,174 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
 
   const totalItems = processedEvents.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
     }
   }, [totalPages, currentPage]);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
-  const paginatedEvents = processedEvents.slice(startIndex, endIndex);
-  const canRegister = useMemo(() => {
-    if (!selectedEvent || !currentUserId) return false;
-    const isCreator = currentUserId === selectedEvent.createdBy;
-    const isApproved = selectedEvent.status?.toUpperCase() === "APPROVED";
-    const hasEnded = getEventStatus(selectedEvent.date) === "ended";
-    const isAlreadyRegistered = selectedEvent.attendees?.some(
-      (att) => att.userId === currentUserId && att.attending !== false
-    );
-    let isFull = false;
-    const maxAtt = selectedEvent.maxAttendees;
-    if (maxAtt !== null && maxAtt !== undefined && maxAtt >= 0) {
-      const currentCount =
-        selectedEvent.currentAttendeesCount ??
-        selectedEvent.attendees?.filter((a) => a.attending !== false).length ??
-        0;
-      isFull = currentCount >= maxAtt;
-    }
-    return (
-      !isCreator && isApproved && !hasEnded && !isFull && !isAlreadyRegistered
-    );
-  }, [selectedEvent, currentUserId]);
 
-  if (isLoading && !events.length && !selectedEvent) {
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedEvents = processedEvents.slice(startIndex, endIndex);
+
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newStartDate = e.target.value;
+    setStartDateFilter(newStartDate);
+    setCurrentPage(1);
+    if (endDateFilter && newStartDate > endDateFilter) {
+      setEndDateFilter("");
+      toast("Ngày bắt đầu không thể sau ngày kết thúc.", { icon: "⚠️" });
+    }
+  };
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newEndDate = e.target.value;
+    if (startDateFilter && newEndDate < startDateFilter) {
+      toast.error("Ngày kết thúc không thể trước ngày bắt đầu.");
+    } else {
+      setEndDateFilter(newEndDate);
+      setCurrentPage(1);
+    }
+  };
+  const handleItemsPerPageChange = (
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    setItemsPerPage(Number(e.target.value));
+    setCurrentPage(1);
+  };
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+  };
+  const handleRefresh = async () => {
+    try {
+      await onRefreshEvents();
+      toast.success("Đã làm mới!");
+    } catch (error) {
+      console.error("Lỗi khi làm mới:", error);
+      toast.error("Không thể làm mới.");
+    }
+  };
+  const handleEditEvent = (event: EventDisplayInfo) => {
+    onOpenUpdateModal(event);
+  };
+
+  const handleDeleteEvent = (event: EventDisplayInfo) => {
+    if (!user || !user.id) {
+      toast.error("Vui lòng đăng nhập.");
+      return;
+    }
+    if (isDeleting === event.id) return;
+
+    const confirmDeleteAction = async () => {
+      setIsDeleting(event.id);
+      let token = localStorage.getItem("authToken");
+      if (!token) {
+        toast.error("Phiên đăng nhập hết hạn.");
+        setIsDeleting(null);
+        setConfirmationDialogState({
+          ...confirmationDialogState,
+          isOpen: false,
+        });
+        router.push("/login?sessionExpired=true&redirect=/admin/home");
+        return;
+      }
+      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
+
+      try {
+        let response = await fetch(apiUrl, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (
+          (response.status === 401 || response.status === 403) &&
+          refreshToken
+        ) {
+          const nt = await refreshToken();
+          if (nt) {
+            token = nt;
+            localStorage.setItem("authToken", nt);
+            response = await fetch(apiUrl, {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else {
+            throw new Error("Làm mới phiên thất bại. Vui lòng đăng nhập lại.");
+          }
+        }
+
+        if (response.ok || response.status === 204) {
+          let successMsg = `Đã xoá sự kiện "${event.title}".`;
+          if (response.status !== 204) {
+            try {
+              const data = await response.json();
+              successMsg = data.message || successMsg;
+            } catch (e) {
+              // Ignore if parsing fails for non-JSON response, use default message
+            }
+          }
+          toast.success(successMsg);
+          await onRefreshEvents(); 
+          if(selectedEvent?.id === event.id) {
+            onBackToList(); 
+          }
+        } else {
+          let errorMsg = `Lỗi ${response.status}`;
+          try {
+            const errData = await response.json();
+            errorMsg = errData.message || errorMsg;
+          } catch (e) {
+            // Ignore if parsing fails, use status code based message
+          }
+          if (response.status === 401 || response.status === 403) {
+             router.push("/login?sessionExpired=true&redirect=/admin/home");
+          }
+          throw new Error(errorMsg);
+        }
+      } catch (error: any) {
+        console.error("Lỗi xoá sự kiện:", error);
+        toast.error(`Xoá thất bại: ${error.message || "Lỗi không xác định"}`);
+      } finally {
+        setIsDeleting(null);
+        setConfirmationDialogState({
+          ...confirmationDialogState,
+          isOpen: false,
+        });
+      }
+    };
+
+    setConfirmationDialogState({
+      isOpen: true,
+      title: "Xác nhận Xoá",
+      message: (
+        <>
+          <p>
+            Bạn chắc chắn muốn xoá sự kiện{" "}
+            <strong className="font-semibold">"{event.title}"</strong> không?
+          </p>
+        </>
+      ),
+      onConfirm: confirmDeleteAction,
+      confirmVariant: "danger",
+      confirmText: "Xác nhận Xoá",
+      cancelText: "Huỷ bỏ",
+    });
+  };
+
+  const handleCancelConfirmation = () => {
+    setConfirmationDialogState({
+      ...confirmationDialogState,
+      isOpen: false,
+      onConfirm: null,
+    });
+  };
+
+
+  if (errorEvents && !isLoadingEvents && !allEvents.length) {
     return (
-      <div className="flex justify-center items-center min-h-[300px]">
-        <ReloadIcon className="w-10 h-10 animate-spin text-indigo-500" />
-        <p className="ml-3 text-gray-600 text-lg italic">
-          Đang tải dữ liệu sự kiện...
-        </p>
-      </div>
+      <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
+        Lỗi tải sự kiện: {errorEvents}
+      </p>
     );
   }
 
@@ -875,17 +606,17 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600 shrink-0">
-          Quản lý Sự kiện
+          🎉 Trang chủ
         </h1>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
           <div className="flex-grow sm:flex-grow-0">
             <button
               onClick={handleRefresh}
-              disabled={isLoading || isRefreshingLocal}
+              disabled={isLoadingEvents}
               title="Làm mới"
               className="w-full h-full p-2 border cursor-pointer border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
             >
-              {isRefreshingLocal ? (
+              {isLoadingEvents ? (
                 <ReloadIcon className="w-5 h-5 animate-spin text-indigo-600" />
               ) : (
                 <ReloadIcon className="w-5 h-5 text-indigo-600" />
@@ -893,31 +624,33 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             </button>
           </div>
           <div className="flex-grow sm:flex-grow-0">
-            <label htmlFor="sortOptionAdminHome" className="sr-only">
+            <label htmlFor="sortOptionGuest" className="sr-only">
               Sắp xếp
             </label>
             <select
-              id="sortOptionAdminHome"
+              id="sortOptionGuest"
               value={sortOption}
               onChange={(e) => {
                 setSortOption(e.target.value);
+                setCurrentPage(1);
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              <option value="default">🕒 Mới nhất</option>
-              <option value="az">🔤 A - Z </option>
-              <option value="za">🔤 Z - A </option>
+              <option value="date">📅 Mới nhất</option>
+              <option value="az">🔤 A - Z</option>
+              <option value="za">🔤 Z - A</option>
             </select>
           </div>
           <div className="flex-grow sm:flex-grow-0">
-            <label htmlFor="timeFilterOptionAdminHome" className="sr-only">
+            <label htmlFor="timeFilterOptionGuest" className="sr-only">
               Lọc thời gian
             </label>
             <select
-              id="timeFilterOptionAdminHome"
+              id="timeFilterOptionGuest"
               value={timeFilterOption}
               onChange={(e) => {
                 setTimeFilterOption(e.target.value);
+                setCurrentPage(1);
               }}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
@@ -932,41 +665,41 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             </select>
           </div>
           <div className="flex-grow sm:flex-grow-0">
-            <label htmlFor="itemsPerPageSelectAdmin" className="sr-only">
-              Sự kiện mỗi trang
+            <label htmlFor="itemsPerPageSelect" className="sr-only">
+              Sự kiện/trang
             </label>
             <select
-              id="itemsPerPageSelectAdmin"
+              id="itemsPerPageSelect"
               value={itemsPerPage}
               onChange={handleItemsPerPageChange}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
             >
-              {ITEMS_PER_PAGE_OPTIONS.map((o) => (
-                <option key={o} value={o}>
-                  {o} / trang
+              {ITEMS_PER_PAGE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option} / trang
                 </option>
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 self-center ">
+          <div className="flex items-center gap-2 flex-shrink-0 self-center">
             <button
               onClick={() => setViewMode("card")}
-              title="Chế độ thẻ"
+              title="Thẻ"
               className={`p-2 rounded-md border transition cursor-pointer ${
                 viewMode === "card"
-                  ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
-                  : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
+                  ? "bg-indigo-600 border-indigo-700 text-white"
+                  : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
               }`}
             >
               <GridIcon className="h-5 w-5" />
             </button>
             <button
               onClick={() => setViewMode("list")}
-              title="Chế độ danh sách"
+              title="Danh sách"
               className={`p-2 rounded-md border transition cursor-pointer ${
                 viewMode === "list"
-                  ? "bg-indigo-600 border-indigo-700 text-white shadow-sm"
-                  : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700 hover:border-gray-400"
+                  ? "bg-indigo-600 border-indigo-700 text-white"
+                  : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50"
               }`}
             >
               <ListBulletIcon className="h-5 w-5" />
@@ -975,63 +708,50 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         </div>
       </div>
       {timeFilterOption === "dateRange" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
           <div>
             <label
-              htmlFor="startDateFilterAdmin"
+              htmlFor="startDateFilterHome"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
               Từ ngày
             </label>
             <input
               type="date"
-              id="startDateFilterAdmin"
+              id="startDateFilterHome"
               value={startDateFilter}
               onChange={handleStartDateChange}
               max={endDateFilter || undefined}
-              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full p-2 border rounded-lg text-sm"
             />
           </div>
           <div>
             <label
-              htmlFor="endDateFilterAdmin"
+              htmlFor="endDateFilterHome"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
               Đến ngày
             </label>
             <input
               type="date"
-              id="endDateFilterAdmin"
+              id="endDateFilterHome"
               value={endDateFilter}
               onChange={handleEndDateChange}
               min={startDateFilter || undefined}
-              className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full p-2 border rounded-lg text-sm"
             />
           </div>
         </div>
       )}
       <div className="relative w-full mb-6">
         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
+          🔍
         </span>
         <input
-          id="searchAdminHome"
+          id="searchGuest"
           type="text"
-          placeholder="Tìm theo tên, địa điểm, trạng thái duyệt, người tạo (ID)..."
-          className="w-full p-3 pl-10 pr-4 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Tìm sự kiện theo tên hoặc địa điểm..."
+          className="w-full p-3 pl-10 pr-4 border rounded-lg shadow-sm"
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -1040,45 +760,28 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         />
       </div>
 
-      {isLoading && !selectedEvent && !events.length ? (
+      {isLoadingEvents && !selectedEvent ? (
         <div className="flex justify-center items-center min-h-[200px]">
           <ReloadIcon className="w-8 h-8 animate-spin text-indigo-600" />
-          <p className="ml-3 text-gray-600 text-lg italic">Đang tải...</p>
+          <p className="ml-3 text-gray-500 italic">Đang tải...</p>
         </div>
-      ) : error && !events.length ? (
-        <p className="text-center text-red-600 bg-red-50 p-3 rounded border border-red-200">
-          Lỗi tải sự kiện: {error}
-        </p>
       ) : selectedEvent ? (
-        <div className="p-4 sm:p-6 border rounded-lg shadow-lg bg-white mb-6 relative animate-fadeIn">
+        <div className="p-6 border rounded-lg shadow-lg bg-gray-50 mb-6">
           <button
             onClick={onBackToList}
             className="mb-4 text-sm text-indigo-600 hover:text-indigo-800 flex items-center cursor-pointer p-1 rounded hover:bg-indigo-50"
-            aria-label="Quay lại danh sách"
           >
-            <ChevronLeftIcon className="h-8 w-8 mr-1" />
-            <span className="text-lg">Quay lại</span>
+            <ChevronLeftIcon className="h-7 w-7 " /> Quay lại
           </button>
-          <div className="flex flex-col md:flex-row gap-6 lg:gap-8 pt-8 md:pt-0">
+          <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
               {selectedEvent.avatarUrl ? (
                 <Image
                   src={selectedEvent.avatarUrl}
-                  alt={`Avatar for ${selectedEvent.title}`}
+                  alt={`Ảnh bìa ${selectedEvent.title}`}
                   width={300}
                   height={300}
                   className="w-full h-auto max-h-80 rounded-lg object-cover border p-1 bg-white shadow-md"
-                  priority
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = "none";
-                    const placeholder = document.createElement("div");
-                    placeholder.className =
-                      "w-full h-48 md:h-64 lg:h-80 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-5xl font-semibold border";
-                    placeholder.textContent =
-                      selectedEvent.title?.charAt(0).toUpperCase() || "?";
-                    target.parentElement?.appendChild(placeholder);
-                  }}
                 />
               ) : (
                 <div className="w-full h-48 md:h-64 lg:h-80 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-5xl font-semibold border">
@@ -1088,254 +791,203 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             </div>
             <div className="flex-grow space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex-1 break-words mr-2">
+                <h2 className="text-xl md:text-2xl font-bold text-gray-800 flex-1">
                   {selectedEvent.title}
                 </h2>
-                <div className="flex flex-col items-start sm:items-end sm:flex-row sm:ml-2 gap-1 mt-1 sm:mt-0 shrink-0">
-                  {(() => {
-                    const status = getEventStatus(selectedEvent.date);
-                    return (
-                      <span
-                        className={`${getStatusBadgeClasses(
-                          status
-                        )} flex-shrink-0`}
-                      >
-                        {getStatusIcon(status)} {getStatusText(status)}
-                      </span>
-                    );
-                  })()}
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium ml-2 ${getApprovalStatusBadgeColor(
-                      selectedEvent.status
-                    )}`}
-                  >
-                    {getApprovalStatusText(selectedEvent.status)}
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-3 text-base text-gray-700 border-t pt-4">
-                {selectedEvent.date && (
-                  <div className="flex items-start">
-                    <CalendarIcon className="w-5 h-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" />
-                    <div>
-                      <p className="font-semibold text-gray-800">Thời gian:</p>
-                      <p className="text-gray-600">
-                        {formatFullDateTime(
-                          selectedEvent.date,
-                          selectedEvent.time
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {selectedEvent.location && (
-                  <div className="flex items-start">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
+                {(() => {
+                  const status = getEventStatus(selectedEvent.date);
+                  return (
+                    <span
+                      className={`${getStatusBadgeClasses(
+                        status
+                      )} mt-1 sm:mt-0 flex-shrink-0`}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                    <div>
-                      <p className="font-semibold text-gray-800">Địa điểm:</p>
-                      <p className="text-gray-600">{selectedEvent.location}</p>
-                    </div>
-                  </div>
+                      {getStatusIcon(status)} {getStatusText(status)}
+                    </span>
+                  );
+                })()}
+              </div>
+              <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
+                <p>
+                  <strong className="font-medium w-28 inline-block">
+                    📅 Ngày diễn ra:
+                  </strong>{" "}
+                  {new Date(selectedEvent.date).toLocaleDateString("vi-VN")}
+                </p>
+                {selectedEvent.time && (
+                  <p>
+                    <strong className="font-medium w-28 inline-block">
+                      🕒 Thời gian:
+                    </strong>{" "}
+                    {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
                 )}
-                {(selectedEvent.currentAttendeesCount !== undefined ||
-                  (selectedEvent.maxAttendees !== null &&
-                    selectedEvent.maxAttendees !== undefined)) && (
-                  <div className="flex items-start">
-                    <AttendeesIcon className="h-5 w-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" />
-                    <div>
-                      <p className="font-semibold text-gray-800">
-                        Số lượng đăng ký:
-                      </p>
-                      <p className="text-gray-600">
-                        {selectedEvent.currentAttendeesCount ??
-                          (selectedEvent.attendees?.filter(
-                            (a) => a.attending !== false
-                          ).length ||
-                            0)}
-                        {selectedEvent.maxAttendees !== null &&
-                        selectedEvent.maxAttendees !== undefined &&
-                        selectedEvent.maxAttendees >= 0
-                          ? ` / ${selectedEvent.maxAttendees}`
-                          : " / Không giới hạn"}
-                        {selectedEvent.maxAttendees !== null &&
-                          selectedEvent.maxAttendees !== undefined &&
-                          selectedEvent.maxAttendees >= 0 &&
-                          (selectedEvent.currentAttendeesCount ??
-                            selectedEvent.attendees?.filter(
-                              (a) => a.attending !== false
-                            ).length ??
-                            0) >= selectedEvent.maxAttendees && (
-                            <span className="text-sm text-orange-600 ml-1">
-                              (Đã đủ)
-                            </span>
-                          )}
-                      </p>
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-start">
-                  <PersonIcon className="w-5 h-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" />
-                  <div>
-                    <p className="font-semibold text-gray-800">Người tạo:</p>
-                    <p className="text-gray-600">
-                      {detailedCreatedByName !== null
-                        ? detailedCreatedByName
-                        : selectedEvent?.createdBy
-                        ? `ID: ${selectedEvent.createdBy}`
-                        : "N/A"}
-                    </p>
-                  </div>
-                </div>
+                <p>
+                  <strong className="font-medium w-28 inline-block">
+                    📍 Địa điểm:
+                  </strong>{" "}
+                  {selectedEvent.location}
+                </p>
+                <p>
+                  <strong className="font-medium w-28 inline-block">
+                    👤 Người tạo:
+                  </strong>{" "}
+                  {isLoadingCreator
+                    ? "Đang tải..."
+                    : creatorName || selectedEvent.createdBy || "N/A"}
+                </p>
                 {selectedEvent.purpose && (
-                  <div className="flex items-start">
-                    <InfoCircledIcon className="w-5 h-5 mr-3 text-indigo-600 flex-shrink-0 mt-1" />
-                    <div>
-                      <p className="font-semibold text-gray-800">Mục đích:</p>
-                      <p className="text-gray-600 whitespace-pre-wrap">
-                        {selectedEvent.purpose}
-                      </p>
-                    </div>
-                  </div>
+                  <p>
+                    <strong className="font-medium w-28 inline-block align-top">
+                      🎯 Mục đích:
+                    </strong>{" "}
+                    <span className="inline-block max-w-[calc(100%-7rem)]">
+                      {selectedEvent.purpose}
+                    </span>
+                  </p>
                 )}
               </div>
-              <div className="space-y-3 text-sm border-t pt-4">
+              <div className="space-y-3 text-sm">
                 <div>
-                  <p className="font-semibold text-gray-900 mb-1 text-base">
-                    📜 Nội dung chi tiết:
-                  </p>
-                  <p className="text-gray-700 whitespace-pre-wrap text-base">
+                  <p className="font-medium mb-1">📜 Nội dung sự kiện:</p>
+                  <p className="whitespace-pre-wrap">
                     {selectedEvent.content ||
                       selectedEvent.description ||
-                      "Không có nội dung chi tiết."}
+                      "Không có mô tả chi tiết."}
+                  </p>
+                </div>
+                <div>
+                  <strong className="font-medium mb-1 block">
+                    👥 Ban tổ chức:
+                  </strong>
+                  {isLoadingOrganizers ? (
+                    <p className="italic">Đang tải...</p>
+                  ) : detailedOrganizers && detailedOrganizers.length > 0 ? (
+                    <ul className="list-disc list-inside pl-5 space-y-1">
+                      {detailedOrganizers.map((org, index) => (
+                        <li key={`org-detail-${org.userId}-${index}`}>
+                          {[org.fullName, org.positionName, org.roleName]
+                            .filter(Boolean)
+                            .join(" - ") || `Thành viên BTC ${index + 1}`}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="italic">Chưa có thông tin.</p>
+                  )}
+                </div>
+                <div>
+                  <strong className="font-medium mb-1 block">
+                    ✅ Số lượng đăng ký:
+                  </strong>
+                  <p className="text-sm text-gray-700">
+                    {selectedEvent.attendees?.length || 0}
+                    {typeof selectedEvent.maxAttendees === 'number'
+                      ? ` / ${selectedEvent.maxAttendees} người`
+                      : " người (Không giới hạn)"}
                   </p>
                 </div>
               </div>
-              <div className="space-y-1 text-sm border-t pt-4">
-                <strong className="font-semibold text-gray-900 mb-1 block text-base">
-                  👥 Ban tổ chức:
-                </strong>
-                {detailedOrganizers.length > 0 ? (
-                  <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1 text-base">
-                    {detailedOrganizers.map((org, index) => (
-                      <li key={`${org.userId}-${index}`}>
-                        {org.fetchedFullName || `ID: ${org.userId}`}
-                        {org.positionName || org.roleName
-                          ? ` - ${org.positionName || ""}${
-                              org.positionName && org.roleName ? " - " : ""
-                            }${org.roleName || ""}${
-                              org.positionName && org.roleName ? "" : ""
-                            }`
-                          : ""}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-500 italic text-base ml-5">
-                    {selectedEvent?.organizers &&
-                    selectedEvent.organizers.length > 0
-                      ? "Đang tải..."
-                      : "Chưa có thông tin."}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1 text-sm border-t pt-4">
-                <strong className="font-semibold text-gray-900 mb-1 block text-base">
-                  👤 Người tham dự ({detailedParticipants.length}):
-                </strong>
-                {detailedParticipants.length > 0 ? (
-                  <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1 text-base max-h-40 overflow-y-auto pr-2">
-                    {detailedParticipants.map((p, index) => (
-                      <li key={`${p.userId}-${index}`}>
-                        {p.fetchedFullName || `ID: ${p.userId}`}
-                        {p.positionName || p.roleName
-                          ? ` - ${p.positionName || ""}${
-                              p.positionName && p.roleName ? " - " : ""
-                            }${p.roleName || ""}${
-                              p.positionName && p.roleName ? "" : ""
-                            }`
-                          : ""}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-500 italic text-base ml-5">
-                    {selectedEvent?.participants &&
-                    selectedEvent.participants.length > 0
-                      ? "Đang tải..."
-                      : "Chưa có người tham dự."}
-                  </p>
-                )}
-              </div>
               <div className="mt-6 pt-4 border-t border-gray-200 flex flex-wrap justify-end gap-3">
-                {currentUserId && selectedEvent.createdBy === currentUserId && (
-                  <>
-                    <button
-                      onClick={() => handleEditEvent(selectedEvent)}
-                      className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition text-sm font-medium flex items-center gap-1.5 shadow-sm hover:shadow"
-                      aria-label="Sửa sự kiện"
-                    >
-                      <Pencil2Icon className="w-4 h-4" /> Sửa sự kiện
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => setShowDeleteConfirm(selectedEvent)}
-                  className="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition text-sm font-medium flex items-center gap-1.5 shadow-sm hover:shadow"
-                  aria-label="Xoá sự kiện"
-                >
-                  <TrashIcon className="w-4 h-4" /> Xoá sự kiện
-                </button>
-                {canRegister && (
+                {user?.id === selectedEvent.createdBy && (
                   <button
-                    onClick={handleRegister}
-                    disabled={isRegistering}
-                    className={`px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition text-sm font-medium flex items-center gap-1.5 shadow-sm hover:shadow ${
-                      isRegistering ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                    title="Đăng ký tham gia sự kiện này"
-                    aria-label="Đăng ký tham gia sự kiện"
+                    onClick={() => handleEditEvent(selectedEvent)}
+                    disabled={isDeleting === selectedEvent.id}
+                    className="px-4 py-2 cursor-pointer rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
                   >
-                    {isRegistering ? (
-                      <>
-                        <ReloadIcon className="w-4 h-4 animate-spin mr-1" />
-                        Đang đăng ký...
-                      </>
-                    ) : (
-                      <>
-                        <PersonIcon className="w-4 h-4" /> Đăng ký tham gia
-                      </>
-                    )}
+                    <Pencil1Icon className="w-4 h-4" /> Sửa
                   </button>
                 )}
-                {selectedEvent.attendees?.some(
-                  (att) =>
-                    att.userId === currentUserId && att.attending !== false
-                ) &&
-                  !canRegister &&
-                  getEventStatus(selectedEvent.date) !== "ended" && (
-                    <span className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-medium flex items-center gap-1.5 border border-gray-200">
-                      <CheckCircledIcon className="w-4 h-4 text-green-600" /> Đã
-                      đăng ký
-                    </span>
-                  )}
+                {user && ( 
+                  <button
+                    onClick={() => handleDeleteEvent(selectedEvent)}
+                    disabled={isDeleting === selectedEvent.id}
+                    className={`px-4 py-2 cursor-pointer rounded-lg bg-red-500 text-white hover:bg-red-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 ${isDeleting === selectedEvent.id ? "cursor-wait" : ""}`}
+                  >
+                    {isDeleting === selectedEvent.id ? (
+                      <ReloadIcon className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <TrashIcon className="w-4 h-4" />
+                    )}
+                    {isDeleting === selectedEvent.id
+                      ? "Đang xoá..."
+                      : "Xoá"}
+                  </button>
+                )}
+                 {(() => {
+                    const isCreated = user?.id === selectedEvent.createdBy;
+                    const isRegistered = registeredEventIds.has(selectedEvent.id);
+                    const processing = isRegistering === selectedEvent.id;
+                    const status = getEventStatus(selectedEvent.date);
+                    const showRegisterBtn = !isCreated && status !== "ended";
+
+                    if (user && showRegisterBtn) {
+                      const canClick = !isRegistered && !processing;
+                      const isDisabled =
+                        !canClick ||
+                        isLoadingRegisteredIds ||
+                        isLoadingCreatedEventIds ||
+                        isRegistered;
+                      return (
+                        <button
+                          onClick={() => {
+                            if (canClick) {
+                              onRegister(selectedEvent);
+                            }
+                          }}
+                          className={`px-4 py-2 rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center cursor-pointer ${
+                            isRegistered
+                              ? "bg-green-500 "
+                              : processing
+                              ? "bg-indigo-300 cursor-wait"
+                              : "bg-indigo-500 hover:bg-indigo-600"
+                          }`}
+                          disabled={isDisabled}
+                        >
+                          {isRegistered ? (
+                            <>
+                              <CheckCircledIcon className="mr-1.5" /> Đã đăng ký
+                            </>
+                          ) : processing ? (
+                            <>
+                              <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />{" "}
+                              ...
+                            </>
+                          ) : (
+                            <>
+                              <Pencil1Icon className="mr-1.5" /> Đăng ký
+                            </>
+                          )}
+                        </button>
+                      );
+                    } else if (status === "ended" && !isCreated) {
+                       return (
+                        <button
+                          className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
+                          disabled
+                        >
+                          Đã kết thúc
+                        </button>
+                      );
+                    } else if (!user && status !== "ended") {
+                       return (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toast("Vui lòng đăng nhập.", { icon: "🔒" });
+                             router.push("/login?redirect=/admin/home");
+                          }}
+                          className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
+                        >
+                          Đăng nhập
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
               </div>
             </div>
           </div>
@@ -1344,138 +996,169 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         <div className="mt-1 mb-6">
           {processedEvents.length > 0 ? (
             viewMode === "card" ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fadeIn">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {paginatedEvents.map((event) => {
-                  const timeStatus = getEventStatus(event.date);
-                  const isMyEvent =
-                    currentUserId && event.createdBy === currentUserId;
+                  const isRegistered = registeredEventIds.has(event.id);
+                  const isCreatedByUser = user?.id === event.createdBy;
+                  const processing = isRegistering === event.id;
+                  const status = getEventStatus(event.date);
+                  const showRegisterButton =
+                    user && !isCreatedByUser && status !== "ended";
+                  const canClickRegister =
+                    showRegisterButton && !isRegistered && !processing;
+                  const canEdit = user?.id === event.createdBy && status !== "ended";
+
                   return (
                     <div
                       key={event.id}
-                      className="bg-white shadow-md rounded-xl overflow-hidden transform transition duration-300 hover:scale-[1.02] hover:shadow-lg flex flex-col border border-gray-100 hover:border-indigo-200 cursor-pointer group"
-                      onClick={() => onEventClick(event)}
+                      className="bg-white shadow-md rounded-xl overflow-hidden flex flex-col border"
                     >
-                      <div className="w-full h-40 bg-gray-200 relative overflow-hidden">
+                      <div
+                        className="relative w-full h-40 bg-gray-200 cursor-pointer"
+                        onClick={() => onEventClick(event)}
+                      >
                         {event.avatarUrl ? (
                           <Image
                             src={event.avatarUrl}
                             alt={event.title}
                             layout="fill"
                             objectFit="cover"
-                            className="transition-transform duration-300 group-hover:scale-105"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = "none";
-                              const placeholder = document.createElement("div");
-                              placeholder.className =
-                                "w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold";
-                              placeholder.textContent =
-                                event.title?.charAt(0).toUpperCase() || "?";
-                              target.parentElement?.appendChild(placeholder);
-                            }}
                           />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold">
                             {event.title?.charAt(0).toUpperCase() || "?"}
                           </div>
                         )}
-                        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-                          <span
-                            className={`${getStatusBadgeClasses(
-                              timeStatus
-                            )} shadow-sm`}
-                          >
-                            {getStatusIcon(timeStatus)}{" "}
-                            {getStatusText(timeStatus)}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${getApprovalStatusBadgeColor(
-                              event.status
-                            )} shadow-sm`}
-                          >
-                            {getApprovalStatusText(event.status)}
-                          </span>
-                        </div>
+                        <span
+                          className={`absolute top-2 right-2 ${getStatusBadgeClasses(
+                            status
+                          )} shadow-sm`}
+                        >
+                          {getStatusIcon(status)} {getStatusText(status)}
+                        </span>
                       </div>
                       <div className="p-4 flex flex-col flex-grow">
-                        <div className="mb-3 flex-grow">
-                          <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1 group-hover:text-indigo-600 transition-colors">
+                        <div
+                          className="mb-3 grow"
+                          onClick={() => onEventClick(event)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <h2 className="text-md font-semibold mb-1 line-clamp-2">
                             {event.title}
                           </h2>
-                          <div className="space-y-1 mb-2 text-xs text-gray-600">
-                            <p className="flex items-center gap-1.5">
-                              <CalendarIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                              <span className="truncate">
-                                {formatFullDateTime(event.date, event.time)}
-                              </span>
-                            </p>
-                            <p className="flex items-center gap-1.5">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-3.5 w-3.5 text-gray-400 flex-shrink-0"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={2}
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                />
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                />
-                              </svg>
-                              <span className="truncate">
-                                {event.location || "Chưa cập nhật"}
-                              </span>
-                            </p>
-                            {event.maxAttendees !== null &&
-                              event.maxAttendees !== undefined && (
-                                <p className="flex items-center gap-1.5">
-                                  <AttendeesIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                                  <span className="truncate">
-                                    SL:{" "}
-                                    {event.currentAttendeesCount ??
-                                      (event.attendees?.filter(
-                                        (a) => a.attending !== false
-                                      ).length ||
-                                        0)}{" "}
-                                    /{" "}
-                                    {event.maxAttendees >= 0
-                                      ? event.maxAttendees
-                                      : "Không giới hạn"}
-                                  </span>
-                                </p>
-                              )}
-                          </div>
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <CalendarIcon className="w-3.5 h-3.5" />{" "}
+                            {new Date(event.date).toLocaleDateString("vi-VN")}
+                          </p>
+                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {event.location}
+                          </p>
                         </div>
-                        <div className="mt-auto pt-3 border-t border-gray-100 flex justify-end gap-2">
-                          {isMyEvent && (
+                         <div className="text-xs text-gray-600 mt-1">
+                            <span>
+                              ✅ Đã đăng ký: {event.attendees?.length || 0}
+                              {typeof event.maxAttendees === 'number'
+                                ? ` / ${event.maxAttendees}`
+                                : " (Không giới hạn)"}
+                            </span>
+                          </div>
+                        <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
+                          {isCreatedByUser ? (
+                            <div className="w-full px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium text-center">
+                              ✨ Của bạn
+                            </div>
+                          ) : showRegisterButton ? (
+                            <button
+                              onClick={() => {
+                                if (canClickRegister) onRegister(event);
+                              }}
+                              className={`flex-grow px-3 py-1.5 rounded-md text-white text-xs font-medium flex items-center justify-center cursor-pointer ${
+                                isRegistered
+                                  ? "bg-green-500 cursor-default"
+                                  : processing
+                                  ? "bg-indigo-300 cursor-wait"
+                                  : "bg-indigo-500 hover:bg-indigo-600"
+                              }`}
+                              disabled={
+                                !canClickRegister ||
+                                isLoadingRegisteredIds ||
+                                isLoadingCreatedEventIds ||
+                                isRegistered
+                              }
+                            >
+                              {isRegistered ? (
+                                <>
+                                  <CheckCircledIcon className="mr-1" /> Đã đăng
+                                  ký
+                                </>
+                              ) : processing ? (
+                                <>
+                                  <ReloadIcon className="animate-spin mr-1.5" />{" "}
+                                  ...
+                                </>
+                              ) : (
+                                <>
+                                  <Pencil1Icon className="mr-1" /> Đăng ký
+                                </>
+                              )}
+                            </button>
+                          ) : status === "ended" ? (
+                            <button
+                              className="w-full px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs"
+                              disabled
+                            >
+                              🏁 Đã kết thúc
+                            </button>
+                          ) : !user && status !== "ended" ? (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleEditEvent(event);
+                                toast("Vui lòng đăng nhập.", { icon: "🔒" });
+                                router.push("/login?redirect=/admin/home");
                               }}
-                              className="px-2.5 py-1 rounded text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium flex items-center gap-1 transition"
-                              aria-label={`Sửa ${event.title}`}
+                              className="w-full px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-xs"
                             >
-                              <Pencil2Icon className="w-3 h-3" /> Sửa
+                              Đăng nhập
+                            </button>
+                          ) : null}
+                          {canEdit && (
+                            <button
+                              onClick={() => handleEditEvent(event)}
+                              className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 cursor-pointer"
+                              title="Sửa sự kiện"
+                            >
+                              <Pencil1Icon className="w-4 h-4" />
                             </button>
                           )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowDeleteConfirm(event);
-                            }}
-                            className="px-2.5 py-1 rounded text-xs bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-1 transition"
-                            aria-label={`Xoá ${event.title}`}
-                          >
-                            <TrashIcon className="w-3 h-3" /> Xoá
-                          </button>
+                          {user && ( 
+                            <button
+                              onClick={() => handleDeleteEvent(event)}
+                              disabled={isDeleting === event.id}
+                              className={`p-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 cursor-pointer ${
+                                isDeleting === event.id
+                                  ? "opacity-50 cursor-wait"
+                                  : ""
+                              }`}
+                              title="Xóa sự kiện"
+                            >
+                              {isDeleting === event.id ? (
+                                <ReloadIcon className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <TrashIcon className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1486,16 +1169,24 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
                 <ul className="divide-y divide-gray-200">
                   {paginatedEvents.map((event) => {
-                    const timeStatus = getEventStatus(event.date);
-                    const isMyEvent =
-                      currentUserId && event.createdBy === currentUserId;
+                    const isRegistered = registeredEventIds.has(event.id);
+                    const isCreatedByUser = user?.id === event.createdBy;
+                    const processing = isRegistering === event.id;
+                    const status = getEventStatus(event.date);
+                    const showRegisterButton =
+                      user && !isCreatedByUser && status !== "ended";
+                    const canClickRegister =
+                      showRegisterButton && !isRegistered && !processing;
+                     const canEdit = user?.id === event.createdBy && status !== "ended";
                     return (
                       <li
                         key={event.id}
-                        className="px-4 py-3 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors cursor-pointer group"
-                        onClick={() => onEventClick(event)}
+                        className="px-4 py-3 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between transition-colors"
                       >
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div
+                          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                          onClick={() => onEventClick(event)}
+                        >
                           {event.avatarUrl ? (
                             <div className="relative w-16 h-12 rounded overflow-hidden flex-shrink-0 hidden sm:block bg-gray-100">
                               <Image
@@ -1503,17 +1194,6 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                                 alt={event.title}
                                 layout="fill"
                                 objectFit="cover"
-                                className="transition-transform duration-300 group-hover:scale-105"
-                                onError={(e) => {
-                                  const t = e.target as HTMLImageElement;
-                                  t.style.display = "none";
-                                  const p = document.createElement("div");
-                                  p.className =
-                                    "w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-gray-400 text-4xl font-semibold";
-                                  p.textContent =
-                                    event.title?.charAt(0).toUpperCase() || "?";
-                                  t.parentElement?.appendChild(p);
-                                }}
                               />
                             </div>
                           ) : (
@@ -1522,18 +1202,20 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1 group-hover:text-indigo-600 transition-colors">
+                            <p className="font-semibold text-sm md:text-base text-gray-800 line-clamp-1">
                               {event.title}
                             </p>
                             <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                               <span className="inline-flex items-center gap-1">
-                                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
-                                {formatFullDateTime(event.date, event.time)}
+                                <CalendarIcon className="w-3.5 h-3.5" />
+                                {new Date(event.date).toLocaleDateString(
+                                  "vi-VN"
+                                )}
                               </span>
                               <span className="inline-flex items-center gap-1">
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
-                                  className="h-3.5 w-3.5 text-gray-400"
+                                  className="h-3.5 w-3.5"
                                   fill="none"
                                   viewBox="0 0 24 24"
                                   stroke="currentColor"
@@ -1542,49 +1224,107 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                                   <path d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                   <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
-                                {event.location || "N/A"}
+                                {event.location}
                               </span>
                               <span
-                                className={`${getStatusBadgeClasses(
-                                  timeStatus
-                                )}`}
+                                className={`${getStatusBadgeClasses(status)}`}
                               >
-                                {getStatusIcon(timeStatus)}{" "}
-                                {getStatusText(timeStatus)}
+                                {getStatusIcon(status)} {getStatusText(status)}
                               </span>
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-xs font-medium ${getApprovalStatusBadgeColor(
-                                  event.status
-                                )}`}
-                              >
-                                {getApprovalStatusText(event.status)}
+                               <span className="text-xs text-gray-500">
+                                (ĐK: {event.attendees?.length || 0}
+                                {typeof event.maxAttendees === 'number'
+                                  ? `/${event.maxAttendees}`
+                                  : ""})
                               </span>
                             </div>
                           </div>
                         </div>
                         <div className="mt-2 sm:mt-0 sm:ml-4 flex-shrink-0 flex items-center gap-2 justify-end">
-                          {isMyEvent && (
+                          {isCreatedByUser ? (
+                            <div className="px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium">
+                              ✨ Của bạn
+                            </div>
+                          ) : showRegisterButton ? (
                             <button
+                              onClick={() => {
+                                if (canClickRegister) onRegister(event);
+                              }}
+                              className={`px-3 py-1.5 cursor-pointer rounded-md text-white text-xs font-medium flex items-center justify-center cursor-pointer ${
+                                isRegistered
+                                  ? "bg-green-500 cursor-default"
+                                  : processing
+                                  ? "bg-indigo-300 cursor-wait"
+                                  : "bg-indigo-500 hover:bg-indigo-600"
+                              }`}
+                              disabled={
+                                !canClickRegister ||
+                                isLoadingRegisteredIds ||
+                                isLoadingCreatedEventIds ||
+                                isRegistered
+                              }
+                            >
+                              {isRegistered ? (
+                                <>
+                                  <CheckCircledIcon className="mr-1" /> Đã ĐK
+                                </>
+                              ) : processing ? (
+                                <>
+                                  <ReloadIcon className="animate-spin mr-1.5" />{" "}
+                                  ...
+                                </>
+                              ) : (
+                                <>
+                                  <Pencil1Icon className="mr-1" /> Đăng ký
+                                </>
+                              )}
+                            </button>
+                          ) : status === "ended" ? (
+                             <button
+                              className="px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs"
+                              disabled
+                            >
+                              🏁 Đã kết thúc
+                            </button>
+                          ) : !user && status !== "ended" ? (
+                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleEditEvent(event);
+                                toast("Vui lòng đăng nhập.", { icon: "🔒" });
+                                router.push("/login?redirect=/admin/home");
                               }}
-                              className="px-3 py-1.5 rounded-md text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition font-medium flex items-center gap-1"
-                              aria-label={`Sửa ${event.title}`}
+                              className="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-xs"
                             >
-                              <Pencil2Icon className="w-3.5 h-3.5" /> Sửa
+                              Đăng nhập
+                            </button>
+                          ): null}
+                           {canEdit && (
+                            <button
+                              onClick={() => handleEditEvent(event)}
+                              className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 cursor-pointer"
+                              title="Sửa sự kiện"
+                            >
+                              <Pencil1Icon className="w-4 h-4" />
                             </button>
                           )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowDeleteConfirm(event);
-                            }}
-                            className="px-3 py-1.5 rounded-md text-xs bg-red-100 text-red-700 hover:bg-red-200 transition font-medium flex items-center gap-1"
-                            aria-label={`Xoá ${event.title}`}
-                          >
-                            <TrashIcon className="w-3.5 h-3.5" /> Xoá
-                          </button>
+                          {user && ( 
+                            <button
+                              onClick={() => handleDeleteEvent(event)}
+                              disabled={isDeleting === event.id}
+                              className={`p-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 cursor-pointer ${
+                                isDeleting === event.id
+                                  ? "opacity-50 cursor-wait"
+                                  : ""
+                              }`}
+                              title="Xóa sự kiện"
+                            >
+                              {isDeleting === event.id ? (
+                                <ReloadIcon className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <TrashIcon className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </li>
                     );
@@ -1594,7 +1334,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             )
           ) : (
             <p className="text-gray-500 text-center col-span-1 md:col-span-2 lg:col-span-3 py-6 italic">
-              Không có sự kiện nào.
+              Không tìm thấy sự kiện nào khớp.
             </p>
           )}
           {processedEvents.length > 0 && totalPages > 1 && (
@@ -1602,22 +1342,20 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               <span className="text-sm text-gray-600">
                 Trang <span className="font-semibold">{currentPage}</span> /{" "}
                 <span className="font-semibold">{totalPages}</span> (Tổng:{" "}
-                <span className="font-semibold">{totalItems}</span> sự kiện)
+                <span className="font-semibold">{totalItems}</span>)
               </span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-md border bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                  aria-label="Trang trước"
+                  className="px-3 py-1.5 rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
                 >
                   <ChevronLeftIcon className="w-4 h-4" /> Trước
                 </button>
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-md border bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                  aria-label="Trang sau"
+                  className="px-3 py-1.5 rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
                 >
                   Sau <ChevronRightIcon className="w-4 h-4" />
                 </button>
@@ -1626,35 +1364,18 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           )}
         </div>
       )}
-      {eventToEdit && (
-        <ModalUpdateEvent
-          isOpen={isUpdateModalOpen}
-          onClose={() => {
-            setIsUpdateModalOpen(false);
-            setEventToEdit(null);
-          }}
-          editingEvent={eventToEdit}
-          onSuccess={handleEventUpdatedSuccessfully}
-          user={currentUser}
-        />
-      )}
       <ConfirmationDialog
-        isOpen={!!showDeleteConfirm}
-        title="Xác nhận xoá sự kiện"
-        message={
-          <>
-            Bạn có chắc chắn muốn xoá sự kiện <br />
-            <strong className="text-indigo-600">
-              "{showDeleteConfirm?.title}"
-            </strong>
-            ? <br />
-          </>
-        }
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setShowDeleteConfirm(null)}
-        confirmText="Xác nhận Xoá"
-        confirmVariant="danger"
-        cancelText="Huỷ bỏ"
+        isOpen={confirmationDialogState.isOpen}
+        title={confirmationDialogState.title}
+        message={confirmationDialogState.message}
+        confirmVariant={confirmationDialogState.confirmVariant}
+        confirmText={confirmationDialogState.confirmText || "Xác nhận"}
+        cancelText={confirmationDialogState.cancelText || "Hủy bỏ"}
+        onConfirm={() => {
+          if (confirmationDialogState.onConfirm)
+            confirmationDialogState.onConfirm();
+        }}
+        onCancel={handleCancelConfirmation}
       />
     </div>
   );

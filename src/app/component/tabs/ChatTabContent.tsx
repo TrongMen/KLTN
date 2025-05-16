@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, {
@@ -22,7 +21,6 @@ import {
   ChatMessageNotificationPayload,
 } from "./chat/ChatTabContentTypes";
 import GroupChatDetailView from "./chat/GroupChatDetailView";
-
 
 const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
   currentUser,
@@ -61,6 +59,7 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
   getDisplayName,
   handleRemoveMember: handleRemoveMemberAPI,
   handleLeaveGroup: handleLeaveGroupAPI,
+  handleDisbandGroupAPI,
   handleSendMessageAPI,
   handleSendFileAPI,
   handleDeleteMessageAPI,
@@ -95,6 +94,13 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
     onConfirm: (() => void) | null;
     onCancel: () => void;
   }>({ isOpen: false, onConfirm: null, onCancel: () => {} });
+
+  const [disbandConfirmationState, setDisbandConfirmationState] = useState<{
+    isOpen: boolean;
+    onConfirm: (() => void) | null;
+    onCancel: () => void;
+  }>({ isOpen: false, onConfirm: null, onCancel: () => {} });
+
   const [deleteMessageConfirmationState, setDeleteMessageConfirmationState] =
     useState<{
       isOpen: boolean;
@@ -114,9 +120,6 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const groupSocket = useRef<Socket | null>(null);
-
-  // console.log("ChatTabContent rendered. Conversations count:", conversations.length, "Payload:", globalChatMessagePayload);
-
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -148,27 +151,27 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
 
   useEffect(() => {
     if (currentUser?.id && viewMode === "list") {
-        fetchConversationsFromUserHome();
+      fetchConversationsFromUserHome();
     }
   }, [currentUser?.id, fetchConversationsFromUserHome, viewMode]);
 
   useEffect(() => {
-    // console.log("ChatTabContent: globalChatMessagePayload EFFECT CHECK. Payload:", globalChatMessagePayload);
-    if (globalChatMessagePayload && currentUser && setConversationsInUserHome && userCache && getDisplayName) {
-      console.log("ChatTabContent: Processing globalChatMessagePayload:", globalChatMessagePayload);
-      const {
-        groupId,
-        groupName,
-        senderId,
-        sentAt,
-        messageContentPreview,
-      } = globalChatMessagePayload;
+    if (
+      globalChatMessagePayload &&
+      currentUser &&
+      setConversationsInUserHome &&
+      userCache &&
+      getDisplayName
+    ) {
+      const { groupId, groupName, senderId, sentAt, messageContentPreview } =
+        globalChatMessagePayload;
 
       const newActivityMessageText = messageContentPreview || "Có tin nhắn mới";
 
       setConversationsInUserHome((prevList) => {
-        // console.log(`ChatTabContent: Updating conversations list via setConversationsInUserHome. GroupID: ${groupId}. Previous list size: ${prevList.length}`);
-        const existingConvoIndex = prevList.findIndex((c) => String(c.id) === String(groupId));
+        const existingConvoIndex = prevList.findIndex(
+          (c) => String(c.id) === String(groupId)
+        );
         let newList: MainConversationType[];
 
         let displaySenderName = globalChatMessagePayload.senderName;
@@ -176,11 +179,13 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
           displaySenderName = "Bạn";
         } else {
           const cachedSender = userCache[senderId];
-          displaySenderName = getDisplayName(cachedSender || null, globalChatMessagePayload.senderName);
+          displaySenderName = getDisplayName(
+            cachedSender || null,
+            globalChatMessagePayload.senderName
+          );
         }
 
         if (existingConvoIndex !== -1) {
-          // console.log(`ChatTabContent: Updating existing conversation for group ${groupId}`);
           const updatedConvo: MainConversationType = {
             ...prevList[existingConvoIndex],
             message: newActivityMessageText,
@@ -192,7 +197,6 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
           newList = prevList.filter((_, index) => index !== existingConvoIndex);
           newList.unshift(updatedConvo);
         } else {
-          // console.log(`ChatTabContent: Adding new conversation for group ${groupId}`);
           const newConversation: MainConversationType = {
             id: groupId,
             name: groupName,
@@ -209,16 +213,21 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
           };
           newList = [newConversation, ...prevList];
         }
-        
         const sortedList = newList.sort(
           (a, b) =>
-            (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime())
+            new Date(b.sentAt || 0).getTime() -
+            new Date(a.sentAt || 0).getTime()
         );
-        // console.log(`ChatTabContent: New sorted list for conversations. New list size: ${sortedList.length}. First item message: ${sortedList[0]?.message}`);
         return sortedList;
       });
     }
-  }, [globalChatMessagePayload, currentUser, setConversationsInUserHome, userCache, getDisplayName]);
+  }, [
+    globalChatMessagePayload,
+    currentUser,
+    setConversationsInUserHome,
+    userCache,
+    getDisplayName,
+  ]);
 
   useEffect(() => {
     if (
@@ -230,7 +239,11 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
       getDisplayName
     ) {
       const messagesNeedNameUpdate = messages.some(
-        (msg) => (!msg.senderName || !msg.senderName.includes(" ") || msg.senderName.startsWith("User (")) && msg.senderId !== currentUser?.id
+        (msg) =>
+          (!msg.senderName ||
+            !msg.senderName.includes(" ") ||
+            msg.senderName.startsWith("User (")) &&
+          msg.senderId !== currentUser?.id
       );
 
       if (messagesNeedNameUpdate) {
@@ -239,18 +252,36 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
             if (msg.senderId === currentUser?.id) {
               return { ...msg, senderName: "Bạn" };
             }
-            if (msg.senderName && msg.senderName.includes(" ") && !msg.senderName.startsWith("User (")) {
+            if (
+              msg.senderName &&
+              msg.senderName.includes(" ") &&
+              !msg.senderName.startsWith("User (")
+            ) {
               return msg;
             }
             const participantInfo = selectedConversation.participants?.find(
               (p) => p.id === msg.senderId
             );
-            return { ...msg, senderName: getDisplayName(participantInfo || null, msg.senderName || `User (${String(msg.senderId).substring(0,4)})`) };
+            return {
+              ...msg,
+              senderName: getDisplayName(
+                participantInfo || null,
+                msg.senderName ||
+                  `User (${String(msg.senderId).substring(0, 4)})`
+              ),
+            };
           })
         );
       }
     }
-  }, [selectedConversation?.participants, messages, currentUser, viewMode, getDisplayName, setMessagesInUserHome]);
+  }, [
+    selectedConversation?.participants,
+    messages,
+    currentUser,
+    viewMode,
+    getDisplayName,
+    setMessagesInUserHome,
+  ]);
 
   const handleGoBackToList = useCallback(() => {
     setViewMode("list");
@@ -290,18 +321,27 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
 
       const handleConnect = () => {};
       const handleDisconnect = (reason: Socket.DisconnectReason) => {
-        if (reason !== "io client disconnect" && viewMode === "detail" && selectedConversation?.id === groupId) {
+        if (
+          reason !== "io client disconnect" &&
+          viewMode === "detail" &&
+          selectedConversation?.id === groupId
+        ) {
         }
       };
       const handleConnectError = (error: Error) => {
-         if (viewMode === "detail" && selectedConversation?.id === groupId) {
-           toast.error(`Chat lỗi kết nối: ${error.message}`);
-         }
+        if (viewMode === "detail" && selectedConversation?.id === groupId) {
+          toast.error(`Chat lỗi kết nối: ${error.message}`);
+        }
       };
 
       const handleNewMessage = async (newMessage: Message) => {
-        // console.log(`ChatTabContent: GroupSocket received new_message for group ${groupId}`, newMessage);
-        if (selectedConversation?.id === groupId && currentUser && userCache && getDisplayName && fetchUserDetailsWithCache) {
+        if (
+          selectedConversation?.id === groupId &&
+          currentUser &&
+          userCache &&
+          getDisplayName &&
+          fetchUserDetailsWithCache
+        ) {
           let finalMessage = { ...newMessage };
           if (newMessage.senderId === currentUser.id) {
             finalMessage.senderName = "Bạn";
@@ -309,24 +349,38 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
             let senderDetailToUse: ApiUserDetail | Participant | null = null;
 
             if (userCache[newMessage.senderId]) {
-                senderDetailToUse = userCache[newMessage.senderId];
+              senderDetailToUse = userCache[newMessage.senderId];
             } else {
-                const foundParticipant = selectedConversation.participants?.find(p => p.id === newMessage.senderId) || null;
-                if (foundParticipant) {
-                    senderDetailToUse = foundParticipant;
-                }
+              const foundParticipant =
+                selectedConversation.participants?.find(
+                  (p) => p.id === newMessage.senderId
+                ) || null;
+              if (foundParticipant) {
+                senderDetailToUse = foundParticipant;
+              }
             }
 
             if (senderDetailToUse) {
-               finalMessage.senderName = getDisplayName(senderDetailToUse, newMessage.senderName);
+              finalMessage.senderName = getDisplayName(
+                senderDetailToUse,
+                newMessage.senderName
+              );
             } else {
-               const fetchedDetail = await fetchUserDetailsWithCache(newMessage.senderId, localStorage.getItem("authToken"));
-               finalMessage.senderName = getDisplayName(fetchedDetail, newMessage.senderName || `User (${String(newMessage.senderId).substring(0,4)})`);
+              const fetchedDetail = await fetchUserDetailsWithCache(
+                newMessage.senderId,
+                localStorage.getItem("authToken")
+              );
+              finalMessage.senderName = getDisplayName(
+                fetchedDetail,
+                newMessage.senderName ||
+                  `User (${String(newMessage.senderId).substring(0, 4)})`
+              );
             }
           }
 
           setMessagesInUserHome((prevMessages) => {
-            if (prevMessages.some((m) => m.id === finalMessage.id)) return prevMessages;
+            if (prevMessages.some((m) => m.id === finalMessage.id))
+              return prevMessages;
             const updated = [...prevMessages, finalMessage];
             updated.sort(
               (a, b) =>
@@ -336,86 +390,119 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
           });
 
           setConversationsInUserHome((prevList) => {
-            // console.log(`ChatTabContent: Updating conversations from groupSocket new_message. GroupID: ${groupId}`);
-            const idx = prevList.findIndex((c) => String(c.id) === String(groupId));
+            const idx = prevList.findIndex(
+              (c) => String(c.id) === String(groupId)
+            );
             if (idx === -1) return prevList;
 
             const updatedConvo = {
               ...prevList[idx],
-              message: newMessage.content ?? `Đã gửi: ${newMessage.fileName || "File"}`,
+              message:
+                newMessage.content ??
+                `Đã gửi: ${newMessage.fileName || "File"}`,
               sentAt: newMessage.sentAt,
               lastMessageSenderId: newMessage.senderId,
               lastMessageSenderName: finalMessage.senderName,
             };
 
-            const newList = prevList.filter(c => String(c.id) !== String(groupId));
+            const newList = prevList.filter(
+              (c) => String(c.id) !== String(groupId)
+            );
             newList.unshift(updatedConvo);
             return newList.sort(
-                (a, b) =>
-                  (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime())
-              );
+              (a, b) =>
+                new Date(b.sentAt || 0).getTime() -
+                new Date(a.sentAt || 0).getTime()
+            );
           });
 
           if (showInfoPanel) {
-            if (newMessage.type === "IMAGE" || newMessage.type === "VIDEO") fetchMediaMessagesFromUserHome(groupId);
-            else if (newMessage.type === "FILE") fetchFileMessagesFromUserHome(groupId);
-            else if (newMessage.type === "AUDIO") fetchAudioMessagesFromUserHome(groupId);
+            if (newMessage.type === "IMAGE" || newMessage.type === "VIDEO")
+              fetchMediaMessagesFromUserHome(groupId);
+            else if (newMessage.type === "FILE")
+              fetchFileMessagesFromUserHome(groupId);
+            else if (newMessage.type === "AUDIO")
+              fetchAudioMessagesFromUserHome(groupId);
           }
         }
       };
 
       const handleMessageDeleted = (data: { messageId: string }) => {
-          // console.log(`ChatTabContent: GroupSocket received message_deleted for group ${groupId}`, data);
-          if (data?.messageId && selectedConversation?.id === groupId && currentUser && userCache && getDisplayName) {
-            let newLastMessageForPreview: Message | null = null;
-            setMessagesInUserHome((prev) => {
-                const remaining = prev.filter((m) => m.id !== data.messageId);
-                if (remaining.length > 0) {
-                    newLastMessageForPreview = remaining[remaining.length -1];
-                }
-                return remaining;
-            });
-
-            setConversationsInUserHome((prevList) => {
-                // console.log(`ChatTabContent: Updating conversations from groupSocket message_deleted. GroupID: ${groupId}`);
-                const idx = prevList.findIndex((c) => String(c.id) === groupId);
-                if (idx === -1) return prevList;
-
-                const participantFromList = newLastMessageForPreview ? selectedConversation.participants?.find(p => p.id === newLastMessageForPreview!.senderId) : undefined;
-                const senderDetailForDisplayName: ApiUserDetail | Participant | null = newLastMessageForPreview
-                    ? (userCache[newLastMessageForPreview.senderId] || participantFromList || null)
-                    : null;
-
-                const senderName = newLastMessageForPreview
-                    ? (newLastMessageForPreview.senderId === currentUser.id ? "Bạn" : getDisplayName(senderDetailForDisplayName, newLastMessageForPreview.senderName))
-                    : undefined;
-
-                const updatedConvo = {
-                    ...prevList[idx],
-                    message: newLastMessageForPreview
-                        ? (newLastMessageForPreview.content ?? `Đã gửi: ${newLastMessageForPreview.fileName || "File"}`)
-                        : "Chưa có tin nhắn",
-                    sentAt: newLastMessageForPreview?.sentAt,
-                    lastMessageSenderId: newLastMessageForPreview?.senderId,
-                    lastMessageSenderName: senderName,
-                };
-                const newList = prevList.filter(c => String(c.id) !== String(groupId));
-                newList.unshift(updatedConvo);
-                return newList.sort(
-                    (a, b) =>
-                      (new Date(b.sentAt || 0).getTime()) - (new Date(a.sentAt || 0).getTime())
-                  );
-            });
-
-            if (showInfoPanel) {
-                fetchMediaMessagesFromUserHome(groupId);
-                fetchFileMessagesFromUserHome(groupId);
-                fetchAudioMessagesFromUserHome(groupId);
+        if (
+          data?.messageId &&
+          selectedConversation?.id === groupId &&
+          currentUser &&
+          userCache &&
+          getDisplayName
+        ) {
+          let newLastMessageForPreview: Message | null = null;
+          setMessagesInUserHome((prev) => {
+            const remaining = prev.filter((m) => m.id !== data.messageId);
+            if (remaining.length > 0) {
+              newLastMessageForPreview = remaining[remaining.length - 1];
             }
-          }
-      };
+            return remaining;
+          });
 
-      const handleMemberRemoved = (data: { removedUserId?: string; groupId?: string }) => {
+          setConversationsInUserHome((prevList) => {
+            const idx = prevList.findIndex((c) => String(c.id) === groupId);
+            if (idx === -1) return prevList;
+
+            const participantFromList = newLastMessageForPreview
+              ? selectedConversation.participants?.find(
+                  (p) => p.id === newLastMessageForPreview!.senderId
+                )
+              : undefined;
+            const senderDetailForDisplayName:
+              | ApiUserDetail
+              | Participant
+              | null = newLastMessageForPreview
+              ? userCache[newLastMessageForPreview.senderId] ||
+                participantFromList ||
+                null
+              : null;
+
+            const senderName = newLastMessageForPreview
+              ? newLastMessageForPreview.senderId === currentUser.id
+                ? "Bạn"
+                : getDisplayName(
+                    senderDetailForDisplayName,
+                    newLastMessageForPreview.senderName
+                  )
+              : undefined;
+
+            const updatedConvo = {
+              ...prevList[idx],
+              message: newLastMessageForPreview
+                ? newLastMessageForPreview.content ??
+                  `Đã gửi: ${newLastMessageForPreview.fileName || "File"}`
+                : "Chưa có tin nhắn",
+              sentAt: newLastMessageForPreview?.sentAt,
+              lastMessageSenderId: newLastMessageForPreview?.senderId,
+              lastMessageSenderName: senderName,
+            };
+            const newList = prevList.filter(
+              (c) => String(c.id) !== String(groupId)
+            );
+            newList.unshift(updatedConvo);
+            return newList.sort(
+              (a, b) =>
+                new Date(b.sentAt || 0).getTime() -
+                new Date(a.sentAt || 0).getTime()
+            );
+          });
+
+          if (showInfoPanel) {
+            fetchMediaMessagesFromUserHome(groupId);
+            fetchFileMessagesFromUserHome(groupId);
+            fetchAudioMessagesFromUserHome(groupId);
+          }
+        }
+      };
+      const handleMemberRemoved = (data: {
+        removedUserId?: string;
+        groupId?: string;
+      }) => {
         if (data.groupId === groupId) {
           toast("Một thành viên đã bị xóa khỏi nhóm.");
           fetchGroupChatDetailsFromUserHome(groupId);
@@ -429,22 +516,27 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
         }
       };
 
-      const handleMemberLeft = (data: { userId?: string; groupId?: string }) => {
-            if (data.groupId === groupId) {
-                toast("Một thành viên đã rời nhóm.");
-                fetchGroupChatDetailsFromUserHome(groupId);
-            } else if (data.groupId) {
-                fetchConversationsFromUserHome();
-            }
+      const handleMemberLeft = (data: {
+        userId?: string;
+        groupId?: string;
+      }) => {
+        if (data.groupId === groupId) {
+          toast("Một thành viên đã rời nhóm.");
+          fetchGroupChatDetailsFromUserHome(groupId);
+        } else if (data.groupId) {
+          fetchConversationsFromUserHome();
+        }
       };
 
       const handleGroupDeactivated = (data: { groupId?: string }) => {
-            if (data.groupId === groupId) {
-                const groupName = selectedConversation?.name || groupId;
-                toast.error(`Nhóm "${groupName}" đã bị giải tán.`);
-                handleGoBackToList();
-            }
-            setConversationsInUserHome((prev) => prev.filter((c) => String(c.id) !== data.groupId));
+        if (data.groupId === groupId) {
+          const groupName = selectedConversation?.name || groupId;
+          toast.error(`Nhóm "${groupName}" đã bị giải tán.`);
+          handleGoBackToList();
+        }
+        setConversationsInUserHome((prev) =>
+          prev.filter((c) => String(c.id) !== data.groupId)
+        );
       };
 
       currentGroupSocket.on("connect", handleConnect);
@@ -489,7 +581,7 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
     setConversationsInUserHome,
     getDisplayName,
     userCache,
-    fetchUserDetailsWithCache
+    fetchUserDetailsWithCache,
   ]);
 
   const handleSelectConversation = useCallback(
@@ -522,20 +614,47 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
         setSelectedConversationInUserHome(conversation);
       }
     },
-    [fetchGroupChatDetailsFromUserHome, fetchMessagesFromUserHome, setSelectedConversationInUserHome, setMessagesInUserHome, setMediaMessages, setFileMessages, setAudioMessages]
+    [
+      fetchGroupChatDetailsFromUserHome,
+      fetchMessagesFromUserHome,
+      setSelectedConversationInUserHome,
+      setMessagesInUserHome,
+      setMediaMessages,
+      setFileMessages,
+      setAudioMessages,
+    ]
   );
 
-  const handleActualRemoveMember = async (gId: string | number, mId: string, lId: string) => {
+  const handleActualRemoveMember = async (
+    gId: string | number,
+    mId: string,
+    lId: string
+  ) => {
     await handleRemoveMemberAPI(gId, mId, lId);
-    setRemoveConfirmationState({ isOpen: false, memberToRemove: null, onConfirm: null, onCancel: () => {} });
+    setRemoveConfirmationState({
+      isOpen: false,
+      memberToRemove: null,
+      onConfirm: null,
+      onCancel: () => {},
+    });
   };
 
   const closeRemoveConfirmationDialog = useCallback(() => {
-    setRemoveConfirmationState({ isOpen: false, memberToRemove: null, onConfirm: null, onCancel: () => {} });
+    setRemoveConfirmationState({
+      isOpen: false,
+      memberToRemove: null,
+      onConfirm: null,
+      onCancel: () => {},
+    });
   }, []);
 
   const confirmRemoveMember = (member: Participant) => {
-    if (!selectedConversation || !currentUser || typeof selectedConversation.id !== "string") return;
+    if (
+      !selectedConversation ||
+      !currentUser ||
+      typeof selectedConversation.id !== "string"
+    )
+      return;
     const gId = selectedConversation.id;
     const lId = currentUser.id;
     setRemoveConfirmationState({
@@ -546,24 +665,87 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
     });
   };
 
-  const handleActualLeaveGroup = async (groupId: string | number, memberId: string) => {
+  const handleActualLeaveGroup = async (
+    groupId: string | number,
+    memberId: string
+  ) => {
     await handleLeaveGroupAPI(groupId, memberId);
-     setLeaveConfirmationState({ isOpen: false, onConfirm: null, onCancel: () => {} });
-     handleGoBackToList();
+    setLeaveConfirmationState({
+      isOpen: false,
+      onConfirm: null,
+      onCancel: () => {},
+    });
+    handleGoBackToList();
   };
 
   const closeLeaveConfirmationDialog = useCallback(() => {
-    setLeaveConfirmationState({ isOpen: false, onConfirm: null, onCancel: () => {} });
+    setLeaveConfirmationState({
+      isOpen: false,
+      onConfirm: null,
+      onCancel: () => {},
+    });
   }, []);
 
   const confirmLeaveGroup = () => {
-    if (!selectedConversation || !currentUser || typeof selectedConversation.id !== "string") return;
+    if (
+      !selectedConversation ||
+      !currentUser ||
+      typeof selectedConversation.id !== "string"
+    )
+      return;
     const gId = selectedConversation.id;
     const mId = currentUser.id;
     setLeaveConfirmationState({
       isOpen: true,
       onConfirm: () => handleActualLeaveGroup(gId, mId),
       onCancel: closeLeaveConfirmationDialog,
+    });
+  };
+
+  const handleActualDisbandGroup = async () => {
+    if (
+      !selectedConversation ||
+      !currentUser ||
+      typeof selectedConversation.id !== "string"
+    )
+      return;
+    const groupId = selectedConversation.id;
+    const leaderId = currentUser.id;
+    if (typeof handleDisbandGroupAPI === "function") {
+      await handleDisbandGroupAPI(groupId, leaderId);
+      setDisbandConfirmationState({
+        isOpen: false,
+        onConfirm: null,
+        onCancel: () => {},
+      });
+      handleGoBackToList();
+    } else {
+      console.error(
+        "handleDisbandGroupAPI is not a function in ChatTabContent"
+      );
+      toast.error("Chức năng giải tán nhóm không khả dụng.");
+    }
+  };
+
+  const closeDisbandConfirmationDialog = useCallback(() => {
+    setDisbandConfirmationState({
+      isOpen: false,
+      onConfirm: null,
+      onCancel: () => {},
+    });
+  }, []);
+
+  const confirmDisbandGroup = () => {
+    if (
+      !selectedConversation ||
+      !currentUser ||
+      typeof selectedConversation.id !== "string"
+    )
+      return;
+    setDisbandConfirmationState({
+      isOpen: true,
+      onConfirm: handleActualDisbandGroup,
+      onCancel: closeDisbandConfirmationDialog,
     });
   };
 
@@ -579,10 +761,15 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
       senderName: "Bạn",
       sentAt: new Date().toISOString(),
       type: "TEXT",
+      groupId: String(selectedConversation.id),
     };
 
     if (selectedConversation && selectedConversation.id) {
-      setMessagesInUserHome(prev => [...prev, optimisticMessage].sort((a,b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()));
+      setMessagesInUserHome((prev) =>
+        [...prev, optimisticMessage].sort(
+          (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+        )
+      );
     }
 
     const msgToSend = messageInput;
@@ -592,52 +779,90 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
     setMessageInput("");
     setShowEmojiPicker(false);
 
-    const actualMessageFromServer = await handleSendMessageAPI(String(currentSelectedGroupId), sId, msgToSend, tempMessageId);
+    const actualMessageFromServer = await handleSendMessageAPI(
+      String(currentSelectedGroupId),
+      sId,
+      msgToSend,
+      tempMessageId
+    );
 
     if (actualMessageFromServer) {
-        setMessagesInUserHome(prevMessages => {
-            const messageExistsByActualId = prevMessages.some(m => m.id === actualMessageFromServer.id);
-            if (messageExistsByActualId) {
-                return prevMessages.filter(m => m.id !== tempMessageId)
-                                     .sort((a,b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
-            } else {
-                return prevMessages.map(m => m.id === tempMessageId ? actualMessageFromServer : m)
-                                     .sort((a,b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime());
-            }
-        });
-    } else {
-        if (currentSelectedGroupId) {
-            setMessagesInUserHome(prev => prev.filter(m => m.id !== tempMessageId));
-            setMessageInput(msgToSend);
+      setMessagesInUserHome((prevMessages) => {
+        const messageExistsByActualId = prevMessages.some(
+          (m) => m.id === actualMessageFromServer.id
+        );
+        if (messageExistsByActualId) {
+          return prevMessages
+            .filter((m) => m.id !== tempMessageId)
+            .sort(
+              (a, b) =>
+                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+            );
+        } else {
+          return prevMessages
+            .map((m) => (m.id === tempMessageId ? actualMessageFromServer : m))
+            .sort(
+              (a, b) =>
+                new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+            );
         }
+      });
+    } else {
+      if (currentSelectedGroupId) {
+        setMessagesInUserHome((prev) =>
+          prev.filter((m) => m.id !== tempMessageId)
+        );
+        setMessageInput(msgToSend);
+      }
     }
-  }, [messageInput, selectedConversation, currentUser, handleSendMessageAPI, setMessagesInUserHome]);
+  }, [
+    messageInput,
+    selectedConversation,
+    currentUser,
+    handleSendMessageAPI,
+    setMessagesInUserHome,
+  ]);
 
-
-  const handleSendFile = useCallback(async (file: File) => {
-    if (!file || !selectedConversation?.id || !currentUser?.id) return;
-    const gId = String(selectedConversation.id);
-    const sId = currentUser.id;
-    
-    await handleSendFileAPI(gId, sId, file);
-
-  }, [selectedConversation, currentUser, handleSendFileAPI]);
-
+  const handleSendFile = useCallback(
+    async (file: File) => {
+      if (!file || !selectedConversation?.id || !currentUser?.id) return;
+      const gId = String(selectedConversation.id);
+      const sId = currentUser.id;
+      await handleSendFileAPI(gId, sId, file);
+    },
+    [selectedConversation, currentUser, handleSendFileAPI]
+  );
 
   const handleActualDeleteMessage = async (messageId: string) => {
     if (!currentUser?.id || !selectedConversation?.id) return;
-    await handleDeleteMessageAPI(messageId, currentUser.id, selectedConversation.id);
-    setDeleteMessageConfirmationState({ isOpen: false, messageIdToDelete: null, onConfirm: null, onCancel: () => {} });
+    await handleDeleteMessageAPI(
+      messageId,
+      currentUser.id,
+      selectedConversation.id
+    );
+    setDeleteMessageConfirmationState({
+      isOpen: false,
+      messageIdToDelete: null,
+      onConfirm: null,
+      onCancel: () => {},
+    });
   };
 
   const confirmDeleteMessage = useCallback(
     (message: Message) => {
-      if (!message || !currentUser || message.senderId !== currentUser.id) return;
+      if (!message || !currentUser || message.senderId !== currentUser.id)
+        return;
       setDeleteMessageConfirmationState({
         isOpen: true,
         messageIdToDelete: message.id,
         onConfirm: () => handleActualDeleteMessage(message.id),
-        onCancel: () => setDeleteMessageConfirmationState({ isOpen: false, messageIdToDelete: null, onConfirm: null, onCancel: () => {} }),
+        onCancel: () =>
+          setDeleteMessageConfirmationState({
+            isOpen: false,
+            messageIdToDelete: null,
+            onConfirm: null,
+            onCancel: () => {},
+          }),
       });
     },
     [currentUser, handleDeleteMessageAPI]
@@ -663,7 +888,6 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
   };
 
   const filteredConversations = useMemo(() => {
-    // console.log("ChatTabContent: Recalculating filteredConversations. Source conversations count:", conversations.length);
     if (!searchTerm.trim()) return conversations;
     const lower = searchTerm.toLowerCase();
     return conversations.filter((c) => c.name.toLowerCase().includes(lower));
@@ -678,21 +902,27 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
     );
   }, [selectedConversation?.participants, participantSearchTerm]);
 
-  const getParticipantInfo = (conversationToDisplay: MainConversationType | null) => {
+  const getParticipantInfo = (
+    conversationToDisplay: MainConversationType | null
+  ) => {
     if (!conversationToDisplay?.isGroup) return null;
     const participantCount = conversationToDisplay.participants?.length;
 
-    if (isLoadingDetails && !participantCount && selectedConversation?.id === conversationToDisplay.id) {
+    if (
+      isLoadingDetails &&
+      !participantCount &&
+      selectedConversation?.id === conversationToDisplay.id
+    ) {
       return (
         <p className="text-xs text-gray-500 truncate mt-0.5">
-          Đang tải thành viên...
+          Đang tải thành viên...{" "}
         </p>
       );
     }
     if (!participantCount && conversationToDisplay.participants?.length === 0) {
       return (
         <p className="text-xs text-gray-500 truncate mt-0.5">
-          (Chưa có thông tin thành viên)
+          (Chưa có thông tin thành viên){" "}
         </p>
       );
     }
@@ -708,7 +938,7 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
         onClick={(e) => {
           e.stopPropagation();
           if (selectedConversation?.id !== conversationToDisplay.id) {
-             handleSelectConversation(conversationToDisplay);
+            handleSelectConversation(conversationToDisplay);
           }
           setShowInfoPanel(true);
           setParticipantSearchTerm("");
@@ -727,106 +957,119 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
         }}
         title={`${count} thành viên`}
       >
-        {count} thành viên{count > 0 ? ":" : ""} {namesToShow}
-        {remainingCount > 0 && ` và ${remainingCount} người khác`}
+        {count} thành viên{count > 0 ? ":" : ""} {namesToShow}{" "}
+        {remainingCount > 0 && ` và ${remainingCount} người khác`}{" "}
       </p>
     );
   };
 
   const renderListView = () => {
-    // console.log("ChatTabContent: renderListView is rendering. Filtered conversations count:", filteredConversations.length);
     return (
-        <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full">
+        {" "}
         <div className="p-3 border-b border-gray-200 flex-shrink-0">
-            <div className="relative">
+          {" "}
+          <div className="relative">
+            {" "}
             <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                <MagnifyingGlassIcon width="16" height="16" />
-            </span>
+              <MagnifyingGlassIcon width="16" height="16" />{" "}
+            </span>{" "}
             <input
-                type="text"
-                placeholder="Tìm kiếm theo tên nhóm..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            </div>
-        </div>
+              type="text"
+              placeholder="Tìm kiếm theo tên nhóm..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />{" "}
+          </div>{" "}
+        </div>{" "}
         <ul className="space-y-1 p-3 overflow-y-auto flex-1 bg-gray-50">
-            {isLoadingConversations && conversations.length === 0 ? (
+          {" "}
+          {isLoadingConversations && conversations.length === 0 ? (
             <p className="text-center text-gray-500 py-6 italic">
-                Đang tải danh sách...
+              Đang tải danh sách...{" "}
             </p>
-            ) : errorConversations ? (
-            <p className="text-center text-red-500 py-6">{errorConversations}</p>
-            ) : filteredConversations.length > 0 ? (
+          ) : errorConversations ? (
+            <p className="text-center text-red-500 py-6">
+              {errorConversations}
+            </p>
+          ) : filteredConversations.length > 0 ? (
             filteredConversations.map((conv) => (
-                <li
+              <li
                 key={conv.id}
                 onClick={() => handleSelectConversation(conv)}
                 className={`flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer group ${
-                    selectedConversation?.id === conv.id ? "bg-blue-100" : ""
+                  selectedConversation?.id === conv.id ? "bg-blue-100" : ""
                 }`}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ")
+                  if (e.key === "Enter" || e.key === " ")
                     handleSelectConversation(conv);
                 }}
-                >
+              >
+                {" "}
                 <img
-                    src={
+                  src={
                     conv.avatar ||
                     `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                        conv.name
+                      conv.name
                     )}&background=random`
-                    }
-                    alt={`Avatar của ${conv.name}`}
-                    className="w-11 h-11 rounded-full object-cover flex-shrink-0 border"
-                />
+                  }
+                  alt={`Avatar của ${conv.name}`}
+                  className="w-11 h-11 rounded-full object-cover flex-shrink-0 border"
+                />{" "}
                 <div className="flex-1 overflow-hidden">
-                    <p className="font-semibold text-gray-800 text-sm truncate group-hover:text-blue-700">
-                    {conv.name}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate group-hover:text-gray-700">
+                  {" "}
+                  <p className="font-semibold text-gray-800 text-sm truncate group-hover:text-blue-700">
+                    {conv.name}{" "}
+                  </p>{" "}
+                  <p className="text-xs text-gray-500 truncate group-hover:text-gray-700">
+                    {" "}
                     {conv.lastMessageSenderName && (
-                        <span className="font-medium">
-                        {`${conv.lastMessageSenderName}: `}
-                        </span>
+                      <span className="font-medium">
+                        {" "}
+                        {`${conv.lastMessageSenderName}: `}{" "}
+                      </span>
                     )}
-                    {conv.message || "..."}
-                    </p>
-                </div>
+                    {conv.message || "..."}{" "}
+                  </p>{" "}
+                </div>{" "}
                 {conv.sentAt && (
-                    <span className="text-xs text-gray-400 self-start flex-shrink-0 ml-2">
+                  <span className="text-xs text-gray-400 self-start flex-shrink-0 ml-2">
+                    {" "}
                     {new Date(conv.sentAt).toLocaleTimeString("vi-VN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                    })}
-                    </span>
-                )}
-                </li>
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}{" "}
+                  </span>
+                )}{" "}
+              </li>
             ))
-            ) : (
+          ) : (
             <p className="text-center text-gray-500 py-6 italic">
-                {searchTerm
+              {" "}
+              {searchTerm
                 ? "Không tìm thấy nhóm chat nào."
-                : "Không có nhóm chat nào."}
+                : "Không có nhóm chat nào."}{" "}
             </p>
-            )}
-        </ul>
-        </div>
+          )}{" "}
+        </ul>{" "}
+      </div>
     );
-  }
-
+  };
 
   return (
     <div className="flex flex-col h-180 bg-white rounded-lg shadow overflow-hidden">
+      {" "}
       <div className="flex justify-between items-center p-4 border-b flex-shrink-0">
+        {" "}
         <h2 className="text-xl md:text-2xl font-bold text-purple-600">
-          Danh sách Chat
-        </h2>
-      </div>
+          Danh sách Chat{" "}
+        </h2>{" "}
+      </div>{" "}
       <div className="flex-1 overflow-hidden border-t md:border-t-0 md:border-l">
+        {" "}
         {viewMode === "list" ? (
           renderListView()
         ) : selectedConversation && currentUser ? (
@@ -861,6 +1104,7 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
             filteredParticipants={filteredParticipants}
             confirmRemoveMember={confirmRemoveMember}
             confirmLeaveGroup={confirmLeaveGroup}
+            confirmDisbandGroup={confirmDisbandGroup}
             handleSendMessage={handleSendMessage}
             triggerFileInput={triggerFileInput}
             handleFileChange={handleFileChange}
@@ -880,12 +1124,13 @@ const ChatTabContent: React.FC<ChatTabContentPropsFromUserHome> = ({
             isLoadingDetails={isLoadingDetails}
             removeConfirmationState={removeConfirmationState}
             leaveConfirmationState={leaveConfirmationState}
+            disbandConfirmationState={disbandConfirmationState}
             deleteMessageConfirmationState={deleteMessageConfirmationState}
           />
         ) : (
           renderListView()
-        )}
-      </div>
+        )}{" "}
+      </div>{" "}
     </div>
   );
 };

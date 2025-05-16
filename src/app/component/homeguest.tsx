@@ -2400,7 +2400,7 @@ export default function HomeGuest() {
       requiresAuth: true,
     },
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
-    { id: "chatList", label: "💬 Danh sách chat", requiresAuth: true },
+    { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true },
   ];
   const totalOtherTabPages = Math.ceil(tabs.length / TABS_PER_PAGE);
 

@@ -1305,7 +1305,7 @@ const executeBatchUnregistration = async (ids: string[]) => {
               <button
                 onClick={() => setRegisterViewMode("list")}
                 title="Danh sách"
-                className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out ${
+                className={`flex-1 sm:flex-none p-2 rounded-l-md border border-r-0 transition duration-150 ease-in-out cursor-pointer ${
                   registerViewMode === "list"
                     ? "bg-green-600 border-green-700 text-white shadow-sm z-10"
                     : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
@@ -1316,7 +1316,7 @@ const executeBatchUnregistration = async (ids: string[]) => {
               <button
                 onClick={() => setRegisterViewMode("card")}
                 title="Thẻ"
-                className={`flex-1 sm:flex-none p-2 rounded-r-md border transition duration-150 ease-in-out ${
+                className={`flex-1 sm:flex-none p-2 rounded-r-md border transition duration-150 ease-in-out cursor-pointer ${
                   registerViewMode === "card"
                     ? "bg-green-600 border-green-700 text-white shadow-sm z-10"
                     : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"

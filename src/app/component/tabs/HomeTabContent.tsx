@@ -125,7 +125,7 @@ const getMonthRange = (
   return { startOfMonth: start, endOfMonth: end };
 };
 
-const ITEMS_PER_PAGE_OPTIONS = [6, 12, 36];
+const ITEMS_PER_PAGE_OPTIONS = [6, 12, 18, 24, 36];
 
 interface HomeTabContentProps {
   allEvents: EventDisplayInfo[];
@@ -1069,7 +1069,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               onClick={() => {
                                 if (canClickRegister) onRegister(event);
                               }}
-                              className={`flex-grow px-3 py-1.5 rounded-md text-white text-xs font-medium flex items-center justify-center ${
+                              className={`flex-grow px-3 py-1.5 rounded-md text-white text-xs font-medium flex items-center justify-center cursor-pointer ${
                                 isRegistered
                                   ? "bg-green-500 cursor-default"
                                   : processing
@@ -1120,7 +1120,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           {canEdit && (
                             <button
                               onClick={() => handleEditEvent(event)}
-                              className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200"
+                              className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 cursor-pointer"
                               title="Sửa sự kiện"
                             >
                               <Pencil1Icon className="w-4 h-4" />
@@ -1130,7 +1130,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             <button
                               onClick={() => handleDeleteEvent(event)}
                               disabled={isDeleting === event.id}
-                              className={`p-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 ${
+                              className={`p-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 cursor-pointer ${
                                 isDeleting === event.id
                                   ? "opacity-50 cursor-wait"
                                   : ""
@@ -1237,7 +1237,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                               onClick={() => {
                                 if (canClickRegister) onRegister(event);
                               }}
-                              className={`px-3 py-1.5 cursor-pointer rounded-md text-white text-xs font-medium flex items-center justify-center ${
+                              className={`px-3 py-1.5 cursor-pointer rounded-md text-white text-xs font-medium flex items-center justify-center cursor-pointer ${
                                 isRegistered
                                   ? "bg-green-500 cursor-default"
                                   : processing
@@ -1287,7 +1287,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           {canEdit && (
                             <button
                               onClick={() => handleEditEvent(event)}
-                              className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200"
+                              className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 cursor-pointer"
                               title="Sửa sự kiện"
                             >
                               <Pencil1Icon className="w-4 h-4" />
@@ -1297,7 +1297,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             <button
                               onClick={() => handleDeleteEvent(event)}
                               disabled={isDeleting === event.id}
-                              className={`p-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 ${
+                              className={`p-2 rounded-md text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 cursor-pointer ${
                                 isDeleting === event.id
                                   ? "opacity-50 cursor-wait"
                                   : ""

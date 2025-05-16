@@ -17,6 +17,36 @@ export interface User {
   email?: string;
   gender?: boolean;
 }
+export type EventMember = {
+  userId: string;
+  roleId?: string;       // Event-specific Role ID (e.g., Organizer Role ID, Participant Role ID)
+  positionId?: string;   // User's Position ID at the time of adding
+  roleName?: string;     // Event-specific Role Name
+  positionName?: string; // User's Position Name
+};
+export type Event = {
+  id: string;
+  name: string;
+  purpose: string;
+  time: string; // Should be ISO string or Date object, handle appropriately
+  location: string;
+  content: string;
+  createdBy?: string; // User ID of the creator
+  organizers: EventMember[];
+  participants: EventMember[];
+  status?: "PENDING" | "APPROVED" | "REJECTED";
+  image?: string; // URL or path to a general event image
+  avatarUrl?: string | null; // URL to event's specific avatar/poster
+  attendees?: any[]; // Consider a more specific type if structure is known
+  rejectionReason?: string | null;
+  createdAt?: string; // Should be ISO string or Date
+  deleted?: boolean;
+  deletedAt?: string | null; // Should be ISO string or Date
+  deletedBy?: string | null; // User ID
+  progressStatus?: string;
+  qrCodeUrl?: string | null;
+  maxAttendees?: number | null;
+};
 
 export interface EventDisplayInfo {
   id: string;
@@ -96,6 +126,8 @@ export interface NewsItem {
   event?: { id: string; name?: string } | null;
   coverImageUrl?: string;
   rejectionReason?: string | null;
+  maxAttendees?: number|null ;
+  
 }
 
 export interface Participant {

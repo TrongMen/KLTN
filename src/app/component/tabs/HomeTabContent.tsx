@@ -215,7 +215,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       setIsLoadingCreator(true);
       setCreatorName(null);
       fetch(
-        `/identity/users/notoken/${selectedEvent.createdBy}`
+        `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -755,6 +755,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           >
             <ChevronLeftIcon className="h-7 w-7 " /> Quay lại
           </button>
+          {/* Console logs for debugging selectedEvent data */}
+          {/* {console.log("Selected Event Data DEBUG:", selectedEvent)}
+          {console.log("Max Attendees Value DEBUG:", selectedEvent.maxAttendees)}
+          {console.log("Type of Max Attendees DEBUG:", typeof selectedEvent.maxAttendees)} */}
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
               {selectedEvent.avatarUrl ? (
@@ -866,7 +870,10 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                     ✅ Số lượng đăng ký:
                   </strong>
                   <p className="text-sm text-gray-700">
-                    {selectedEvent.attendees?.length || 0} người
+                    {selectedEvent.attendees?.length || 0}
+                    {typeof selectedEvent.maxAttendees === 'number'
+                      ? ` / ${selectedEvent.maxAttendees} người`
+                      : " người (Không giới hạn)"}
                   </p>
                 </div>
               </div>
@@ -1044,11 +1051,14 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                             {event.location}
                           </p>
                         </div>
-                        <div className="text-xs flex items-center gap-x-3 mt-1">
-                          {event.attendees && event.attendees.length > 0 && (
-                            <span>✅ Đã đăng ký: {event.attendees.length}</span>
-                          )}
-                        </div>
+                        <div className="text-xs text-gray-600 mt-1">
+                           <span>
+                             ✅ Đã đăng ký: {event.attendees?.length || 0}
+                             {typeof event.maxAttendees === 'number'
+                               ? ` / ${event.maxAttendees}`
+                               : " (Không giới hạn)"}
+                           </span>
+                         </div>
                         <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
                           {isCreatedByUser ? (
                             <div className="w-full px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium text-center">
@@ -1207,6 +1217,12 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                                 className={`${getStatusBadgeClasses(status)}`}
                               >
                                 {getStatusIcon(status)} {getStatusText(status)}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                (ĐK: {event.attendees?.length || 0}
+                                {typeof event.maxAttendees === 'number'
+                                  ? `/${event.maxAttendees}`
+                                  : ""})
                               </span>
                             </div>
                           </div>

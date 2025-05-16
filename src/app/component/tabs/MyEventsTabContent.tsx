@@ -77,7 +77,7 @@ export interface EventType {
   progressStatus?: string;
   title?: string; // alias cho name
   date?: string; // alias cho time
-  maxAttendees?: number;
+  maxAttendees?: number |null;
   currentAttendeesCount?: number;
 }
 
@@ -484,10 +484,11 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     const organizersForModal: ModalEventType["organizers"] =
       eventFromMyCreatedTab.organizers?.map((org) => ({
         userId: org.userId,
-        roleId: org.roles?.[0]?.id || "", // Lấy roleId từ vai trò đầu tiên trong sự kiện, hoặc để trống
+        roleId: org.roles?.[0]?.id || "",
+        roleName: org.roles?.[0]?.name || "",
         positionId: org.positionName
           ? personDetailsCacheRef.current[org.userId]?.id || ""
-          : "", // Cần cách lấy positionId chuẩn hơn
+          : "", // 
         name:
           org.fullName ||
           `${org.lastName || ""} ${org.firstName || ""}`.trim() ||
@@ -498,6 +499,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       eventFromMyCreatedTab.participants?.map((par) => ({
         userId: par.userId,
         roleId: par.roles?.[0]?.id || "",
+         roleName: par.roles?.[0]?.name || "",
         positionId: par.positionName ? "" : "", // Tương tự, cần cách lấy positionId
         name:
           par.fullName ||
@@ -513,7 +515,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       location: eventFromMyCreatedTab.location || "",
       content: eventFromMyCreatedTab.content || "",
       maxAttendees: eventFromMyCreatedTab.maxAttendees ?? "",
-      status: eventFromMyCreatedTab.status as ModalEventType["status"], // Ép kiểu nếu cần
+      status: eventFromMyCreatedTab.status as ModalEventType["status"], 
       avatarUrl: eventFromMyCreatedTab.avatarUrl,
       organizers: organizersForModal,
       participants: participantsForModal,
@@ -1190,7 +1192,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               </div>
             </div>
           </div>
-          {/* ... Purpose, Content ... */}
+          
           {(event.purpose || event.content) && !isDeletedEvent && (
             <div className="mt-8 pt-6 border-t border-gray-200">
               <h4 className="text-xl font-semibold text-gray-800 mb-3">

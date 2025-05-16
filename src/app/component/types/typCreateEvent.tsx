@@ -100,6 +100,7 @@ export interface OrganizerParticipantInput {
   positionId: string;
   name?: string;
   roleName?: string;
+
 }
 
 // Type cho dữ liệu sự kiện nhận từ API hoặc để điền form khi edit
@@ -112,7 +113,7 @@ export interface EventDataForForm {
   content: string;
   organizers: OrganizerParticipantInput[];
   participants: OrganizerParticipantInput[];
-  maxAttendees: number | null; // API có thể trả về null
+  maxAttendees: number | null ; 
   status?: "PENDING" | "APPROVED" | "REJECTED"; // Trạng thái của sự kiện
   createdBy?: string;
   // Thêm các trường khác nếu API trả về và bạn muốn hiển thị/sử dụng

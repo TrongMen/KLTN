@@ -16,14 +16,12 @@ import HomeTabContent from "./tabs/HomeTabContent";
 import MyEventsTabContent, {
   EventType as MyEventType,
 } from "./tabs/MyEventsTabContent";
-// import AttendeesTabContent from "./tabs/AttendeesTabContent";
 import AttendeesTabContent from "./tabs/AttendeesTabContentUser";
-
 import MembersTabContent from "./tabs/MembersTabContent";
 import ChatTabContent from "./tabs/ChatTabContent";
 import MyNewsTabContent from "./tabs/MyNewsTabContent";
 import NewsTabContent from "./tabs/NewsTabContent";
-import CreateNewsModal, { NewsFormData } from "./modals/CreateNewsModal";
+import CreateNewsModal from "./modals/CreateNewsModal";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import { ConfirmationDialog } from "../../utils/ConfirmationDialog";
@@ -33,7 +31,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@radix-ui/react-icons";
-
 import { User, EventDisplayInfo, NewsItem } from "./types/appTypes";
 import {
   ChatMessageNotificationPayload,
@@ -114,7 +111,6 @@ export default function UserHome() {
   const notificationButtonRef = useRef<HTMLButtonElement>(null);
   const notificationContainerRef = useRef<HTMLDivElement>(null);
   const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
-  const [isSubmittingNews, setIsSubmittingNews] = useState(false);
   const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
   const initializedRef = useRef(false);
   const router = useRouter();
@@ -201,6 +197,7 @@ export default function UserHome() {
     },
     [chatUserCache, user?.id]
   );
+
   const getChatDisplayName = useCallback(
     (
       detail: ApiUserDetail | ChatParticipant | null,
@@ -230,6 +227,7 @@ export default function UserHome() {
     },
     []
   );
+
   const fetchChatConversationsAPI = useCallback(async () => {
     if (!user?.id) {
       setErrorChatConversations("User invalid.");
@@ -350,6 +348,7 @@ export default function UserHome() {
       setIsLoadingChatConversations(false);
     }
   }, [user, fetchChatUserDetailsWithCache, getChatDisplayName, chatUserCache]);
+
   const fetchChatMessagesAPI = useCallback(
     async (groupId: string) => {
       if (!groupId || !user?.id) return;
@@ -448,6 +447,7 @@ export default function UserHome() {
       selectedChatConversation?.participants,
     ]
   );
+
   const fetchGroupChatDetailsAPI = useCallback(
     async (groupId: string) => {
       if (!groupId || !user?.id) return;
@@ -557,6 +557,7 @@ export default function UserHome() {
       chatUserCache,
     ]
   );
+
   const fetchChatMediaMessagesAPI = useCallback(async (groupId: string) => {
     setIsLoadingChatMedia(true);
     setErrorChatMedia(null);
@@ -592,6 +593,7 @@ export default function UserHome() {
       setIsLoadingChatMedia(false);
     }
   }, []);
+
   const fetchChatFileMessagesAPI = useCallback(async (groupId: string) => {
     setIsLoadingChatFiles(true);
     setErrorChatFiles(null);
@@ -627,6 +629,7 @@ export default function UserHome() {
       setIsLoadingChatFiles(false);
     }
   }, []);
+
   const fetchChatAudioMessagesAPI = useCallback(async (groupId: string) => {
     setIsLoadingChatAudio(true);
     setErrorChatAudio(null);
@@ -662,6 +665,7 @@ export default function UserHome() {
       setIsLoadingChatAudio(false);
     }
   }, []);
+
   const handleRemoveMemberChatAPI = useCallback(
     async (groupId: string | number, memberId: string, leaderId: string) => {
       if (!groupId || !memberId || !leaderId) {
@@ -695,6 +699,7 @@ export default function UserHome() {
     },
     [fetchGroupChatDetailsAPI]
   );
+
   const handleLeaveGroupChatAPI = useCallback(
     async (groupId: string | number, memberId: string) => {
       if (!groupId || !memberId) {
@@ -731,6 +736,7 @@ export default function UserHome() {
     },
     []
   );
+
   const handleSendMessageChatAPI = useCallback(
     async (
       groupId: string,
@@ -800,6 +806,7 @@ export default function UserHome() {
     },
     []
   );
+
   const handleSendFileChatAPI = useCallback(
     async (
       groupId: string,
@@ -873,6 +880,7 @@ export default function UserHome() {
     },
     []
   );
+
   const handleDeleteMessageChatAPI = useCallback(
     async (
       msgId: string,
@@ -951,6 +959,7 @@ export default function UserHome() {
       getChatDisplayName,
     ]
   );
+
   const handleDownloadFileChatAPI = useCallback(
     async (msgId: string, fName?: string | null) => {
       if (!msgId) return;
@@ -1011,6 +1020,7 @@ export default function UserHome() {
     },
     []
   );
+
   const fetchNews = useCallback(async () => {
     setIsLoadingNews(true);
     setErrorNews(null);
@@ -1072,6 +1082,7 @@ export default function UserHome() {
       setIsLoadingNews(false);
     }
   }, [refreshToken]);
+
   const fetchAllEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     setErrorEvents(null);
@@ -1124,6 +1135,8 @@ export default function UserHome() {
             organizers: e.organizers || [],
             participants: e.participants || [],
             attendees: e.attendees || [],
+            maxAttendees: e.maxAttendees || 0,
+            event: e.event,
           }));
         setAllEvents(fmt);
       } else throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
@@ -1135,6 +1148,7 @@ export default function UserHome() {
       setIsLoadingEvents(false);
     }
   }, [refreshToken, router]);
+
   const fetchRegisteredEventIds = useCallback(
     async (userIdParam: string, token: string | null) => {
       if (!userIdParam || !token) {
@@ -1185,6 +1199,7 @@ export default function UserHome() {
     },
     [refreshToken, router]
   );
+
   const fetchUserCreatedEvents = useCallback(
     async (userIdParam: string, token: string | null) => {
       if (!userIdParam || !token) {
@@ -1233,6 +1248,7 @@ export default function UserHome() {
     },
     [refreshToken, router]
   );
+
   const fetchNotifications = useCallback(
     async (userIdParam: string, token: string | null) => {
       if (!userIdParam || !token) {
@@ -1543,6 +1559,7 @@ export default function UserHome() {
       setIsRegistering(null);
     }
   };
+
   const handleRegister = (event: EventDisplayInfo) => {
     if (!user?.id) {
       toast.error("Đăng nhập để đăng ký.");
@@ -1586,6 +1603,7 @@ export default function UserHome() {
       cancelText: "Hủy",
     });
   };
+
   const handleRegistrationChange = useCallback(
     (eventId: string, registered: boolean) => {
       setRegisteredEventIds((prevIds) => {
@@ -1597,8 +1615,10 @@ export default function UserHome() {
     },
     []
   );
+
   const handleEventClick = (event: EventDisplayInfo) => setSelectedEvent(event);
   const handleBackToList = () => setSelectedEvent(null);
+
   const handleLogout = async () => {
     try {
       const t = localStorage.getItem("authToken");
@@ -1625,11 +1645,14 @@ export default function UserHome() {
       router.push("/login");
     }
   };
+
   const refreshNewsList = useCallback(() => {
     fetchNews();
   }, [fetchNews]);
+
   const handleNotificationClick = () =>
     setShowNotificationDropdown((prev) => !prev);
+
   const handleMarkAsRead = async (notificationId: string) => {
     let token = localStorage.getItem("authToken");
     if (!token || !user?.id) {
@@ -1674,94 +1697,7 @@ export default function UserHome() {
         router.push("/login?sessionExpired=true");
     }
   };
-  const handleNewsFormSubmit = async (
-    formData: NewsFormData,
-    newsId?: string
-  ) => {
-    if (!user) {
-      toast.error("Vui lòng đăng nhập để thực hiện.");
-      return;
-    }
-    setIsSubmittingNews(true);
-    const apiFormData = new FormData();
-    apiFormData.append("title", formData.title);
-    apiFormData.append("content", formData.content);
-    if (formData.eventId) {
-      apiFormData.append("eventId", formData.eventId);
-    }
-    let API_URL = `http://localhost:8080/identity/api/news`;
-    let method = "POST";
-    let currentToken = localStorage.getItem("authToken");
-    if (newsId) {
-      API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
-      method = "PUT";
-      if (formData.imageFile) {
-        apiFormData.append("coverImage", formData.imageFile);
-      }
-    } else {
-      apiFormData.append("type", "NEWS");
-      apiFormData.append("featured", "false");
-      apiFormData.append("pinned", "false");
-      apiFormData.append("createdById", user.id);
-      if (formData.imageFile) {
-        apiFormData.append("coverImage", formData.imageFile);
-      }
-    }
-    try {
-      let headers: HeadersInit = {};
-      if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      let response = await fetch(API_URL, {
-        method: method,
-        headers: headers,
-        body: apiFormData,
-      });
-      if (
-        (response.status === 401 || response.status === 403) &&
-        currentToken &&
-        refreshToken
-      ) {
-        const newToken = await refreshToken();
-        if (newToken) {
-          currentToken = newToken;
-          localStorage.setItem("authToken", newToken);
-          headers["Authorization"] = `Bearer ${currentToken}`;
-          response = await fetch(API_URL, {
-            method: method,
-            headers: headers,
-            body: apiFormData,
-          });
-        } else {
-          throw new Error("Refresh token failed or missing.");
-        }
-      }
-      const result = await response.json();
-      if (response.ok && result.code === 1000) {
-        toast.success(
-          result.message ||
-            (newsId ? "Cập nhật thành công!" : "Tạo mới thành công!")
-        );
-        setIsNewsModalOpen(false);
-        setEditingNewsItem(null);
-        refreshNewsList();
-        if (activeTab === "myNews") {
-        }
-      } else {
-        toast.error(
-          result.message ||
-            (newsId ? "Cập nhật thất bại." : "Tạo mới thất bại.")
-        );
-      }
-    } catch (error: any) {
-      if (error.message?.includes("Refresh token failed")) {
-        toast.error("Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
-        router.push("/login?sessionExpired=true");
-      } else {
-        toast.error("Lỗi khi gửi yêu cầu: " + error.message);
-      }
-    } finally {
-      setIsSubmittingNews(false);
-    }
-  };
+
   const handleOpenCreateModal = () => {
     if (!user) {
       toast.error("Vui lòng đăng nhập.");
@@ -1770,20 +1706,32 @@ export default function UserHome() {
     setEditingNewsItem(null);
     setIsNewsModalOpen(true);
   };
+
   const handleOpenEditModal = (newsItem: NewsItem) => {
     setEditingNewsItem(newsItem);
     setIsNewsModalOpen(true);
   };
+
   const handleCloseModal = () => {
-    if (!isSubmittingNews) {
-      setIsNewsModalOpen(false);
-      setEditingNewsItem(null);
+    setIsNewsModalOpen(false);
+    setEditingNewsItem(null);
+  };
+  
+  const handleNewsActionSuccess = (createdOrUpdatedItem?: NewsItem) => {
+    setIsNewsModalOpen(false);
+    setEditingNewsItem(null);
+    refreshNewsList();
+    if (activeTab === "myNews" || activeTab === "news") {
+      // NewsTabContent and MyNewsTabContent might need a signal to refresh if they don't rely on `newsItems` prop from UserHome
+      // For now, refreshNewsList updates the main newsItems state which should flow down or trigger re-renders.
     }
   };
+
   const handleSessionExpired = useCallback(
     () => router.push("/login?sessionExpired=true"),
     [router]
   );
+
   const handleGlobalEventRefresh = useCallback(() => {
     fetchAllEvents();
     const token = localStorage.getItem("authToken");
@@ -1862,6 +1810,7 @@ export default function UserHome() {
       activeTab === tabName ? active : specificText
     } ${activeTab !== tabName ? inactive : ""} ${specificHover}`;
   };
+
   const getActiveIndicatorColor = (tabName: ActiveTab): string => {
     switch (tabName) {
       case "home":
@@ -1886,10 +1835,12 @@ export default function UserHome() {
         return "border-t-gray-400";
     }
   };
+
   const unreadNotificationCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications]
   );
+
   const tabs = [
     { id: "home", label: "🎉 Trang chủ", requiresAuth: false },
     { id: "news", label: "📰 Bảng tin", requiresAuth: false },
@@ -1900,7 +1851,9 @@ export default function UserHome() {
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
     { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true },
   ];
+
   const totalOtherTabPages = Math.ceil(tabs.length / TABS_PER_PAGE);
+
   const currentVisibleOtherTabs = useMemo(() => {
     const adjustedPage = Math.min(
       currentTabSetPage,
@@ -1911,16 +1864,19 @@ export default function UserHome() {
     const end = start + TABS_PER_PAGE;
     return tabs.slice(start, end);
   }, [tabs, currentTabSetPage, TABS_PER_PAGE, totalOtherTabPages]);
+
   useEffect(() => {
     const newTotal = Math.ceil(tabs.length / TABS_PER_PAGE);
     if (currentTabSetPage >= newTotal && newTotal > 0)
       setCurrentTabSetPage(newTotal - 1);
     else if (newTotal === 0 && currentTabSetPage !== 0) setCurrentTabSetPage(0);
   }, [TABS_PER_PAGE, tabs.length, currentTabSetPage]);
+
   const handleNextTabs = () =>
     setCurrentTabSetPage((prev) => Math.min(prev + 1, totalOtherTabPages - 1));
   const handlePrevTabs = () =>
     setCurrentTabSetPage((prev) => Math.max(prev - 1, 0));
+
   const showPrevButton = currentTabSetPage > 0 && tabs.length > TABS_PER_PAGE;
   const showNextButton =
     currentTabSetPage < totalOtherTabPages - 1 && tabs.length > TABS_PER_PAGE;
@@ -1955,8 +1911,8 @@ export default function UserHome() {
     setEventToEditInModal(eventForModal);
     setIsUpdateEventModalOpen(true);
   };
-   const openModalForEventUpdateHome = (eventData: EventDisplayInfo | MyEventType) => { 
-    
+
+  const openModalForEventUpdateHome = (eventData: EventDisplayInfo | MyEventType) => {  
     const eventForModal: EventDataForForm = {
         id: eventData.id,
         name: eventData.name || (eventData as EventDisplayInfo).title || "", 
@@ -2122,7 +2078,7 @@ export default function UserHome() {
                 isLoadingNews={isLoadingNews}
                 errorNews={errorNews}
                 refreshNewsList={refreshNewsList}
-                onOpenUpdateModal={openModalForEventUpdate}
+                onOpenUpdateModal={openModalForEventUpdateHome}
               />
             )}
             {activeTab === "news" && (
@@ -2131,11 +2087,14 @@ export default function UserHome() {
                 isLoading={isLoadingNews}
                 error={errorNews}
                 user={user}
-                onOpenCreateModal={handleOpenCreateModal}
-                onOpenEditModal={handleOpenEditModal}
                 onNewsDeleted={refreshNewsList}
                 refreshToken={refreshToken}
                 onRefreshNews={fetchNews}
+                allEvents={allEvents}
+                registeredEventIds={registeredEventIds}
+                createdEventIdsForEvents={createdEventIds}
+                onRegisterForEvent={handleRegister}
+                isRegisteringForEventId={isRegistering}
               />
             )}
             {user && activeTab === "myNews" && (
@@ -2144,9 +2103,9 @@ export default function UserHome() {
                 onNewsChange={() => {
                   fetchNews();
                 }}
+                refreshToken={refreshToken}
               />
             )}
-
             {user && activeTab === "createEvent" && (
               <CreateEventForm
                 user={user}
@@ -2156,7 +2115,6 @@ export default function UserHome() {
                 }}
               />
             )}
-
             {user && activeTab === "myEvents" && (
               <MyEventsTabContent
                 user={user}
@@ -2170,10 +2128,10 @@ export default function UserHome() {
             )}
             {user && activeTab === "attendees" && (
                <AttendeesTabContent
-    user={user}                             
-    refreshToken={refreshToken}             
-    onSessionExpired={handleSessionExpired} 
-  />
+                  user={user}               
+                  refreshToken={refreshToken}  
+                  onSessionExpired={handleSessionExpired} 
+              />
             )}
             {user && activeTab === "members" && (
               <MembersTabContent
@@ -2299,12 +2257,12 @@ export default function UserHome() {
       <CreateNewsModal
         isOpen={isNewsModalOpen}
         onClose={handleCloseModal}
-        onSubmit={handleNewsFormSubmit}
-        isSubmitting={isSubmittingNews}
+        onActionSuccess={handleNewsActionSuccess}
         editMode={!!editingNewsItem}
         initialData={editingNewsItem}
+        user={user}
+        refreshToken={refreshToken}
       />
-
       {user && eventToEditInModal && (
         <ModalUpdateEvent
           isOpen={isUpdateEventModalOpen}

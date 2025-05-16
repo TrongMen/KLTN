@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import Image from "next/image";
 import { User as MainUserType, NewsItem } from "../types/appTypes";
-import ConfirmationDialog from "../../../utils/ConfirmationDialog";
+import ConfirmationDialog, { ConfirmationDialogProps } from "../../../utils/ConfirmationDialog";
+import CreateNewsModal from "../modals/CreateNewsModal";
 import {
   ArrowLeftIcon,
   CheckCircledIcon,
@@ -21,7 +22,6 @@ import {
   PlusIcon,
   Pencil1Icon,
 } from "@radix-ui/react-icons";
-import CreateNewsModal, { NewsFormData } from "../modals/CreateNewsModal";
 
 const getWeekRange = (
   refDate: Date
@@ -92,13 +92,13 @@ const renderStatusBadge = (status: NewsItem["status"]) => {
   }
 };
 
-
 interface MyNewsProps {
   user: MainUserType | null;
-   onNewsChange?: () => void;
+  onNewsChange?: () => void;
+  refreshToken?: () => Promise<string | null>;
 }
 
-const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
+const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshToken }) => {
   const [mainTab, setMainTab] = useState<"myNews" | "deletedNews">("myNews");
   const [myNewsTab, setMyNewsTab] = useState<
     "approved" | "pending" | "rejected"
@@ -132,15 +132,15 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
     null
   );
   const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isSubmittingNews, setIsSubmittingNews] = useState(false);
+  const [isNewsModalOpen, setIsNewsModalOpen] = useState(false);
+  
   const [confirmationState, setConfirmationState] = useState<
     ConfirmationDialogProps & { isOpen: boolean }
   >({
     isOpen: false,
     title: "",
     message: "",
-    onConfirm: () => {},
+    onConfirm: async () => {},
     onCancel: () => {},
   });
   const [isRestoring, setIsRestoring] = useState<string | null>(null);
@@ -205,9 +205,10 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
             deleted: item.deleted,
             deletedAt: item.deletedAt,
             deletedBy: item.deletedBy,
+            maxAttendees: item.maxAttendees // Đảm bảo trường này được map nếu có từ API
           }));
           userNewsOfStatus = allNewsOfStatus.filter(
-            (item) => item.createdBy?.id === currentUserId
+            (item) => item.createdBy?.id === currentUserId && !item.deleted 
           );
         } else {
           console.warn(
@@ -254,7 +255,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
           Array.isArray(data.result.content)
         ) {
           const userDeletedNews: NewsItem[] = data.result.content
-            .filter((item: any) => item.createdBy?.id === currentUserId)
+            .filter((item: any) => item.createdBy?.id === currentUserId) // Chỉ lấy tin tức đã xóa do người dùng hiện tại tạo
             .map((item: any) => ({
               id: item.id,
               title: item.title || "N/A",
@@ -274,12 +275,13 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
               deleted: item.deleted,
               deletedAt: item.deletedAt,
               deletedBy: item.deletedBy,
+              maxAttendees: item.maxAttendees 
             }));
 
           setDeletedNewsItems(userDeletedNews);
           const totalUserElements = data.result.totalElements;
           const totalUserPages = Math.ceil(totalUserElements / size);
-
+          
           setDeletedNewsPagination({
             page: data.result.number,
             size: data.result.size,
@@ -316,7 +318,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
     },
     [currentUserId]
   );
-
+  
   const handleRefresh = useCallback(async () => {
     if (isRefreshing) return;
 
@@ -329,7 +331,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
       }
 
       if (mainTab === "myNews") {
-        setRefreshMyNewsTrigger(prev => prev + 1);
+        setRefreshMyNewsTrigger(prev => prev + 1); 
       } else if (mainTab === "deletedNews") {
         await fetchDeletedNews(deletedNewsPagination.page, deletedNewsPagination.size);
       }
@@ -347,9 +349,8 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
     fetchDeletedNews,
     deletedNewsPagination.page,
     deletedNewsPagination.size,
-    setRefreshMyNewsTrigger
+    setRefreshMyNewsTrigger 
   ]);
-
 
   useEffect(() => {
     if (mainTab === "myNews" && currentUserId) {
@@ -394,7 +395,11 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
 
           setMyNewsItemCounts(newCounts);
           setMyNewsError(combinedErrorMessages.trim());
-          setCurrentMyNewsItems(initialTabItems ?? []);
+          if (initialTabItems !== null) { // Chỉ cập nhật nếu có dữ liệu mới cho tab hiện tại
+            setCurrentMyNewsItems(initialTabItems);
+          } else if (myNewsTab) { // Nếu không có, thử fetch lại cho tab hiện tại nếu nó được set
+             fetchMyNewsData(myNewsTab).then(res => setCurrentMyNewsItems(res.items)).catch(err => setMyNewsError(err.message));
+          }
           setIsLoadingMyNewsContent(false);
         })
         .finally(() => setIsLoadingMyNewsCounts(false));
@@ -409,54 +414,27 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
     mainTab,
     currentUserId,
     fetchMyNewsData,
-    myNewsTab,
+    myNewsTab, // Thêm myNewsTab vào dependency để load lại khi tab con thay đổi
     refreshMyNewsTrigger,
   ]);
-
+  
+  // Effect riêng để load content của sub-tab khi myNewsTab thay đổi (và không phải là initial load của counts)
   useEffect(() => {
-    const isInitialLoadForCounts = isLoadingMyNewsCounts;
-    const isDataPotentiallyLoaded =
-      !isInitialLoadForCounts &&
-      currentMyNewsItems.length > 0 &&
-      currentMyNewsItems[0]?.status?.toUpperCase() === myNewsTab.toUpperCase();
-
-    if (
-      mainTab !== "myNews" ||
-      isInitialLoadForCounts ||
-      !currentUserId ||
-      isDataPotentiallyLoaded
-    ) {
-      if (isDataPotentiallyLoaded && isLoadingMyNewsContent) {
-        setIsLoadingMyNewsContent(false);
-      }
-      return;
+    if (mainTab === "myNews" && currentUserId && !isLoadingMyNewsCounts) {
+      setIsLoadingMyNewsContent(true);
+      setMyNewsError("");
+      fetchMyNewsData(myNewsTab)
+        .then(result => {
+          setCurrentMyNewsItems(result.items);
+        })
+        .catch(err => {
+          setMyNewsError(`Lỗi tải tin ${myNewsTab}: ${err.message || "Unknown error"}`);
+          setCurrentMyNewsItems([]);
+        })
+        .finally(() => setIsLoadingMyNewsContent(false));
     }
+  }, [mainTab, myNewsTab, currentUserId, fetchMyNewsData, isLoadingMyNewsCounts, refreshMyNewsTrigger]);
 
-    setIsLoadingMyNewsContent(true);
-    setMyNewsError("");
-    setCurrentMyNewsItems([]);
-
-    fetchMyNewsData(myNewsTab)
-      .then((result) => {
-        setCurrentMyNewsItems(result.items);
-        setMyNewsItemCounts((prev) => ({ ...prev, [myNewsTab]: result.count }));
-      })
-      .catch((err) => {
-        console.error(`Error fetching content for sub-tab ${myNewsTab}:`, err);
-        setMyNewsError(
-          `Lỗi tải tin ${myNewsTab}: ${err.message || "Unknown error"}`
-        );
-        setCurrentMyNewsItems([]);
-      })
-      .finally(() => setIsLoadingMyNewsContent(false));
-  }, [
-    mainTab,
-    myNewsTab,
-    currentUserId,
-    fetchMyNewsData,
-    isLoadingMyNewsCounts,
-    isLoadingMyNewsContent,
-  ]);
 
   useEffect(() => {
     if (mainTab === "deletedNews" && currentUserId) {
@@ -476,106 +454,33 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
     mainTab,
     currentUserId,
     fetchDeletedNews,
-    deletedNewsPagination.page,
+    deletedNewsPagination.page, 
     deletedNewsPagination.size,
+    refreshMyNewsTrigger
   ]);
 
-
-  const handleOpenCreateModal = (itemToEdit: NewsItem | null = null) => {
+  const handleOpenModalForCreateOrEdit = (itemToEdit: NewsItem | null = null) => {
     if (!user) {
       toast.error("Vui lòng đăng nhập để thực hiện.");
       return;
     }
     setEditingNewsItem(itemToEdit);
-    setIsCreateModalOpen(true);
+    setIsNewsModalOpen(true);
   };
+  
   const handleNewsModalClose = () => {
-     if (!isSubmittingNews) {
-      setIsCreateModalOpen(false);
-      setEditingNewsItem(null);
-    }
+    setIsNewsModalOpen(false);
+    setEditingNewsItem(null); 
   };
-
-  const handleNewsFormSubmit = useCallback(
-    async (formData: NewsFormData) => {
-      if (!currentUserId) {
-        toast.error("Không thể thực hiện. Thiếu ID người dùng.");
-        return;
-      }
-      setIsSubmittingNews(true);
-      const isEditing = !!editingNewsItem;
-      const toastId = toast.loading(
-        isEditing ? "Đang cập nhật..." : "Đang tạo..."
-      );
-
-      try {
-        const token = localStorage.getItem("authToken");
-        if (!token) throw new Error("Vui lòng đăng nhập lại.");
-
-        const apiFormData = new FormData();
-        apiFormData.append("title", formData.title);
-        apiFormData.append("content", formData.content);
-
-        if (formData.imageFile instanceof File) {
-          apiFormData.append("coverImage", formData.imageFile);
-        }
-        if (formData.eventId) {
-          apiFormData.append("eventId", formData.eventId);
-        }
-
-        let API_URL = `http://localhost:8080/identity/api/news`;
-        let method = "POST";
-
-        if (isEditing && editingNewsItem) {
-          API_URL = `http://localhost:8080/identity/api/news/${editingNewsItem.id}?UserId=${currentUserId}`;
-          method = "PUT";
-        } else {
-          apiFormData.append("type", "NEWS");
-          apiFormData.append("featured", "false");
-          apiFormData.append("pinned", "false");
-          apiFormData.append("createdById", currentUserId);
-        }
-
-        const headers: HeadersInit = { Authorization: `Bearer ${token}` };
-
-        const response = await fetch(API_URL, {
-          method: method,
-          headers: headers,
-          body: apiFormData,
-        });
-
-        const responseData = await response.json();
-
-        if (!response.ok || responseData.code !== 1000) {
-          console.error("API Error Response:", responseData);
-          throw new Error(
-            responseData.message ||
-              `Lỗi ${isEditing ? "cập nhật" : "tạo"} (${response.status})`
-          );
-        }
-
-        toast.success(
-          responseData.message ||
-            (isEditing ? "Cập nhật thành công!" : "Tạo mới thành công!"),
-          { id: toastId }
-        );
-        handleNewsModalClose();
-        setRefreshMyNewsTrigger((prev) => prev + 1);
-        if (!isEditing) {
-          setMyNewsTab("pending");
-        }
-      } catch (error: any) {
-        console.error(`Lỗi ${isEditing ? "cập nhật" : "tạo"}:`, error);
-        toast.error(
-          `${isEditing ? "Cập nhật" : "Tạo"} thất bại: ${error.message}`,
-          { id: toastId }
-        );
-      } finally {
-        setIsSubmittingNews(false);
-      }
-    },
-    [currentUserId, editingNewsItem, handleNewsModalClose]
-  );
+  
+  const handleNewsActionSuccess = (createdOrUpdatedItem?: NewsItem, actionWasEditMode?: boolean) => {
+    handleNewsModalClose();
+    setRefreshMyNewsTrigger(prev => prev + 1);
+    if (onNewsChange) {
+        onNewsChange();
+    }
+    setMyNewsTab("pending"); 
+  };
 
   const executeDeleteNews = useCallback(
     async (newsId: string, newsTitle: string) => {
@@ -665,7 +570,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
           deletedNewsPagination.page,
           deletedNewsPagination.size
         );
-        setRefreshMyNewsTrigger((prev) => prev + 1);
+        setRefreshMyNewsTrigger((prev) => prev + 1); 
       } catch (err: any) {
         console.error(`Lỗi khôi phục tin ${newsId}:`, err);
         toast.error(`Khôi phục thất bại: ${err.message}`, { id: toastId });
@@ -815,13 +720,13 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
   const renderNewsDetails = (item: NewsItem) => {
     const isDeleted = mainTab === "deletedNews";
     const processing =
-      isDeleting === item.id || isRestoring === item.id || isSubmittingNews;
+      isDeleting === item.id || isRestoring === item.id;
     const canEdit = !isDeleted && user?.id === item.createdBy?.id;
     const canDelete = !isDeleted && user?.id === item.createdBy?.id;
     const canRestore = isDeleted && user?.id === item.createdBy?.id;
 
     return (
-      <div className="p-1  overflow-y-auto mb-4 pr-2 bg-white p-4 rounded-lg shadow border scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+      <div className="p-1 overflow-y-auto mb-4 pr-2 bg-white p-4 rounded-lg shadow border scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
         <button
           onClick={() => setViewingNewsDetails(null)}
           className="mb-4 text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer p-1 rounded hover:bg-blue-50"
@@ -935,7 +840,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
           )}
           {canEdit && (
             <button
-              onClick={() => handleOpenCreateModal(item)}
+              onClick={() => handleOpenModalForCreateOrEdit(item)}
               disabled={!!isDeleting || processing}
               className={`px-4 py-2 rounded text-white shadow-sm transition text-sm font-medium flex items-center gap-1.5 ${
                 isDeleting || processing
@@ -978,6 +883,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
       </div>
     );
   };
+
   const renderMyNewsList = () => {
     const isLoading = isLoadingMyNewsContent;
     const error = myNewsError;
@@ -1039,7 +945,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                   className="cursor-pointer flex flex-col flex-grow h-full"
                 >
                   {item.imageUrl && (
-                    <div className="relative w-full h-80 mb-3 rounded overflow-hidden bg-gray-50">
+                    <div className="relative w-full h-40 sm:h-48 md:h-36 lg:h-40 xl:h-48 mb-3 rounded overflow-hidden bg-gray-50">
                       <Image
                         src={item.imageUrl}
                         alt={item.title}
@@ -1079,7 +985,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                   {user?.id === item.createdBy?.id && (
                     <>
                       <button
-                        onClick={() => handleOpenCreateModal(item)}
+                        onClick={() => handleOpenModalForCreateOrEdit(item)}
                         disabled={isDeleting === item.id}
                         className={`p-1.5 rounded text-indigo-600 hover:bg-indigo-100 transition duration-150 ease-in-out flex items-center gap-1 text-xs font-medium ${
                           isDeleting === item.id
@@ -1160,7 +1066,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                     {user?.id === item.createdBy?.id && (
                       <>
                         <button
-                          onClick={() => handleOpenCreateModal(item)}
+                          onClick={() => handleOpenModalForCreateOrEdit(item)}
                           disabled={isDeleting === item.id}
                           className={`p-1.5 rounded text-indigo-600 hover:bg-indigo-100 transition duration-150 ease-in-out flex items-center gap-1 text-xs font-medium ${
                             isDeleting === item.id
@@ -1428,7 +1334,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
 
 
   return (
-    <div className="flex flex-col h-270 p-3 md:p-5 bg-gray-50">
+    <div className="flex flex-col h-full p-3 md:p-5 bg-gray-50">
       <div className="flex flex-wrap gap-x-6 gap-y-2 mb-5 border-b border-gray-200 flex-shrink-0">
         <button
           onClick={() => {
@@ -1470,7 +1376,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                 </h2>
                 <button
                     onClick={handleRefresh}
-                    disabled={isRefreshing || isLoadingMyNewsCounts || isLoadingMyNewsContent || !!isDeleting || !!isRestoring || isSubmittingNews}
+                    disabled={isRefreshing || isLoadingMyNewsCounts || isLoadingMyNewsContent || !!isDeleting || !!isRestoring }
                     className="p-1.5 sm:p-2 cursor-pointer border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
                     title="Làm mới danh sách tin tức"
                 >
@@ -1482,7 +1388,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                 </button>
               </div>
               <button
-                onClick={() => handleOpenCreateModal(null)}
+                onClick={() => handleOpenModalForCreateOrEdit(null)}
                 className="px-3 py-1.5 sm:px-4 sm:py-2 cursor-pointer bg-indigo-600 text-white rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-1.5 transition-colors duration-150"
               >
                 <PlusIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Tạo Bảng Tin
@@ -1555,7 +1461,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
                     value={myNewsSortOrder}
                     onChange={(e) => setMyNewsSortOrder(e.target.value as any)}
                     className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-amber-500 focus:border-amber-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
-                    style={{
+                     style={{
                       backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                       backgroundRepeat: "no-repeat",
                       backgroundPosition: "right 0.5rem center",
@@ -1667,13 +1573,13 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
               {renderMyNewsList()}
             </div>
           </>
-        ) : (
+        ) : ( 
           <>
             <div className="flex items-center gap-3 mb-4 flex-shrink-0">
-              <h2 className="text-xl md:text-2xl font-bold text-red-600">
-                Tin tức đã xóa
-              </h2>
-                <button
+                <h2 className="text-xl md:text-2xl font-bold text-red-600">
+                    Tin tức đã xóa
+                </h2>
+                 <button
                     onClick={handleRefresh}
                     disabled={isRefreshing || isLoadingDeleted || !!isRestoring }
                     className="p-1.5 sm:p-2 cursor-pointer border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
@@ -1704,14 +1610,18 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user }) => {
         onCancel={confirmationState.onCancel}
       />
 
-      <CreateNewsModal
-        isOpen={isCreateModalOpen}
-        onClose={handleNewsModalClose}
-        onSubmit={handleNewsFormSubmit}
-        isSubmitting={isSubmittingNews}
-        editMode={!!editingNewsItem}
-        initialData={editingNewsItem}
-      />
+      {isNewsModalOpen && user && (
+         <CreateNewsModal
+            isOpen={isNewsModalOpen}
+            onClose={handleNewsModalClose}
+            onActionSuccess={handleNewsActionSuccess}
+            editMode={!!editingNewsItem}
+            initialData={editingNewsItem}
+            user={user}
+            refreshToken={refreshToken}
+         />
+      )}
+      
     </div>
   );
 };

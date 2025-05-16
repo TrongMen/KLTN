@@ -3,9 +3,10 @@
 import React, { useState, useMemo } from "react";
 import Image from "next/image";
 import { toast } from "react-hot-toast";
-import { NewsItem, User } from "../types/appTypes";
+import { NewsItem, User, EventDisplayInfo } from "../types/appTypes"; // Thêm EventDisplayInfo
 import { ConfirmationDialog } from "../../../utils/ConfirmationDialog";
 import NewsDetailModal from "../modals/NewsDetailModal";
+import CreateNewsModal from "../modals/CreateNewsModal";
 import {
   Pencil1Icon,
   TrashIcon,
@@ -21,11 +22,15 @@ interface NewsTabContentProps {
   isLoading: boolean;
   error: string | null;
   user: User | null;
-  onOpenCreateModal: () => void;
-  onOpenEditModal: (item: NewsItem) => void;
   onNewsDeleted: () => void;
   refreshToken?: () => Promise<string | null>;
   onRefreshNews: () => Promise<void>;
+  // Props mới cho việc đăng ký sự kiện liên quan từ NewsDetailModal
+  allEvents: EventDisplayInfo[];
+  registeredEventIds: Set<string>;
+  createdEventIdsForEvents: Set<string>; // ID các sự kiện do người dùng hiện tại tạo
+  onRegisterForEvent: (event: EventDisplayInfo) => void; // Hàm đăng ký sự kiện từ UserHome
+  isRegisteringForEventId: string | null; // ID sự kiện đang được xử lý đăng ký
 }
 
 const ITEMS_PER_PAGE_OPTIONS = [6, 12, 24];
@@ -43,11 +48,14 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
   isLoading,
   error,
   user,
-  onOpenCreateModal,
-  onOpenEditModal,
   onNewsDeleted,
   refreshToken,
   onRefreshNews,
+  allEvents,
+  registeredEventIds,
+  createdEventIdsForEvents,
+  onRegisterForEvent,
+  isRegisteringForEventId,
 }) => {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [confirmationState, setConfirmationState] = useState<{
@@ -64,6 +72,34 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
   const [itemsPerPage, setItemsPerPage] = useState<number>(
     ITEMS_PER_PAGE_OPTIONS[0]
   );
+
+  const [isCreateOrEditModalOpen, setIsCreateOrEditModalOpen] = useState(false);
+  const [editingNewsItem, setEditingNewsItem] = useState<NewsItem | null>(null);
+  const [isEditModeModal, setIsEditModeModal] = useState(false);
+  const [relatedEventDetailsForModal, setRelatedEventDetailsForModal] = useState<EventDisplayInfo | null>(null);
+
+
+  const handleOpenCreateModal = () => {
+    setEditingNewsItem(null);
+    setIsEditModeModal(false);
+    setIsCreateOrEditModalOpen(true);
+  };
+
+  const handleOpenEditModal = (item: NewsItem) => {
+    setEditingNewsItem(item);
+    setIsEditModeModal(true);
+    setIsCreateOrEditModalOpen(true);
+  };
+
+  const handleCloseCreateOrEditModal = () => {
+    setIsCreateOrEditModalOpen(false);
+    setEditingNewsItem(null);
+  };
+
+  const handleModalActionSuccess = (updatedOrCreatedItem?: NewsItem, wasEditMode?: boolean) => {
+    handleCloseCreateOrEditModal();
+    onRefreshNews();
+  };
 
   const safeNewsItems = useMemo(
     () => (Array.isArray(newsItems) ? newsItems : []),
@@ -114,7 +150,6 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
     });
   }, [sortedNews, searchTerm]);
 
-  // Pagination logic
   const totalItems = filteredNews.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -134,12 +169,19 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
 
   const handleOpenDetailModal = (item: NewsItem) => {
     setSelectedNewsItem(item);
+    if (item.event?.id && Array.isArray(allEvents)) {
+      const foundEvent = allEvents.find(ev => ev.id === item.event!.id);
+      setRelatedEventDetailsForModal(foundEvent || null);
+    } else {
+      setRelatedEventDetailsForModal(null);
+    }
     setIsDetailModalOpen(true);
   };
 
   const handleCloseDetailModal = () => {
     setIsDetailModalOpen(false);
     setSelectedNewsItem(null);
+    setRelatedEventDetailsForModal(null);
   };
 
   const handleDeleteClick = (newsItem: NewsItem) => {
@@ -147,9 +189,9 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
       toast.error("Vui lòng đăng nhập.");
       return;
     }
-    const isCreator = user?.id === newsItem.createdBy?.id;
-    const isAdmin = user?.roles?.some((role) => role.name === "ADMIN");
-    if (!(isAdmin || isCreator)) {
+    const isCreatorResult = user?.id === newsItem.createdBy?.id;
+    const isAdminResult = user?.roles?.some((role) => role.name === "ADMIN");
+    if (!(isAdminResult || isCreatorResult)) {
       toast.error("Bạn không có quyền xóa tin tức này.");
       return;
     }
@@ -157,16 +199,17 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
   };
 
   const handleConfirmDelete = async () => {
-    const newsItem = confirmationState.newsItemToDelete;
-    if (!newsItem || !user || !user.id) {
+    const newsItemToDelete = confirmationState.newsItemToDelete;
+    if (!newsItemToDelete || !user || !user.id) {
       setConfirmationState({ isOpen: false, newsItemToDelete: null });
       return;
     }
-    const newsTitle = newsItem.title || "tin tức này";
-    setIsDeleting(newsItem.id);
+    const newsTitle = newsItemToDelete.title || "tin tức này";
+    setIsDeleting(newsItemToDelete.id);
     setConfirmationState({ isOpen: false, newsItemToDelete: null });
     const toastId = toast.loading(`Đang xóa "${newsTitle}"...`);
     let token = localStorage.getItem("authToken");
+
     if (!token && refreshToken) {
       const newToken = await refreshToken();
       if (newToken) {
@@ -175,11 +218,12 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
       }
     }
     if (!token) {
-      toast.error("Phiên đăng nhập hết hạn...", { id: toastId });
+      toast.error("Phiên đăng nhập hết hạn hoặc không thể làm mới token.", { id: toastId });
       setIsDeleting(null);
       return;
     }
-    const API_URL = `http://localhost:8080/identity/api/news/${newsItem.id}?deletedById=${user.id}`;
+
+    const API_URL = `http://localhost:8080/identity/api/news/${newsItemToDelete.id}?deletedById=${user.id}`;
     try {
       let response = await fetch(API_URL, {
         method: "DELETE",
@@ -217,8 +261,8 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
         }
         throw new Error(errorMsg);
       }
-    } catch (error: any) {
-      toast.error(`Xóa thất bại: ${error.message}`, { id: toastId });
+    } catch (err: any) {
+      toast.error(`Xóa thất bại: ${err.message}`, { id: toastId });
     } finally {
       setIsDeleting(null);
     }
@@ -227,30 +271,34 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
   const handleCancelDelete = () => {
     setConfirmationState({ isOpen: false, newsItemToDelete: null });
   };
-  const handleTriggerEditFromModal = (itemToEdit: NewsItem) => {
-    setIsDetailModalOpen(false);
-    onOpenEditModal(itemToEdit);
+
+  const handleTriggerEditFromDetailModal = (itemToEdit: NewsItem) => {
+    setIsDetailModalOpen(false); // Đóng modal chi tiết
+    setTimeout(() => { // Đảm bảo modal chi tiết đã đóng hoàn toàn trước khi mở modal sửa
+      handleOpenEditModal(itemToEdit);
+    }, 0);
   };
-  const handleTriggerDeleteFromModal = (itemToDelete: NewsItem) => {
+
+  const handleTriggerDeleteFromDetailModal = (itemToDelete: NewsItem) => {
     setIsDetailModalOpen(false);
     handleDeleteClick(itemToDelete);
   };
 
-  const handleRefreshNews = async () => {
+  const handleRefreshNewsInternal = async () => {
     setIsRefreshingButton(true);
     try {
       await onRefreshNews();
-      setCurrentPage(1); // Reset to first page after refresh
+      setCurrentPage(1);
       toast.success("Đã làm mới bảng tin!");
-    } catch (error) {
-      console.error("Lỗi khi làm mới bảng tin:", error);
+    } catch (err) {
+      console.error("Lỗi khi làm mới bảng tin:", err);
       toast.error("Không thể làm mới bảng tin.");
     } finally {
       setIsRefreshingButton(false);
     }
   };
 
-  if (isLoading && !isDeleting) {
+  if (isLoading && !isDeleting && !isRefreshingButton) {
     return (
       <div className="flex justify-center items-center min-h-[200px]">
         <ReloadIcon className="w-8 h-8 animate-spin text-green-600" />
@@ -278,14 +326,14 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setCurrentPage(1); // Reset to first page when searching
+                setCurrentPage(1);
               }}
               className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-sm"
             />
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           </div>
           <button
-            onClick={handleRefreshNews}
+            onClick={handleRefreshNewsInternal}
             disabled={isLoading || isRefreshingButton}
             title="Làm mới bảng tin"
             className={`p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 ${
@@ -303,10 +351,10 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
               (role) =>
                 role.name === "ADMIN" ||
                 role.name === "MANAGER" ||
-                role.name === "USER"
+                role.name === "USER" 
             ) && (
               <button
-                onClick={onOpenCreateModal}
+                onClick={handleOpenCreateModal}
                 className="px-4 cursor-pointer py-2 bg-blue-600 text-white text-sm font-medium rounded-lg shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 flex items-center gap-1 w-full sm:w-auto justify-center"
               >
                 <svg
@@ -329,7 +377,6 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
         </div>
       </div>
 
-      {/* Items per page selector */}
       <div className="flex justify-between items-center mb-4">
         <div className="text-sm text-gray-600">
           Hiển thị {startIndex + 1}-{Math.min(endIndex, totalItems)} của{" "}
@@ -358,12 +405,12 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
         <>
           <div className="flex flex-wrap justify-start gap-5">
             {paginatedNews.map((item) => {
-              const isCreator = user?.id === item.createdBy?.id;
-              const isAdmin = user?.roles?.some(
+              const isCreatorResult = user?.id === item.createdBy?.id;
+              const isAdminResult = user?.roles?.some(
                 (role) => role.name === "ADMIN"
               );
-              const canUpdate = isCreator && item.status === "APPROVED";
-              const canDelete = isAdmin || isCreator;
+              const canUpdate = (isCreatorResult && item.status === "APPROVED") || isAdminResult; 
+              const canDelete = isAdminResult || isCreatorResult;
               const creatorName = getCreatorName(item.createdBy);
 
               return (
@@ -418,7 +465,7 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
                       onClick={() => handleOpenDetailModal(item)}
                       className="text-sm text-gray-600 mb-3 line-clamp-3 flex-grow cursor-pointer"
                     >
-                      {/* {item.summary || "Không có tóm tắt."} */}
+                       {item.summary || item.content?.replace(/<[^>]+>/g, '').substring(0, 100) + (item.content?.replace(/<[^>]+>/g, '').length > 100 ? '...' : '') || ''}
                     </p>
                     <div className="mt-auto pt-3 border-t border-gray-100">
                       <p className="text-xs text-gray-500 mb-1.5">
@@ -448,37 +495,34 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
                             />
                           ) : (
                             <span className="inline-block h-5 w-5 rounded-full overflow-hidden bg-gray-200 mr-1.5 flex items-center justify-center">
-                              {" "}
-                              <PersonIcon className="h-3 w-3 text-gray-500" />{" "}
+                              <PersonIcon className="h-3 w-3 text-gray-500" />
                             </span>
                           )}
                           <span
                             className="text-xs text-gray-600 font-medium truncate"
                             title={creatorName}
                           >
-                            {" "}
-                            {creatorName}{" "}
+                            {creatorName}
                           </span>
                         </div>
                       )}
                     </div>
                   </div>
-                  {(canUpdate || canDelete) && user && (
+                  {(canUpdate || canDelete) && user && ( 
                     <div
                       className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {canUpdate && (
+                      {canUpdate && ( 
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onOpenEditModal(item);
+                            handleOpenEditModal(item);
                           }}
                           className="p-1.5 rounded-full bg-white/90 hover:bg-blue-100 text-gray-600 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200 shadow cursor-pointer"
                           title="Chỉnh sửa tin tức"
                         >
-                          {" "}
-                          <Pencil1Icon className="h-4 w-4" />{" "}
+                          <Pencil1Icon className="h-4 w-4" />
                         </button>
                       )}
                       {canDelete && (
@@ -495,12 +539,11 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
                           }`}
                           title="Xóa tin tức"
                         >
-                          {" "}
                           {isDeleting === item.id ? (
                             <ReloadIcon className="animate-spin h-4 w-4 text-red-600" />
                           ) : (
                             <TrashIcon className="h-4 w-4" />
-                          )}{" "}
+                          )}
                         </button>
                       )}
                     </div>
@@ -510,7 +553,6 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
             })}
           </div>
 
-          {/* Pagination controls */}
           {totalPages > 1 && (
             <div className="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4 border-t pt-4">
               <span className="text-sm text-gray-600">
@@ -549,13 +591,11 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
         title="Xác nhận xóa"
         message={
           <>
-            {" "}
-            Bạn có chắc chắn muốn xóa tin tức: <br />{" "}
+            Bạn có chắc chắn muốn xóa tin tức: <br />
             <strong className="text-red-600">
-              {" "}
-              "{confirmationState.newsItemToDelete?.title || "này"}"{" "}
+              "{confirmationState.newsItemToDelete?.title || "này"}"
             </strong>{" "}
-            ?<br /> Hành động này không thể hoàn tác.{" "}
+            ?<br /> Hành động này không thể hoàn tác.
           </>
         }
         onConfirm={handleConfirmDelete}
@@ -571,8 +611,25 @@ const NewsTabContent: React.FC<NewsTabContentProps> = ({
           onClose={handleCloseDetailModal}
           item={selectedNewsItem}
           user={user}
-          onTriggerEdit={handleTriggerEditFromModal}
-          onTriggerDelete={handleTriggerDeleteFromModal}
+          onTriggerEdit={handleTriggerEditFromDetailModal}
+          onTriggerDelete={handleTriggerDeleteFromDetailModal}
+          relatedEventDetails={relatedEventDetailsForModal}
+          onAttemptRegisterRelatedEvent={onRegisterForEvent}
+          registeredEventIds={registeredEventIds}
+          isRegisteringForEventId={isRegisteringForEventId}
+          createdEventIdsForEvents={createdEventIdsForEvents}
+        />
+      )}
+
+      {isCreateOrEditModalOpen && (
+        <CreateNewsModal
+          isOpen={isCreateOrEditModalOpen}
+          onClose={handleCloseCreateOrEditModal}
+          onActionSuccess={handleModalActionSuccess}
+          editMode={isEditModeModal}
+          initialData={editingNewsItem}
+          user={user}
+          refreshToken={refreshToken}
         />
       )}
     </div>

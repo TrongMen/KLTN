@@ -1477,6 +1477,8 @@ export default function HomeGuest() {
             organizers: e.organizers || [],
             participants: e.participants || [],
             attendees: e.attendees || [],
+            maxAttendees: e.maxAttendees || 0,
+            event: e.event,
           }));
         setAllEvents(fmt);
         if (activeTab === "home")
@@ -2595,9 +2597,13 @@ export default function HomeGuest() {
                 error={errorNews}
                 user={user}
                 onNewsDeleted={refreshNewsList}
+                refreshToken={refreshToken}
                 onRefreshNews={fetchNews}
-                onOpenCreateModal={handleOpenCreateNewsModalForGuest}
-                onOpenEditModal={handleOpenEditNewsModalForGuest}
+                allEvents={allEvents}
+                registeredEventIds={registeredEventIds}
+                createdEventIdsForEvents={createdEventIds}
+                onRegisterForEvent={handleRegister}
+                isRegisteringForEventId={isRegistering}
               />
             )}
 

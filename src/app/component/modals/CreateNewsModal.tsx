@@ -3,13 +3,13 @@
 import React, {
   useState,
   useEffect,
-  useCallback,
   useMemo,
   useRef,
+  FormEvent,
 } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { NewsItem } from "../homeuser";
+import { NewsItem, User } from "../types/appTypes";
 import {
   Cross1Icon,
   ImageIcon,
@@ -28,24 +28,50 @@ export interface NewsFormData {
 interface EventForSelect {
   id: string;
   name: string;
+  date?: string;
+  createdBy?: string; // Thêm ID người tạo sự kiện
 }
 
 interface CreateNewsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (formData: NewsFormData, newsId?: string) => void;
-  isSubmitting: boolean;
+  onActionSuccess: (updatedNewsItem?: NewsItem, wasEditMode?: boolean) => void;
   editMode: boolean;
   initialData: NewsItem | null;
+  user: User | null; // user prop để lấy user.id
+  refreshToken?: () => Promise<string | null>;
 }
+
+type TemporalEventStatus = "upcoming" | "ongoing" | "ended";
+
+const getEventTemporalStatus = (eventDateStr: string | undefined): TemporalEventStatus => {
+  if (!eventDateStr) return "upcoming"; 
+  try {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const eventDate = new Date(eventDateStr);
+    if (isNaN(eventDate.getTime())) return "upcoming";
+    
+    const eventDateOnly = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+
+    if (eventDateOnly < todayStart) return "ended";
+    else if (eventDateOnly > todayStart) return "upcoming";
+    else return "ongoing"; 
+  } catch (e) {
+    console.error("Error parsing event date for status:", e);
+    return "upcoming"; 
+  }
+};
+
 
 const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
   isOpen,
   onClose,
-  onSubmit,
-  isSubmitting,
+  onActionSuccess,
   editMode,
   initialData,
+  user, // user prop đã có
+  refreshToken,
 }) => {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -54,10 +80,21 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
   const [eventId, setEventId] = useState<string | null>(null);
   const [eventsForSelect, setEventsForSelect] = useState<EventForSelect[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [internalIsSubmitting, setInternalIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const editorKey = useMemo(() => {
+    if (editMode && initialData?.id) {
+      return `tiptap-editor-${initialData.id}`;
+    }
+    return `tiptap-editor-new-${Date.now()}`;
+  }, [editMode, initialData]);
+
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setEventsForSelect([]); 
+      return;
+    }
     const fetchEventsForDropdown = async () => {
       setIsLoadingEvents(true);
       try {
@@ -70,9 +107,25 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
         if (!res.ok) throw new Error("Lỗi tải danh sách sự kiện");
         const data = await res.json();
         if (data.code === 1000 && Array.isArray(data.result)) {
-          setEventsForSelect(
-            data.result.map((e: any) => ({ id: e.id, name: e.name }))
-          );
+          const approvedEventsFromApi: EventForSelect[] = data.result.map((e: any) => ({
+            id: e.id,
+            name: e.name,
+            date: e.time || e.date || e.startDate || e.eventDate || e.createdAt, 
+            createdBy: e.createdBy, // GIẢ ĐỊNH API trả về trường 'createdBy' chứa ID người tạo
+          }));
+
+          let temporallyFilteredEvents = approvedEventsFromApi.filter(event => {
+            const status = getEventTemporalStatus(event.date);
+            return status === "upcoming" || status === "ongoing";
+          });
+
+          if (user && user.id) {
+            const userSpecificEvents = temporallyFilteredEvents.filter(event => event.createdBy === user.id);
+            setEventsForSelect(userSpecificEvents);
+          } else {
+            setEventsForSelect([]); // Nếu không có user, không hiển thị sự kiện nào (vì cần sự kiện của chính user)
+          }
+
         } else {
           throw new Error(data.message || "Dữ liệu sự kiện không hợp lệ");
         }
@@ -84,8 +137,15 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
         setIsLoadingEvents(false);
       }
     };
-    fetchEventsForDropdown();
-  }, [isOpen]);
+    
+    if (user?.id) { // Chỉ fetch sự kiện nếu có user (vì cần lọc theo user.id)
+        fetchEventsForDropdown();
+    } else {
+        setEventsForSelect([]);
+        setIsLoadingEvents(false);
+    }
+
+  }, [isOpen, user]); // Thêm user vào dependency array
 
   useEffect(() => {
     if (isOpen) {
@@ -127,15 +187,14 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
       }
       setImagePreview(URL.createObjectURL(file));
     } else {
-      // This case might not be hit if a file is always selected or input is reset
-      // but good for robustness
       setImageFile(null);
       if (imagePreview && imagePreview.startsWith("blob:")) {
         URL.revokeObjectURL(imagePreview);
       }
-      // If user cancels file dialog, and we had an initial image, restore it.
       setImagePreview(
-        editMode && initialData?.imageUrl ? initialData.imageUrl : null
+        editMode && (initialData?.imageUrl || initialData?.coverImageUrl)
+          ? initialData.imageUrl || initialData.coverImageUrl
+          : null
       );
     }
   };
@@ -155,31 +214,124 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
       URL.revokeObjectURL(imagePreview);
     }
     setImageFile(null);
-    // When clearing, if in edit mode and had an initial image, decide if we want to show "no image" or revert to initial.
-    // For now, clearing means no image selected for upload, and preview becomes null.
-    // If you want to revert to initialData.imageUrl, change the line below.
-    // For this implementation, clearImageSelection removes any active preview.
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleContentChange = (reason: string) => {
-    setContent(reason);
+  const handleContentChange = (newContent: string) => {
+    setContent(newContent);
   };
 
-  const handleFormSubmitInternal = (e: React.FormEvent) => {
+  const handleFormSubmitInternal = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = content;
-    const hasTextContent =
-      tempDiv.textContent?.trim() || tempDiv.querySelector("img") !== null;
 
-    if (!title || !hasTextContent) {
-      toast.error("Vui lòng nhập tiêu đề và nội dung.");
+    if (!user || !user.id) {
+      toast.error("Vui lòng đăng nhập để thực hiện hành động này.");
       return;
     }
-    const formData: NewsFormData = { title, content, imageFile, eventId };
-    onSubmit(formData, editMode && initialData ? initialData.id : undefined);
+
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = content;
+    const textFromContent = (tempDiv.textContent || "").trim();
+    const hasActualText = textFromContent.length > 0;
+    const hasImages = tempDiv.querySelector("img") !== null;
+    const trimmedTitle = (title || "").trim();
+
+    if (!trimmedTitle) {
+      toast.error("Vui lòng nhập tiêu đề.");
+      return;
+    }
+    if (!hasActualText && !hasImages) {
+      toast.error("Vui lòng nhập nội dung.");
+      return;
+    }
+
+    setInternalIsSubmitting(true);
+    const currentEditMode = editMode; 
+    const toastMessage = currentEditMode ? "Đang cập nhật bảng tin..." : "Đang tạo bảng tin mới...";
+    const toastId = toast.loading(toastMessage);
+
+    const apiFormData = new FormData();
+    apiFormData.append("title", trimmedTitle);
+    apiFormData.append("content", content);
+
+    if (eventId) {
+      apiFormData.append("eventId", eventId);
+    }
+    if (imageFile) {
+      apiFormData.append("coverImage", imageFile);
+    }
+
+    let apiUrl: string;
+    let method: string;
+
+    if (currentEditMode && initialData?.id) {
+      apiUrl = `http://localhost:8080/identity/api/news/${initialData.id}`;
+      method = "PUT";
+      apiFormData.append("status", "PENDING");
+    } else {
+      apiUrl = `http://localhost:8080/identity/api/news`;
+      method = "POST";
+      apiFormData.append("createdById", user.id);
+      apiFormData.append("type", "NEWS");
+      apiFormData.append("featured", "false");
+      apiFormData.append("pinned", "false");
+    }
+
+    let currentToken = localStorage.getItem("authToken");
+
+    try {
+      const makeApiCall = async (token: string | null): Promise<Response> => {
+        if (!token) {
+          throw new Error("Không tìm thấy token xác thực.");
+        }
+        const headers: HeadersInit = {
+          Authorization: `Bearer ${token}`,
+        };
+        
+        return await fetch(apiUrl, {
+          method: method,
+          headers: headers,
+          body: apiFormData,
+        });
+      };
+
+      let response = await makeApiCall(currentToken);
+
+      if ((response.status === 401 || response.status === 403) && refreshToken && typeof refreshToken === 'function') {
+        const newToken = await refreshToken();
+        if (newToken) {
+          localStorage.setItem("authToken", newToken);
+          currentToken = newToken;
+          response = await makeApiCall(newToken); 
+        } else {
+          throw new Error("Không thể làm mới phiên đăng nhập. Vui lòng đăng nhập lại.");
+        }
+      }
+      
+      const responseData = await response.json();
+
+      if (response.ok && responseData.code === 1000) {
+        toast.success(responseData.message || (currentEditMode ? "Cập nhật thành công! Tin tức đã được chuyển sang trạng thái chờ duyệt." : "Tạo mới thành công! Tin tức đã được chuyển sang trạng thái chờ duyệt."), {
+          id: toastId,
+        });
+        onActionSuccess(responseData.result, currentEditMode);
+        onClose();
+      } else {
+        let errorMsg = responseData.message || `Lỗi ${response.status}`;
+        if (response.status === 401 || response.status === 403) {
+          errorMsg = "Không có quyền hoặc phiên đăng nhập hết hạn.";
+        }
+        throw new Error(errorMsg);
+      }
+    } catch (error: any) {
+      toast.error(
+        `${currentEditMode ? "Cập nhật" : "Tạo mới"} thất bại: ${error.message || "Lỗi không xác định"}`,
+        { id: toastId }
+      );
+    } finally {
+      setInternalIsSubmitting(false);
+    }
   };
 
   if (!isOpen) {
@@ -195,7 +347,7 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
           </h2>
           <button
             onClick={onClose}
-            disabled={isSubmitting}
+            disabled={internalIsSubmitting}
             className="text-gray-500 cursor-pointer hover:text-red-600 transition-colors p-1 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Cross1Icon className="h-5 w-5" />
@@ -219,21 +371,21 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
+              disabled={internalIsSubmitting}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition duration-150 ease-in-out"
             />
           </div>
 
           <div>
-            <label
-              htmlFor="newsContentEditor"
-              className="block text-sm font-medium text-gray-700 mb-1.5"
-            >
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Nội dung <span className="text-red-500">*</span>
             </label>
             <TiptapEditor
-              content={content}
+              key={editorKey}
+              initialContent={content}
               onContentChange={handleContentChange}
               placeholder="Nhập nội dung chi tiết cho bảng tin..."
+              disabled={internalIsSubmitting}
             />
           </div>
 
@@ -248,7 +400,7 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
               id="newsEvent"
               value={eventId ?? ""}
               onChange={(e) => setEventId(e.target.value || null)}
-              disabled={isLoadingEvents}
+              disabled={isLoadingEvents || internalIsSubmitting || !user}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm bg-white appearance-none pr-8 disabled:bg-gray-100 disabled:cursor-not-allowed transition duration-150 ease-in-out"
               style={{
                 backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
@@ -260,6 +412,10 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
               <option value="">-- Không chọn --</option>
               {isLoadingEvents ? (
                 <option disabled>Đang tải sự kiện...</option>
+              ) : eventsForSelect.length === 0 && user ? (
+                 <option disabled>Không có sự kiện nào của bạn đang hoặc sắp diễn ra.</option>
+              ) : !user ? (
+                <option disabled>Vui lòng đăng nhập để chọn sự kiện.</option>
               ) : (
                 eventsForSelect.map((event) => (
                   <option key={event.id} value={event.id}>
@@ -270,7 +426,6 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
             </select>
           </div>
 
-          {/* ========== KHỐI CHỌN ẢNH ĐƯỢC CẬP NHẬT ========== */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Ảnh bìa (Tùy chọn, tối đa 5MB)
@@ -279,6 +434,7 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={internalIsSubmitting}
                 className="flex-grow cursor-pointer px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 transition duration-150 ease-in-out text-left"
               >
                 <div className="flex items-center">
@@ -286,7 +442,10 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
                   <span className="truncate">
                     {imageFile
                       ? imageFile.name
-                      : imagePreview && !imageFile && editMode && initialData?.imageUrl
+                      : imagePreview &&
+                        !imageFile &&
+                        editMode &&
+                        (initialData?.imageUrl || initialData?.coverImageUrl)
                       ? "Ảnh hiện tại được giữ lại"
                       : "Chọn ảnh"}
                   </span>
@@ -300,11 +459,13 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
                 accept="image/png, image/jpeg, image/gif, image/webp"
                 onChange={handleImageChange}
                 ref={fileInputRef}
+                disabled={internalIsSubmitting}
               />
               {imagePreview && (
                 <button
                   type="button"
                   onClick={clearImageSelection}
+                  disabled={internalIsSubmitting}
                   className="px-3 py-2 cursor-pointer border border-red-300 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition duration-150 ease-in-out text-sm flex-shrink-0"
                 >
                   Xóa ảnh
@@ -333,27 +494,26 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
               </div>
             )}
           </div>
-          {/* ========== KẾT THÚC KHỐI CHỌN ẢNH ========== */}
 
           <div className="flex justify-end items-center gap-3 pt-5 border-t mt-auto">
             <button
               type="button"
               onClick={onClose}
-              disabled={isSubmitting}
+              disabled={internalIsSubmitting}
               className="px-5 cursor-pointer py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg shadow-sm transition text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Hủy bỏ
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={internalIsSubmitting}
               className={`px-5 cursor-pointer py-2 text-white rounded-lg shadow-sm transition text-sm font-medium flex items-center justify-center min-w-[120px] ${
-                isSubmitting
+                internalIsSubmitting
                   ? "bg-indigo-400 cursor-not-allowed"
                   : "bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               }`}
             >
-              {isSubmitting ? (
+              {internalIsSubmitting ? (
                 <>
                   <ReloadIcon className="mr-2 h-4 w-4 animate-spin" /> Đang xử
                   lý...

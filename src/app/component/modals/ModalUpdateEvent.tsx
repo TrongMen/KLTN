@@ -14,8 +14,8 @@ import type {
   EventDataForForm,
   OrganizerParticipantInput,
   DetailedApiUser, // User từ API, bao gồm roles và position
-  ApiRole,         // Kiểu cho vai trò từ API
-} from "../types/typCreateEvent"; // Đảm bảo đường dẫn đúng
+  ApiRole,         
+} from "../types/typCreateEvent"; 
 
 interface SearchableDropdownOption {
   id: string;
@@ -807,12 +807,14 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
                           <SearchableDropdown
                             options={roleOptions}
                             selectedValue={organizer.roleId}
+                            initialSearchTerm={organizer.roleName}
                             onChange={(selectedId) => handleMemberChange("organizers", index, "roleId", selectedId)}
                             placeholder="-- Chọn Vai trò BTC --"
                             isLoading={isLoadingRoles}
                             disabled={isDataLoading || !organizer.userId}
                           />
                         </div>
+
                       </div>
                       <div className="flex justify-end">
                         <button type="button" onClick={() => handleRemoveMember("organizers", index)}
@@ -877,7 +879,8 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
                           ) : (
                             <SearchableDropdown
                               options={roleOptions}
-                              selectedValue={participant.roleId} // Sử dụng roleId từ state
+                              selectedValue={participant.roleId} 
+                              initialSearchTerm={participant.roleName || roleOptions.find(r => r.id === participant.roleId)?.name}
                               onChange={(selectedId) => handleMemberChange("participants", index, "roleId", selectedId)}
                               placeholder="-- Chọn Vai trò NTG --"
                               isLoading={isLoadingRoles}

@@ -1235,6 +1235,8 @@ export default function HomeAdmin() {
             organizers: e.organizers || [],
             participants: e.participants || [],
             attendees: e.attendees || [],
+            maxAttendees: e.maxAttendees || 0,
+            event: e.event,
           }));
         setAllEvents(fmt);
       } else throw new Error(d.message || "Lỗi định dạng dữ liệu sự kiện");
@@ -2229,10 +2231,14 @@ export default function HomeAdmin() {
                 isLoading={isLoadingNews}
                 error={errorNews}
                 user={user}
-                onOpenCreateModal={handleOpenCreateModal}
-                onOpenEditModal={handleOpenEditModal}
                 onNewsDeleted={refreshNewsList}
+                refreshToken={refreshToken}
                 onRefreshNews={fetchNews}
+                allEvents={allEvents}
+                registeredEventIds={registeredEventIds}
+                createdEventIdsForEvents={createdEventIds}
+                onRegisterForEvent={handleRegister}
+                isRegisteringForEventId={isRegistering}
               />
             )}
             {user && activeTab === "createEvent" && (

@@ -69,8 +69,8 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
       };
 
       const [positionsRes, rolesRes] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions`, { headers }),
-        fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`, { headers }),
+        fetch(`http://localhost:8080/identity/api/positions`, { headers }),
+        fetch(`http://localhost:8080/identity/api/organizerrole`, { headers }),
       ]);
 
       const positionsData = await positionsRes.json();
@@ -120,8 +120,8 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
     const { type, action, id } = editMode;
     const urlBase =
       type === "position"
-        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions`
-        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`;
+        ? `http://localhost:8080/identity/api/positions`
+        : `http://localhost:8080/identity/api/organizerrole`;
     const url = action === "add" ? urlBase : `${urlBase}/${id}`;
     const method = action === "add" ? "POST" : "PUT";
     const body = JSON.stringify({ name: inputName });
@@ -182,8 +182,8 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
 
     const url =
       type === "position"
-        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions/${id}`
-        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole/${id}`;
+        ? `http://localhost:8080/identity/api/positions/${id}`
+        : `http://localhost:8080/identity/api/organizerrole/${id}`;
 
     try {
       const res = await fetch(url, {
@@ -225,8 +225,8 @@ const RolesTabContent: React.FC<RolesTabContentProps> = ({ user }) => {
     const type = activeTab;
     const urlBase =
       type === "position"
-        ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/positions`
-        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`;
+        ? `http://localhost:8080/identity/api/positions`
+        : `http://localhost:8080/identity/api/organizerrole`;
     const deletePromises = idsToDelete.map((id) =>
       fetch(`${urlBase}/${id}`, {
         method: "DELETE",

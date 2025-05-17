@@ -4,8 +4,12 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
 import { User, NewsItem, EventDisplayInfo } from "../types/appTypes";
-import {  EventMemberInfo } from "../types/homeType";
-import { EventDataForForm, DetailedApiUser, ApiRole } from "../types/typCreateEvent";
+import { EventMemberInfo } from "../types/homeType";
+import {
+  EventDataForForm,
+  DetailedApiUser,
+  ApiRole,
+} from "../types/typCreateEvent";
 
 import { useRouter } from "next/navigation";
 import {
@@ -157,7 +161,6 @@ interface AdminHomeTabContentProps {
   refreshToken?: () => Promise<string | null>;
   onRefreshEvents: () => Promise<void>;
   onOpenUpdateModal: (eventData: EventDataForForm) => void;
-  
 }
 
 const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
@@ -211,8 +214,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   >(null);
   const [isLoadingOrganizers, setIsLoadingOrganizers] =
     useState<boolean>(false);
-    const [detailedParticipants, setDetailedParticipants] = useState<DetailedMember[] | null>(null);
-    const [isLoadingParticipants, setIsLoadingParticipants] = useState<boolean>(false);
+  const [detailedParticipants, setDetailedParticipants] = useState<
+    DetailedMember[] | null
+  >(null);
+  const [isLoadingParticipants, setIsLoadingParticipants] =
+    useState<boolean>(false);
 
   const router = useRouter();
 
@@ -221,7 +227,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       setIsLoadingCreator(true);
       setCreatorName(null);
       fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${selectedEvent.createdBy}`
+        `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -259,7 +265,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         try {
           const organizerPromises = organizersToFetch.map(async (org) => {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${org.userId}`
+              `http://localhost:8080/identity/users/notoken/${org.userId}`
             );
             if (!response.ok) {
               return {
@@ -313,6 +319,69 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       setIsLoadingOrganizers(false);
     }
   }, [selectedEvent]);
+  useEffect(() => {
+      if (
+        selectedEvent &&
+        selectedEvent.participants &&
+        selectedEvent.participants.length > 0
+      ) {
+        const participantsToFetch = selectedEvent.participants;
+        const fetchParticipantDetails = async () => {
+          setIsLoadingParticipants(true);
+          setDetailedParticipants(null);
+          try {
+            const participantPromises = participantsToFetch.map(async (par) => {
+              const response = await fetch(
+                `http://localhost:8080/identity/users/notoken/${par.userId}`
+              );
+              let fullName = par.name || `ID: ${par.userId.substring(0, 8)}...`;
+              let positionName = par.positionName;
+  
+              if (response.ok) {
+                const data = await response.json();
+                if (data.code === 1000 && data.result) {
+                  const userDetail = data.result;
+                  fullName =
+                    [userDetail.lastName, userDetail.firstName]
+                      .filter(Boolean)
+                      .join(" ")
+                      .trim() || userDetail.username || fullName;
+                  positionName = userDetail.position?.name || par.positionName;
+                }
+              }
+              return {
+                userId: par.userId,
+                roleId: par.roleId,
+                roleName: par.roleName,
+                positionId: par.positionId,
+                positionName: positionName,
+                fullName: fullName,
+              };
+            });
+            const settledParticipants = await Promise.all(participantPromises);
+            setDetailedParticipants(settledParticipants as DetailedMember[]);
+          } catch (error) {
+            console.error("Lỗi tải thông tin người tham dự:", error);
+            setDetailedParticipants(
+              participantsToFetch.map((par) => ({
+                userId: par.userId,
+                roleId: par.roleId,
+                roleName: par.roleName || "N/A",
+                positionId: par.positionId,
+                positionName: par.positionName || "N/A",
+                fullName: "Lỗi tải tên",
+              })) as DetailedMember[]
+            );
+          } finally {
+            setIsLoadingParticipants(false);
+          }
+        };
+        fetchParticipantDetails();
+      } else {
+        setDetailedParticipants(null);
+        setIsLoadingParticipants(false);
+      }
+    }, [selectedEvent]);
 
   const processedEvents = useMemo(() => {
     if (!allEvents || !Array.isArray(allEvents)) return [];
@@ -507,7 +576,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         router.push("/login?sessionExpired=true&redirect=/admin/home");
         return;
       }
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}?deletedById=${user.id}`;
+      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
 
       try {
         let response = await fetch(apiUrl, {
@@ -543,9 +612,9 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             }
           }
           toast.success(successMsg);
-          await onRefreshEvents(); 
-          if(selectedEvent?.id === event.id) {
-            onBackToList(); 
+          await onRefreshEvents();
+          if (selectedEvent?.id === event.id) {
+            onBackToList();
           }
         } else {
           let errorMsg = `Lỗi ${response.status}`;
@@ -556,7 +625,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             // Ignore if parsing fails, use status code based message
           }
           if (response.status === 401 || response.status === 403) {
-             router.push("/login?sessionExpired=true&redirect=/admin/home");
+            router.push("/login?sessionExpired=true&redirect=/admin/home");
           }
           throw new Error(errorMsg);
         }
@@ -597,7 +666,6 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       onConfirm: null,
     });
   };
-
 
   if (errorEvents && !isLoadingEvents && !allEvents.length) {
     return (
@@ -886,11 +954,32 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 </div>
                 <div>
                   <strong className="font-medium mb-1 block">
+                    🧑‍🤝‍🧑 Người tham dự:
+                  </strong>
+                  {isLoadingParticipants ? (
+                    <p className="italic">Đang tải...</p>
+                  ) : detailedParticipants &&
+                    detailedParticipants.length > 0 ? (
+                    <ul className="list-disc list-inside pl-5 space-y-1">
+                      {detailedParticipants.map((par, index) => (
+                        <li key={`par-detail-${par.userId}-${index}`}>
+                          {[par.fullName, par.positionName, par.roleName]
+                            .filter(Boolean)
+                            .join(" - ") || `Người tham dự ${index + 1}`}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="italic">Chưa có thông tin người tham dự.</p>
+                  )}
+                </div>
+                <div>
+                  <strong className="font-medium mb-1 block">
                     ✅ Số lượng đăng ký:
                   </strong>
                   <p className="text-sm text-gray-700">
                     {selectedEvent.attendees?.length || 0}
-                    {typeof selectedEvent.maxAttendees === 'number'
+                    {typeof selectedEvent.maxAttendees === "number"
                       ? ` / ${selectedEvent.maxAttendees} người`
                       : " người (Không giới hạn)"}
                   </p>
@@ -906,93 +995,93 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                     <Pencil1Icon className="w-4 h-4" /> Sửa
                   </button>
                 )}
-                {user && ( 
+                {user && (
                   <button
                     onClick={() => handleDeleteEvent(selectedEvent)}
                     disabled={isDeleting === selectedEvent.id}
-                    className={`px-4 py-2 cursor-pointer rounded-lg bg-red-500 text-white hover:bg-red-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 ${isDeleting === selectedEvent.id ? "cursor-wait" : ""}`}
+                    className={`px-4 py-2 cursor-pointer rounded-lg bg-red-500 text-white hover:bg-red-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 ${
+                      isDeleting === selectedEvent.id ? "cursor-wait" : ""
+                    }`}
                   >
                     {isDeleting === selectedEvent.id ? (
                       <ReloadIcon className="w-4 h-4 animate-spin" />
                     ) : (
                       <TrashIcon className="w-4 h-4" />
                     )}
-                    {isDeleting === selectedEvent.id
-                      ? "Đang xoá..."
-                      : "Xoá"}
+                    {isDeleting === selectedEvent.id ? "Đang xoá..." : "Xoá"}
                   </button>
                 )}
-                 {(() => {
-                    const isCreated = user?.id === selectedEvent.createdBy;
-                    const isRegistered = registeredEventIds.has(selectedEvent.id);
-                    const processing = isRegistering === selectedEvent.id;
-                    const status = getEventStatus(selectedEvent.date);
-                    const showRegisterBtn = !isCreated && status !== "ended";
+                {(() => {
+                  const isCreated = user?.id === selectedEvent.createdBy;
+                  const isRegistered = registeredEventIds.has(selectedEvent.id);
+                  const processing = isRegistering === selectedEvent.id;
+                  const status = getEventStatus(selectedEvent.date);
+                  const showRegisterBtn = !isCreated && status !== "ended";
 
-                    if (user && showRegisterBtn) {
-                      const canClick = !isRegistered && !processing;
-                      const isDisabled =
-                        !canClick ||
-                        isLoadingRegisteredIds ||
-                        isLoadingCreatedEventIds ||
-                        isRegistered;
-                      return (
-                        <button
-                          onClick={() => {
-                            if (canClick) {
-                              onRegister(selectedEvent);
-                            }
-                          }}
-                          className={`px-4 py-2 rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center cursor-pointer ${
-                            isRegistered
-                              ? "bg-green-500 "
-                              : processing
-                              ? "bg-indigo-300 cursor-wait"
-                              : "bg-indigo-500 hover:bg-indigo-600"
-                          }`}
-                          disabled={isDisabled}
-                        >
-                          {isRegistered ? (
-                            <>
-                              <CheckCircledIcon className="mr-1.5" /> Đã đăng ký
-                            </>
-                          ) : processing ? (
-                            <>
-                              <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />{" "}
-                              ...
-                            </>
-                          ) : (
-                            <>
-                              <Pencil1Icon className="mr-1.5" /> Đăng ký
-                            </>
-                          )}
-                        </button>
-                      );
-                    } else if (status === "ended" && !isCreated) {
-                       return (
-                        <button
-                          className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
-                          disabled
-                        >
-                          Đã kết thúc
-                        </button>
-                      );
-                    } else if (!user && status !== "ended") {
-                       return (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toast("Vui lòng đăng nhập.", { icon: "🔒" });
-                             router.push("/login?redirect=/admin/home");
-                          }}
-                          className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
-                        >
-                          Đăng nhập
-                        </button>
-                      );
-                    }
-                    return null;
-                  })()}
+                  if (user && showRegisterBtn) {
+                    const canClick = !isRegistered && !processing;
+                    const isDisabled =
+                      !canClick ||
+                      isLoadingRegisteredIds ||
+                      isLoadingCreatedEventIds ||
+                      isRegistered;
+                    return (
+                      <button
+                        onClick={() => {
+                          if (canClick) {
+                            onRegister(selectedEvent);
+                          }
+                        }}
+                        className={`px-4 py-2 rounded-lg text-white shadow-sm transition text-sm font-medium flex items-center justify-center cursor-pointer ${
+                          isRegistered
+                            ? "bg-green-500 "
+                            : processing
+                            ? "bg-indigo-300 cursor-wait"
+                            : "bg-indigo-500 hover:bg-indigo-600"
+                        }`}
+                        disabled={isDisabled}
+                      >
+                        {isRegistered ? (
+                          <>
+                            <CheckCircledIcon className="mr-1.5" /> Đã đăng ký
+                          </>
+                        ) : processing ? (
+                          <>
+                            <ReloadIcon className="animate-spin -ml-1 mr-2 h-4 w-4" />{" "}
+                            ...
+                          </>
+                        ) : (
+                          <>
+                            <Pencil1Icon className="mr-1.5" /> Đăng ký
+                          </>
+                        )}
+                      </button>
+                    );
+                  } else if (status === "ended" && !isCreated) {
+                    return (
+                      <button
+                        className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
+                        disabled
+                      >
+                        Đã kết thúc
+                      </button>
+                    );
+                  } else if (!user && status !== "ended") {
+                    return (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toast("Vui lòng đăng nhập.", { icon: "🔒" });
+                          router.push("/login?redirect=/admin/home");
+                        }}
+                        className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition text-sm font-medium"
+                      >
+                        Đăng nhập
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </div>
           </div>
@@ -1011,7 +1100,8 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                     user && !isCreatedByUser && status !== "ended";
                   const canClickRegister =
                     showRegisterButton && !isRegistered && !processing;
-                  const canEdit = user?.id === event.createdBy && status !== "ended";
+                  const canEdit =
+                    user?.id === event.createdBy && status !== "ended";
 
                   return (
                     <div
@@ -1070,14 +1160,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                             {event.location}
                           </p>
                         </div>
-                         <div className="text-xs text-gray-600 mt-1">
-                            <span>
-                              ✅ Đã đăng ký: {event.attendees?.length || 0}
-                              {typeof event.maxAttendees === 'number'
-                                ? ` / ${event.maxAttendees}`
-                                : " (Không giới hạn)"}
-                            </span>
-                          </div>
+                        <div className="text-xs text-gray-600 mt-1">
+                          <span>
+                            ✅ Đã đăng ký: {event.attendees?.length || 0}
+                            {typeof event.maxAttendees === "number"
+                              ? ` / ${event.maxAttendees}`
+                              : " (Không giới hạn)"}
+                          </span>
+                        </div>
                         <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
                           {isCreatedByUser ? (
                             <div className="w-full px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium text-center">
@@ -1146,7 +1236,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               <Pencil1Icon className="w-4 h-4" />
                             </button>
                           )}
-                          {user && ( 
+                          {user && (
                             <button
                               onClick={() => handleDeleteEvent(event)}
                               disabled={isDeleting === event.id}
@@ -1182,7 +1272,8 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                       user && !isCreatedByUser && status !== "ended";
                     const canClickRegister =
                       showRegisterButton && !isRegistered && !processing;
-                     const canEdit = user?.id === event.createdBy && status !== "ended";
+                    const canEdit =
+                      user?.id === event.createdBy && status !== "ended";
                     return (
                       <li
                         key={event.id}
@@ -1236,11 +1327,12 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               >
                                 {getStatusIcon(status)} {getStatusText(status)}
                               </span>
-                               <span className="text-xs text-gray-500">
+                              <span className="text-xs text-gray-500">
                                 (ĐK: {event.attendees?.length || 0}
-                                {typeof event.maxAttendees === 'number'
+                                {typeof event.maxAttendees === "number"
                                   ? `/${event.maxAttendees}`
-                                  : ""})
+                                  : ""}
+                                )
                               </span>
                             </div>
                           </div>
@@ -1285,14 +1377,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               )}
                             </button>
                           ) : status === "ended" ? (
-                             <button
+                            <button
                               className="px-3 py-1.5 rounded-md bg-gray-300 text-gray-600 cursor-not-allowed text-xs"
                               disabled
                             >
                               🏁 Đã kết thúc
                             </button>
                           ) : !user && status !== "ended" ? (
-                             <button
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 toast("Vui lòng đăng nhập.", { icon: "🔒" });
@@ -1302,8 +1394,8 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                             >
                               Đăng nhập
                             </button>
-                          ): null}
-                           {canEdit && (
+                          ) : null}
+                          {canEdit && (
                             <button
                               onClick={() => handleEditEvent(event)}
                               className="p-2 rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 cursor-pointer"
@@ -1312,7 +1404,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               <Pencil1Icon className="w-4 h-4" />
                             </button>
                           )}
-                          {user && ( 
+                          {user && (
                             <button
                               onClick={() => handleDeleteEvent(event)}
                               disabled={isDeleting === event.id}

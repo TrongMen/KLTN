@@ -116,7 +116,7 @@ async function fetchUserDetailsAPI(
   if (!userId) return null;
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`
+      `http://localhost:8080/identity/users/notoken/${userId}`
     );
     if (!response.ok) {
       console.warn(
@@ -295,7 +295,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Chưa xác thực để tải vai trò.");
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`,
+          `http://localhost:8080/identity/api/organizerrole`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!response.ok) {
@@ -336,7 +336,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Chưa đăng nhập.");
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${currentUserId}`,
+        `http://localhost:8080/identity/api/events/creator/${currentUserId}`,
         { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
       );
       if (!res.ok) {
@@ -381,7 +381,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Chưa đăng nhập.");
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/deleted?page=${page}&size=${size}&sort=deletedAt,desc`,
+          `http://localhost:8080/identity/api/events/deleted?page=${page}&size=${size}&sort=deletedAt,desc`,
           { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
         );
         if (!res.ok) {
@@ -513,7 +513,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       return;
     }
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToDelete.id}?deletedById=${currentUserId}`;
+      const url = `http://localhost:8080/identity/api/events/${eventToDelete.id}?deletedById=${currentUserId}`;
       const res = await fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -617,7 +617,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       return;
     }
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToRestore.id}/restore`;
+      const url = `http://localhost:8080/identity/api/events/${eventToRestore.id}/restore`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -718,7 +718,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Token không hợp lệ.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/export`;
+      const url = `http://localhost:8080/identity/api/events/${eventId}/export`;
       const response = await fetch(url, {
         method: "GET",
         headers: {

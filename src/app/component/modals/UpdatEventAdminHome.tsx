@@ -249,7 +249,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         setFetchUsersError(null);
         try {
           const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`, // API này cần trả về cả 'roles' của user
+            `http://localhost:8080/identity/users`, // API này cần trả về cả 'roles' của user
             { headers: { Authorization: `Bearer ${token}` } }
           );
           if (!res.ok) {
@@ -279,7 +279,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
         setFetchRolesError(null);
         try {
           const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`, // API lấy vai trò cho thành viên sự kiện
+            `http://localhost:8080/identity/api/organizerrole`, // API lấy vai trò cho thành viên sự kiện
             { headers: { Authorization: `Bearer ${token}` } }
           );
           if (!res.ok) {
@@ -500,7 +500,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
     if (!eventAvatarFile) return null;
     const formDataUpload = new FormData(); // Tránh trùng tên với formData của state
     formDataUpload.append("file", eventAvatarFile);
-    const uploadUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/avatar`;
+    const uploadUrl = `http://localhost:8080/identity/api/events/${eventId}/avatar`;
     try {
       const response = await fetch(uploadUrl, {
         method: "PATCH",
@@ -599,7 +599,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
     }
 
 
-    const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
+    const url = `http://localhost:8080/identity/api/events/${formData.id}?updatedByUserId=${user.id}`;
     const method = "PUT";
 
     try {
@@ -622,7 +622,7 @@ const ModalUpdateEvent: React.FC<ModalUpdateEventProps> = ({
           // Nếu API PATCH avatar ở trên có thể nhận file rỗng để xóa thì không cần.
           // Giả sử API DELETE avatar tồn tại:
           // try {
-          //   await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${formData.id}/avatar`, {
+          //   await fetch(`http://localhost:8080/identity/api/events/${formData.id}/avatar`, {
           //     method: "DELETE",
           //     headers: { Authorization: `Bearer ${token}` },
           //   });

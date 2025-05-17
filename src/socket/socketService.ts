@@ -24,7 +24,7 @@ export const initializeSocket = (
     socket = null;
   }
 
-  const newSocket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`, {
+  const newSocket = io(`ws://localhost:9099`, {
     path: "/socket.io",
     query: { userId },
     transports: ["websocket"],

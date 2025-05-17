@@ -14,7 +14,7 @@ const QrCodeModal: React.FC<QrCodeModalProps> = ({ isOpen, onClose, imageUrl, is
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 transition-opacity duration-300 ease-in-out">
+    <div className="fixed inset-0 bg-black/50 bg-opacity-75 flex items-center justify-center z-50 p-4 transition-opacity duration-300 ease-in-out">
       <div className="bg-white p-6 pt-5 rounded-lg shadow-xl max-w-xs w-full transform transition-all duration-300 ease-in-out scale-100">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-800 truncate" title={eventName ? `Mã QR cho: ${eventName}` : 'Mã QR Sự kiện'}>
@@ -22,7 +22,7 @@ const QrCodeModal: React.FC<QrCodeModalProps> = ({ isOpen, onClose, imageUrl, is
             </h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            className="text-gray-400 hover:text-gray-600 text-2xl leading-none cursor-pointer"
             aria-label="Đóng modal"
           >
             &times;
@@ -43,7 +43,7 @@ const QrCodeModal: React.FC<QrCodeModalProps> = ({ isOpen, onClose, imageUrl, is
         <div className="mt-6 text-right">
             <button
                 onClick={onClose}
-                className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer transition duration-150 ease-in-out"
             >
                 Đóng
             </button>

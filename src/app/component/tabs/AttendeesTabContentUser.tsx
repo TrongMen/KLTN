@@ -11,9 +11,9 @@ import {
   FaQrcode,
   FaInfoCircle,
   FaSyncAlt,
-  FaSort, // Icon chung cho sắp xếp
-  FaSortUp, // Icon sắp xếp tăng dần
-  FaSortDown, // Icon sắp xếp giảm dần
+  FaSort,
+  FaSortUp,
+  FaSortDown,
 } from "react-icons/fa";
 import { MdQrCodeScanner } from "react-icons/md";
 import QrCodeModal from "../modals/QrCodeModal";
@@ -32,7 +32,6 @@ interface Attendee {
 
 type AttendableEvent = AttendableEventType;
 
-// Định nghĩa kiểu cho khóa và hướng sắp xếp người tham dự
 type AttendeeSortKey = 'name' | 'studentId' | 'status';
 type AttendeeSortDirection = 'asc' | 'desc';
 
@@ -90,9 +89,8 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
   const [eventQrError, setEventQrError] = useState<string | null>(null);
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isProcessingCheckIn, setIsProcessingCheckIn] = useState(false);
-
-  // State cho cấu hình sắp xếp danh sách người tham dự
   const [attendeeSortConfig, setAttendeeSortConfig] = useState<{ key: AttendeeSortKey; direction: AttendeeSortDirection }>({ key: 'name', direction: 'asc' });
+  const [isRequestingCameraPermission, setIsRequestingCameraPermission] = useState(false);
 
   const DEFAULT_EVENT_DURATION_HOURS = 24;
 
@@ -232,7 +230,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       if (getEventRelativeStatus(selectedEvent, DEFAULT_EVENT_DURATION_HOURS) === 'ongoing') {
           fetchEventQrCodeImage(selectedEvent.id).then(url => { currentEventQrUrlToRevoke = url; });
       } else { setEventQrCodeUrl(null); setIsLoadingEventQr(false); setEventQrError(null); }
-      setIsQrScannerOpen(false); setIsEventQrModalOpen(false);
     } else {
       setAttendees([]); setSelectedAttendeeIds(new Set());
       setEventQrCodeUrl(url => { if (url) window.URL.revokeObjectURL(url); return null; });
@@ -250,7 +247,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     });
   };
 
-  // Hàm xử lý thay đổi cấu hình sắp xếp người tham dự
   const handleAttendeeSortChange = (key: AttendeeSortKey) => {
     setAttendeeSortConfig(prevConfig => {
       if (prevConfig.key === key) {
@@ -260,7 +256,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     });
   };
   
-  // Sử dụng useMemo để lọc và sắp xếp danh sách người tham dự
   const sortedAndFilteredAttendees = useMemo(() => {
     let filtered = attendees.filter(
       (attendee) =>
@@ -268,43 +263,26 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
         (attendee.email && attendee.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (attendee.studentId && attendee.studentId.toLowerCase().includes(searchTerm.toLowerCase()))
     );
-
-    // Sắp xếp
     filtered.sort((a, b) => {
       let valA: string | number, valB: string | number;
       const { key, direction } = attendeeSortConfig;
-
       switch (key) {
-        case 'name':
-          valA = a.name.toLowerCase();
-          valB = b.name.toLowerCase();
-          break;
+        case 'name': valA = a.name.toLowerCase(); valB = b.name.toLowerCase(); break;
         case 'studentId':
-          valA = a.studentId || ''; 
-          valB = b.studentId || '';
-          // Sắp xếp số dạng chuỗi, hoặc chuyển sang số nếu chắc chắn là số
-          // Nếu MSSV có thể có chữ, thì sắp xếp như chuỗi là ổn
+          valA = a.studentId || ''; valB = b.studentId || '';
           if (!isNaN(Number(valA)) && !isNaN(Number(valB)) && valA !== '' && valB !== '') {
-            valA = Number(valA);
-            valB = Number(valB);
+            valA = Number(valA); valB = Number(valB);
           }
           break;
-        case 'status':
-          const statusOrder = { 'PRESENT': 1, 'UNKNOWN': 2, 'ABSENT': 3 };
-          valA = statusOrder[a.status];
-          valB = statusOrder[b.status];
-          break;
-        default:
-          return 0;
+        case 'status': const statusOrder = { 'PRESENT': 1, 'UNKNOWN': 2, 'ABSENT': 3 }; valA = statusOrder[a.status]; valB = statusOrder[b.status]; break;
+        default: return 0;
       }
-
       if (valA < valB) return direction === 'asc' ? -1 : 1;
       if (valA > valB) return direction === 'asc' ? 1 : -1;
       return 0;
     });
     return filtered;
   }, [attendees, searchTerm, attendeeSortConfig]);
-
 
   const toggleSelectAll = () => {
     if (selectedAttendeeIds.size === sortedAndFilteredAttendees.length && sortedAndFilteredAttendees.length > 0) {
@@ -401,6 +379,58 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     else { setIsEventQrModalOpen(true); if (selectedEvent?.id) fetchEventQrCodeImage(selectedEvent.id); }
   }, [selectedEvent, eventQrCodeUrl, isLoadingEventQr, canPerformAttendanceActions, fetchEventQrCodeImage]);
 
+  const handleOpenQrScanner = useCallback(async () => {
+    if (!selectedEvent) {
+      toast.error("Vui lòng chọn sự kiện.");
+      return;
+    }
+    if (!canPerformAttendanceActions) {
+      toast.error("Chỉ điểm danh QR cho sự kiện đang diễn ra.");
+      return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast.error("Trình duyệt của bạn không hỗ trợ truy cập camera.");
+      setIsQrScannerOpen(false);
+      return;
+    }
+
+    setIsRequestingCameraPermission(true);
+    const permissionToastId = "camera-permission-toast";
+    toast.loading("Đang yêu cầu quyền truy cập camera...", { id: permissionToastId });
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(track => track.stop());
+      toast.success("Sẵn sàng quét. Đang mở trình quét QR...", { id: permissionToastId });
+      setIsQrScannerOpen(true);
+    } catch (err: any) {
+      console.error("Lỗi yêu cầu quyền camera:", err);
+      let errorMessage = "Lỗi khi yêu cầu quyền camera.";
+      if (err instanceof DOMException) {
+          if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+              errorMessage = "Không tìm thấy camera trên thiết bị.";
+          } else if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+              errorMessage = "Bạn đã từ chối quyền truy cập camera. Vui lòng kiểm tra cài đặt trình duyệt.";
+          } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+              errorMessage = "Không thể đọc dữ liệu từ camera. Camera có thể đang được sử dụng bởi ứng dụng khác.";
+          } else if (err.name === "AbortError") {
+              errorMessage = "Yêu cầu camera đã bị hủy.";
+          } else if (err.name === "SecurityError") {
+              errorMessage = "Lỗi bảo mật khi truy cập camera. Trang web cần được phục vụ qua HTTPS.";
+          } else {
+              errorMessage = `Lỗi camera: ${err.message || err.name}`;
+          }
+      } else if (err instanceof Error) {
+          errorMessage = err.message;
+      }
+      toast.error(errorMessage, { id: permissionToastId });
+      setIsQrScannerOpen(false);
+    } finally {
+      setIsRequestingCameraPermission(false);
+    }
+  }, [selectedEvent, canPerformAttendanceActions]);
+
   const handleCheckInScanSuccess = useCallback(async (qrData: string) => {
     setIsQrScannerOpen(false);
     if (!canPerformAttendanceActions) { toast.error("Sự kiện không đang diễn ra. Không thể điểm danh."); setIsProcessingCheckIn(false); return; }
@@ -438,7 +468,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     return "bg-gray-100 text-gray-700";
   };
   
-  // Helper để render icon sắp xếp
   const SortIndicator = ({ sortKey }: { sortKey: AttendeeSortKey }) => {
     if (attendeeSortConfig.key !== sortKey) {
       return <FaSort className="ml-1 text-gray-400" />;
@@ -507,14 +536,30 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
               </div>
               <div className="mb-4 flex flex-wrap gap-2 items-center">
                 <span className="text-sm text-gray-700 mr-2"> Đã chọn: {selectedAttendeeIds.size} </span>
-                {/* Các nút hành động khác */}
-                <button onClick={() => handleBulkSetAttendanceStatus("PRESENT")} disabled={!canPerformAttendanceActions || isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaUserCheck /> Có mặt </button>
-                <button onClick={() => handleBulkSetAttendanceStatus("ABSENT")} disabled={!canPerformAttendanceActions || isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaUserTimes /> Vắng mặt </button>
-                <button onClick={handleBulkDeleteAttendees} disabled={isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaTrashAlt /> Xóa </button>
-                <button onClick={handleExportAttendees} disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaFileDownload /> {isExporting ? "Đang xuất..." : "Xuất DS"} </button>
-                <button onClick={handleShowEventQrCode} disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaQrcode /> {isLoadingEventQr ? "Tải QR..." : "QR Sự kiện"} </button>
-                <button onClick={() => { if (!selectedEvent) { toast.error("Vui lòng chọn sự kiện."); return; } if (!canPerformAttendanceActions) { toast.error("Chỉ điểm danh QR cho sự kiện đang diễn ra."); return;} setIsQrScannerOpen(true); }} disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !selectedEvent} className="px-3 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <MdQrCodeScanner /> {isProcessingCheckIn ? "Xử lý..." : "Quét QR điểm danh"} </button>
-                <button onClick={() => { if (selectedEvent) fetchAttendeesForEvent(selectedEvent.id, true);}} disabled={isLoadingAttendees || !selectedEvent || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn} className="px-3 py-1.5 text-xs font-medium text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer" title="Làm mới danh sách người tham dự" >
+                <button onClick={() => handleBulkSetAttendanceStatus("PRESENT")} disabled={!canPerformAttendanceActions || isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn || isRequestingCameraPermission} className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaUserCheck /> Có mặt </button>
+                <button onClick={() => handleBulkSetAttendanceStatus("ABSENT")} disabled={!canPerformAttendanceActions || isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn || isRequestingCameraPermission} className="px-3 py-1.5 text-xs font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaUserTimes /> Vắng mặt </button>
+                <button onClick={handleBulkDeleteAttendees} disabled={isPerformingBulkAction || selectedAttendeeIds.size === 0 || isExporting || isLoadingEventQr || isProcessingCheckIn || isRequestingCameraPermission} className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaTrashAlt /> Xóa </button>
+                <button onClick={handleExportAttendees} disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || isRequestingCameraPermission} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaFileDownload /> {isExporting ? "Đang xuất..." : "Xuất DS"} </button>
+                <button onClick={handleShowEventQrCode} disabled={!canPerformAttendanceActions || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || isRequestingCameraPermission} className="px-3 py-1.5 text-xs font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"> <FaQrcode /> {isLoadingEventQr ? "Tải QR..." : "QR Sự kiện"} </button>
+                <button 
+                  onClick={handleOpenQrScanner}
+                  disabled={
+                    !canPerformAttendanceActions || 
+                    isPerformingBulkAction || 
+                    isExporting || 
+                    isLoadingEventQr || 
+                    isProcessingCheckIn || 
+                    !selectedEvent ||
+                    isRequestingCameraPermission
+                  } 
+                  className="px-3 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+                > 
+                  <MdQrCodeScanner /> 
+                  {isRequestingCameraPermission 
+                    ? "Xin quyền..." 
+                    : (isProcessingCheckIn ? "Xử lý..." : "Quét QR điểm danh")} 
+                </button>
+                <button onClick={() => { if (selectedEvent) fetchAttendeesForEvent(selectedEvent.id, true);}} disabled={isLoadingAttendees || !selectedEvent || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || isRequestingCameraPermission} className="px-3 py-1.5 text-xs font-medium text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer" title="Làm mới danh sách người tham dự" >
                   <FaSyncAlt className={isLoadingAttendees ? "animate-spin" : ""} /> DS Tham Dự
                 </button>
               </div>
@@ -527,7 +572,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
                         <input type="checkbox" className="form-checkbox h-4 w-4 text-indigo-600 transition duration-150 ease-in-out"
                           checked={sortedAndFilteredAttendees.length > 0 && selectedAttendeeIds.size === sortedAndFilteredAttendees.length}
                           onChange={toggleSelectAll}
-                          disabled={sortedAndFilteredAttendees.length === 0 || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !canPerformAttendanceActions}
+                          disabled={sortedAndFilteredAttendees.length === 0 || isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !canPerformAttendanceActions || isRequestingCameraPermission}
                         />
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleAttendeeSortChange('name')}>
@@ -548,7 +593,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
                           <input type="checkbox" className="form-checkbox h-4 w-4 text-indigo-600 transition duration-150 ease-in-out"
                             checked={selectedAttendeeIds.has(attendee.id)}
                             onChange={() => toggleSelectAttendee(attendee.id)}
-                            disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !canPerformAttendanceActions}
+                            disabled={isPerformingBulkAction || isExporting || isLoadingEventQr || isProcessingCheckIn || !canPerformAttendanceActions || isRequestingCameraPermission}
                           />
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900"> {attendee.name} </td>
@@ -582,19 +627,22 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="flex justify-between items-center p-4 border-b">
               <h3 className="text-lg font-semibold">Quét mã QR điểm danh</h3>
-              <button onClick={() => setIsQrScannerOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer" disabled={isProcessingCheckIn}>
+              <button onClick={() => setIsQrScannerOpen(false)} className="text-gray-400 hover:text-gray-600 cursor-pointer" disabled={isProcessingCheckIn || isRequestingCameraPermission}>
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
             </div>
             <div className="p-4">
               {isProcessingCheckIn ? (
                 <div className="text-center py-10">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-2"><p>Đang xử lý điểm danh...</p></div> 
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto"></div>
+                  <p className="mt-2 text-gray-600">Đang xử lý điểm danh...</p>
                 </div>
-              ) : ( <QRScanner onScanSuccess={handleCheckInScanSuccess} onScanError={handleCheckInScanError} /> )}
+              ) : ( 
+                <QRScanner onScanSuccess={handleCheckInScanSuccess} onScanError={handleCheckInScanError} /> 
+              )}
             </div>
             {!isProcessingCheckIn && (<div className="p-4 border-t flex justify-end">
-              <button onClick={() => setIsQrScannerOpen(false)} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-sm cursor-pointer">Hủy</button>
+              <button onClick={() => setIsQrScannerOpen(false)} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 text-sm cursor-pointer" disabled={isRequestingCameraPermission}>Hủy</button>
             </div>)}
           </div>
         </div>

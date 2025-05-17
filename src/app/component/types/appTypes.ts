@@ -16,6 +16,7 @@ export interface User {
   avatar?: string;
   email?: string;
   gender?: boolean;
+  joinedDate?: string;
 }
 export type EventMember = {
   userId: string;

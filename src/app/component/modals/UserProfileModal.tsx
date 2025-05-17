@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { Cross1Icon, LockClosedIcon, ReloadIcon } from "@radix-ui/react-icons";
-import { ApiUser } from "../types/appTypes";
+import { ApiUser } from "../types/appTypes"; 
 import { User as MainUserType } from "../types/appTypes";
 
 interface UserProfileModalProps {
@@ -28,15 +28,22 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
   if (!isOpen || !userProfile) return null;
 
   const formatDate = (dateString: string | undefined | null): string => {
-    if (!dateString) return "Chưa cập nhật";
+    if (dateString === null || dateString === undefined || (typeof dateString === 'string' && dateString.trim() === "")) {
+      return "Chưa trở thành thành viên nòng cốt";
+    }
     try {
-      return new Date(dateString).toLocaleDateString("vi-VN", {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return "Ngày không hợp lệ";
+      }
+      return date.toLocaleDateString("vi-VN", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
       });
     } catch (e) {
-      return "Ngày không hợp lệ";
+      console.error("Lỗi định dạng ngày:", dateString, e);
+      return "Lỗi định dạng";
     }
   };
 
@@ -54,10 +61,9 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
       .join(", ");
   };
 
-
- const isCurrentUserAdmin = currentUser?.roles?.some(
-  (role) => role.name?.toUpperCase() === "ADMIN"
-);
+  const isCurrentUserAdmin = currentUser?.roles?.some(
+    (role) => role.name?.toUpperCase() === "ADMIN"
+  );
 
   const canLockThisUser =
     isCurrentUserAdmin &&
@@ -69,6 +75,11 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
       onTriggerLockAccount(userProfile);
     }
   };
+
+  const joinedDateDisplay = formatDate(userProfile.joinedDate);
+  const dobDateDisplay = formatDate(userProfile.dob);
+  const lockedAtDateDisplay = userProfile.locked ? formatDate(userProfile.lockedAt) : "N/A";
+
 
   return (
     <div
@@ -132,7 +143,9 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
             <div>
               <strong className="font-medium text-gray-600">Ngày sinh:</strong>
-              <p className="text-gray-800">{formatDate(userProfile.dob)}</p>
+              <p className={`text-gray-800 ${dobDateDisplay === "Chưa cập nhật" || dobDateDisplay === "Ngày không hợp lệ" || dobDateDisplay === "Lỗi định dạng" ? "text-xs" : ""}`}>
+                {dobDateDisplay}
+              </p>
             </div>
             <div>
               <strong className="font-medium text-gray-600">Giới tính:</strong>
@@ -181,8 +194,8 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <strong className="font-medium text-gray-600">
                     Ngày khóa:
                   </strong>
-                  <p className="text-gray-800">
-                    {formatDate(userProfile.lockedAt)}
+                  <p className={`text-gray-800 ${lockedAtDateDisplay === "Chưa cập nhật" || lockedAtDateDisplay === "Ngày không hợp lệ" || lockedAtDateDisplay === "Lỗi định dạng" ? "text-xs" : ""}`}>
+                    {lockedAtDateDisplay}
                   </p>
                 </div>
                 <div className="sm:col-span-2">
@@ -197,7 +210,9 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
             )}
             <div>
               <strong className="font-medium text-gray-600">Thời gian tham gia:</strong>
-              <p className="text-gray-800">{formatDate(userProfile.joinedDate)}</p>
+              <p className={`text-gray-800 ${joinedDateDisplay === "Chưa trở thành thành viên nòng cốt" || joinedDateDisplay === "Ngày không hợp lệ" || joinedDateDisplay === "Lỗi định dạng" ? "text-xs" : ""}`}>
+                {joinedDateDisplay}
+              </p>
             </div>
           </div>
         </div>

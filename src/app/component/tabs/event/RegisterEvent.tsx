@@ -56,7 +56,7 @@ interface EventType {
   avatarUrl?: string | null;
   qrCodeUrl?: string | null;
   progressStatus?: string;
-  date?: string; // Alias for time
+  date?: string;
 }
 
 type RegisterEventTemporalFilterOption = "all" | "upcoming" | "ongoing" | "ended" | "dateRange";
@@ -151,6 +151,7 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
 
   const [isScanCheckInModalOpen, setIsScanCheckInModalOpen] = useState<boolean>(false);
   const [isCheckingInEvent, setIsCheckingInEvent] = useState<boolean>(false);
+  const [isRequestingQrScanCameraPermission, setIsRequestingQrScanCameraPermission] = useState<boolean>(false);
 
 
   useEffect(() => {
@@ -311,7 +312,7 @@ const RegisteredEventsTab: React.FC<RegisteredEventsTabProps> = ({
   }, [
     registerAvailableEvents,
     registerTab,
-    initialRegisteredEventIds, // Dependency for isRegistered inside filter
+    initialRegisteredEventIds, 
     registerTimeFilter,
     registerStartDateFilter,
     registerEndDateFilter,
@@ -540,9 +541,9 @@ const executeBatchUnregistration = async (ids: string[]) => {
         endedEventIdsInSelection.forEach(id => next.delete(id));
         return next;
     });
-    if (ids.length === endedEventIdsInSelection.length) return; // All selected were ended
-    ids = ids.filter(id => !endedEventIdsInSelection.includes(id)); // Filter out ended events
-    if (ids.length === 0) return; // No valid events left to unregister
+    if (ids.length === endedEventIdsInSelection.length) return; 
+    ids = ids.filter(id => !endedEventIdsInSelection.includes(id)); 
+    if (ids.length === 0) return; 
   }
 
 
@@ -621,7 +622,7 @@ const executeBatchUnregistration = async (ids: string[]) => {
   
   if (okCount === 0 && failIds.length === 0 && ids.length > 0 && endedEventIdsInSelection.length === 0) {
       toast.error(`Không thể hủy ${ids.length} sự kiện. Vui lòng thử lại.`, { id: loadId });
-  } else if (ids.length === 0 && endedEventIdsInSelection.length === 0) { // No events were attempted (e.g. all were ended and filtered out)
+  } else if (ids.length === 0 && endedEventIdsInSelection.length === 0) { 
       toast.dismiss(loadId);
   } else if (okCount > 0 && failIds.length === 0) {
      toast.dismiss(loadId);
@@ -754,6 +755,51 @@ const executeBatchUnregistration = async (ids: string[]) => {
     setShowMyQRCodeModal(true);
     fetchMyQRCode();
   };
+
+  const handleOpenQrScanCheckInModal = useCallback(async () => {
+    if (!currentUserId) {
+        toast.error("Vui lòng đăng nhập để điểm danh.");
+        return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error("Trình duyệt của bạn không hỗ trợ truy cập camera.");
+        setIsScanCheckInModalOpen(false);
+        return;
+    }
+    setIsRequestingQrScanCameraPermission(true);
+    const permissionToastId = "qr-scan-camera-permission-toast";
+    toast.loading("Đang yêu cầu quyền truy cập camera...", { id: permissionToastId });
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+        toast.success("Sẵn sàng quét. Đang mở trình quét QR...", { id: permissionToastId });
+        setIsScanCheckInModalOpen(true);
+    } catch (err: any) {
+        console.error("Lỗi yêu cầu quyền camera để quét QR:", err);
+        let errorMessage = "Lỗi khi yêu cầu quyền camera.";
+        if (err instanceof DOMException) {
+            if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+                errorMessage = "Không tìm thấy camera trên thiết bị.";
+            } else if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                errorMessage = "Bạn đã từ chối quyền truy cập camera. Vui lòng kiểm tra cài đặt trình duyệt.";
+            } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+                errorMessage = "Không thể đọc dữ liệu từ camera. Camera có thể đang được sử dụng bởi ứng dụng khác.";
+            } else if (err.name === "AbortError") {
+                errorMessage = "Yêu cầu camera đã bị hủy.";
+            } else if (err.name === "SecurityError") {
+                errorMessage = "Lỗi bảo mật khi truy cập camera. Trang web cần được phục vụ qua HTTPS.";
+            } else {
+                errorMessage = `Lỗi camera: ${err.message || err.name}`;
+            }
+        } else if (err instanceof Error) {
+            errorMessage = err.message;
+        }
+        toast.error(errorMessage, { id: permissionToastId });
+        setIsScanCheckInModalOpen(false);
+    } finally {
+        setIsRequestingQrScanCameraPermission(false);
+    }
+  }, [currentUserId]);
 
   const handleCheckInScanSuccess = async (qrCodeData: string) => {
     setIsScanCheckInModalOpen(false);
@@ -1045,7 +1091,7 @@ const executeBatchUnregistration = async (ids: string[]) => {
                             ? "bg-red-300 cursor-not-allowed"
                             : "bg-red-500 hover:bg-red-600"
                         }`}
-                         title={isEventEnded ? "Không thể hủy sự kiện đã diễn ra" : "Hủy đăng ký"}
+                          title={isEventEnded ? "Không thể hủy sự kiện đã diễn ra" : "Hủy đăng ký"}
                       >
                         {processing ? (
                           <ReloadIcon className="animate-spin" />
@@ -1256,7 +1302,8 @@ const executeBatchUnregistration = async (ids: string[]) => {
             isParentRefreshing ||
             registerIsLoading ||
             isLoadingRegisteredIds ||
-            !!registerIsSubmitting
+            !!registerIsSubmitting ||
+            isRequestingQrScanCameraPermission 
           }
           className="p-1.5 sm:p-2 cursor-pointer border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
           title="Làm mới danh sách sự kiện có sẵn"
@@ -1269,27 +1316,27 @@ const executeBatchUnregistration = async (ids: string[]) => {
         </button>
         <div className="ml-auto flex gap-2 flex-wrap">
             <button
-                onClick={() => {
-                    if (!currentUserId) {
-                        toast.error("Vui lòng đăng nhập để điểm danh.");
-                        return;
-                    }
-                    setIsScanCheckInModalOpen(true);
-                }}
-                disabled={isLoadingRegisteredIds || !currentUserId || isCheckingInEvent}
+                onClick={handleOpenQrScanCheckInModal}
+                disabled={isLoadingRegisteredIds || !currentUserId || isCheckingInEvent || isRequestingQrScanCameraPermission}
                 className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
                 title="Quét mã QR của sự kiện để check-in"
             >
-                {isCheckingInEvent ? (
+                {isRequestingQrScanCameraPermission ? (
+                     <ReloadIcon className="w-5 h-5 animate-spin" />
+                ) : isCheckingInEvent ? (
                     <ReloadIcon className="w-5 h-5 animate-spin" />
                 ) : (
                     <MdQrCodeScanner size={20} />
                 )}
-                {isCheckingInEvent ? "Đang xử lý..." : "Quét QR Điểm Danh"}
+                {isRequestingQrScanCameraPermission 
+                    ? "Xin quyền..." 
+                    : isCheckingInEvent 
+                    ? "Đang xử lý..." 
+                    : "Quét QR Điểm Danh"}
             </button>
             <button
                 onClick={handleShowMyQRCode}
-                disabled={isLoadingRegisteredIds || !currentUserId || isLoadingMyQRCode}
+                disabled={isLoadingRegisteredIds || !currentUserId || isLoadingMyQRCode || isRequestingQrScanCameraPermission}
                 className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
                 title="Hiển thị mã QR của bạn"
             >
@@ -1517,7 +1564,7 @@ const executeBatchUnregistration = async (ids: string[]) => {
         {isScanCheckInModalOpen && (
             <div
                 className="fixed inset-0 bg-black/30 bg-opacity-75 flex items-center justify-center z-[90] p-4"
-                onClick={() => setIsScanCheckInModalOpen(false)}
+                onClick={() => { if(!isRequestingQrScanCameraPermission) setIsScanCheckInModalOpen(false);}}
             >
                 <div
                     className="bg-white p-4 sm:p-6 rounded-lg shadow-xl w-full max-w-md relative"
@@ -1526,7 +1573,8 @@ const executeBatchUnregistration = async (ids: string[]) => {
                     <h3 className="text-lg font-semibold mb-4 text-gray-800 text-center">Quét mã QR Sự kiện để Điểm danh</h3>
                     <button
                         onClick={() => setIsScanCheckInModalOpen(false)}
-                        className="absolute top-3 right-3 cursor-pointer text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                        disabled={isRequestingQrScanCameraPermission || isCheckingInEvent}
+                        className="absolute top-3 right-3 cursor-pointer text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         aria-label="Đóng trình quét QR"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

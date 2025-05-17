@@ -13,7 +13,7 @@ import { EventDisplayInfo } from "../types/appTypes";
 import ConfirmationDialog from "@/utils/ConfirmationDialog";
 import EventListManager from "./registerEventGuest/EventListManager";
 import { MdQrCodeScanner, MdQrCode } from "react-icons/md";
-import QRScanner from "../modals/QRScanner"; 
+import QRScanner from "../modals/QRScanner";
 
 interface BackendOrganizerOrParticipant {
   userId: string;
@@ -159,6 +159,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
 
   const [isCheckInScannerOpen, setIsCheckInScannerOpen] = useState<boolean>(false);
   const [isCheckingIn, setIsCheckingIn] = useState<boolean>(false);
+  const [isRequestingCheckInCameraPermission, setIsRequestingCheckInCameraPermission] = useState<boolean>(false);
 
 
   const resetConfirmationState = () => {
@@ -717,6 +718,55 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
     fetchQRCode();
   };
 
+  const handleOpenCheckInScanner = useCallback(async () => {
+    if (!currentUserId) {
+        toast.error("Vui lòng đăng nhập để điểm danh bằng QR.");
+        return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error("Trình duyệt của bạn không hỗ trợ truy cập camera.");
+        setIsCheckInScannerOpen(false);
+        return;
+    }
+
+    setIsRequestingCheckInCameraPermission(true);
+    const permissionToastId = "checkin-camera-permission-toast";
+    toast.loading("Đang yêu cầu quyền truy cập camera...", { id: permissionToastId });
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+
+        toast.success("Sẵn sàng quét. Đang mở trình quét QR...", { id: permissionToastId });
+        setIsCheckInScannerOpen(true);
+    } catch (err: any) {
+        console.error("Lỗi yêu cầu quyền camera để điểm danh:", err);
+        let errorMessage = "Lỗi khi yêu cầu quyền camera.";
+        if (err instanceof DOMException) {
+            if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+                errorMessage = "Không tìm thấy camera trên thiết bị.";
+            } else if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                errorMessage = "Bạn đã từ chối quyền truy cập camera. Vui lòng kiểm tra cài đặt trình duyệt.";
+            } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+                errorMessage = "Không thể đọc dữ liệu từ camera. Camera có thể đang được sử dụng bởi ứng dụng khác.";
+            } else if (err.name === "AbortError") {
+                errorMessage = "Yêu cầu camera đã bị hủy.";
+            } else if (err.name === "SecurityError") {
+                errorMessage = "Lỗi bảo mật khi truy cập camera. Trang web cần được phục vụ qua HTTPS.";
+            } else {
+                errorMessage = `Lỗi camera: ${err.message || err.name}`;
+            }
+        } else if (err instanceof Error) {
+            errorMessage = err.message;
+        }
+        toast.error(errorMessage, { id: permissionToastId });
+        setIsCheckInScannerOpen(false);
+    } finally {
+        setIsRequestingCheckInCameraPermission(false);
+    }
+  }, [currentUserId]);
+
   const handleCheckInScanSuccess = async (qrCodeData: string) => {
     setIsCheckInScannerOpen(false);
 
@@ -752,8 +802,8 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         if (response.ok && result.code === 1000) {
             const checkInData = result.result;
             toast.success(
-               `${result.message || "Điểm danh thành công!"} Sự kiện: ${checkInData.eventName}\n}`,
-               { id: toastId, duration: 5000 }
+              `${result.message || "Điểm danh thành công!"} Sự kiện: ${checkInData.eventName}\n}`,
+              { id: toastId, duration: 5000 }
             );
             
             if (checkInData.eventId) {
@@ -970,15 +1020,15 @@ useEffect(() => {
 
 
         {(creatorDisplay && creatorDisplay !== "Không rõ") || displayEvent.createdAt ? (
-              <div className="mt-8 pt-6 border-t border-gray-200">
-                  <h4 className="text-xl font-semibold text-gray-800 mb-3">Thông tin khác</h4>
-                  {creatorDisplay && creatorDisplay !== "Không rõ" && (
-                      <p className="text-sm text-gray-700 mb-1"><strong className="font-medium text-gray-900">Tạo bởi:</strong> {creatorDisplay}</p>
-                  )}
-                  {displayEvent.createdAt && (
-                      <p className="text-sm text-gray-600"><strong className="font-medium text-gray-900">Ngày tạo sự kiện:</strong> {new Date(displayEvent.createdAt).toLocaleString("vi-VN", { dateStyle: 'long', timeStyle: 'short' })}</p>
-                  )}
-              </div>
+            <div className="mt-8 pt-6 border-t border-gray-200">
+                <h4 className="text-xl font-semibold text-gray-800 mb-3">Thông tin khác</h4>
+                {creatorDisplay && creatorDisplay !== "Không rõ" && (
+                    <p className="text-sm text-gray-700 mb-1"><strong className="font-medium text-gray-900">Tạo bởi:</strong> {creatorDisplay}</p>
+                )}
+                {displayEvent.createdAt && (
+                    <p className="text-sm text-gray-600"><strong className="font-medium text-gray-900">Ngày tạo sự kiện:</strong> {new Date(displayEvent.createdAt).toLocaleString("vi-VN", { dateStyle: 'long', timeStyle: 'short' })}</p>
+                )}
+            </div>
         ) : null}
 
         <div className="mt-10 pt-6 border-t-2 border-gray-300 flex flex-col sm:flex-row justify-end gap-3">
@@ -1040,7 +1090,7 @@ useEffect(() => {
           <div className="flex gap-2 flex-wrap items-center ml-auto">
             <button
               onClick={() => fetchAvailableEvents(true)}
-              disabled={isLoadingAvailable || isLoadingUserId}
+              disabled={isLoadingAvailable || isLoadingUserId || isRequestingCheckInCameraPermission}
               className="p-2 border border-gray-300 rounded-lg text-sm cursor-pointer focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
               title="Làm mới danh sách sự kiện"
             >
@@ -1050,28 +1100,28 @@ useEffect(() => {
                 <ReloadIcon className="w-5 h-5 text-indigo-600" />
               )}
             </button>
-             <button
-                onClick={() => {
-                    if (!currentUserId) {
-                        toast.error("Vui lòng đăng nhập để điểm danh.");
-                        return;
-                    }
-                    setIsCheckInScannerOpen(true);
-                }}
-                disabled={isLoadingUserId || !currentUserId || isCheckingIn}
+            <button
+                onClick={handleOpenCheckInScanner}
+                disabled={isLoadingUserId || !currentUserId || isCheckingIn || isRequestingCheckInCameraPermission}
                 className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
                 title="Quét mã QR của sự kiện để check-in"
             >
-                {isCheckingIn ? (
+                {isRequestingCheckInCameraPermission ? (
+                    <ReloadIcon className="w-5 h-5 animate-spin" />
+                ) : isCheckingIn ? (
                     <ReloadIcon className="w-5 h-5 animate-spin" />
                 ) : (
                     <MdQrCodeScanner size={22} />
                 )}
-                {isCheckingIn ? "Đang xử lý..." : "Quét QR Điểm Danh"}
+                {isRequestingCheckInCameraPermission
+                    ? "Xin quyền..."
+                    : isCheckingIn
+                    ? "Đang xử lý..."
+                    : "Quét QR Điểm Danh"}
             </button>
             <button
                 onClick={handleShowQRCode}
-                disabled={isLoadingUserId || !currentUserId || isLoadingQRCode}
+                disabled={isLoadingUserId || !currentUserId || isLoadingQRCode || isRequestingCheckInCameraPermission}
                 className="px-3 py-1.5 cursor-pointer rounded-md text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 transition shadow-sm disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-1.5"
                 title="Hiển thị mã QR của bạn để người khác quét"
             >
@@ -1102,13 +1152,6 @@ useEffect(() => {
                             }`}
                         >
                             📌 Gợi ý 
-                            {/* (
-                            {
-                            availableEvents.filter(
-                                (e) => !isRegistered(e.id) && !isCreatedByUser(e.id)
-                            ).length
-                            }
-                            ) */}
                         </button>
                         <button
                             onClick={() => setTab("registered")}
@@ -1192,7 +1235,7 @@ useEffect(() => {
         {isCheckInScannerOpen && (
             <div
                 className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[90] p-4"
-                onClick={() => setIsCheckInScannerOpen(false)}
+                onClick={() => { if (!isRequestingCheckInCameraPermission) setIsCheckInScannerOpen(false);}}
             >
                 <div
                     className="bg-white p-4 sm:p-6 rounded-lg shadow-xl w-full max-w-md relative"
@@ -1201,7 +1244,8 @@ useEffect(() => {
                     <h3 className="text-lg font-semibold mb-4 text-gray-800 text-center">Quét mã QR Sự kiện để Điểm danh</h3>
                     <button
                         onClick={() => setIsCheckInScannerOpen(false)}
-                        className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                        disabled={isRequestingCheckInCameraPermission || isCheckingIn}
+                        className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         aria-label="Đóng trình quét QR"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

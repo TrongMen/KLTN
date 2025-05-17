@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "Quản lý sự kiện CLB",
   description: "Ứng dụng quản lý sự kiện CLB dễ dàng và hiệu quả.",
   icons: {
-    icon: "../public/image/iuh.png",
+    icon: "./iuh.png",
   },
   
 };

@@ -121,7 +121,6 @@ const StatCard: React.FC<StatCardProps> = ({
   isLoading,
   color = "bg-indigo-500",
 }) => {
-  // Ensure value is always a valid number
   const displayValue = typeof value === 'number' && !isNaN(value) ? value : 0;
 
   return (
@@ -261,37 +260,59 @@ const CustomPieChart: React.FC<{
     );
   }
 
+  const totalValue = useMemo(() => data.reduce((sum, entry) => sum + entry.value, 0), [data]);
+  const filteredData = data.filter(entry => entry.value > 0);
+
+  const renderLabel = ({ name, percent, value }: any) => {
+    if (totalValue === 0) return null;
+    if (value === totalValue && totalValue > 0) { // One item takes 100%
+      return `${name}: 100%`;
+    }
+    if (percent * 100 < 1 && value > 0) { // For very small percentages, show a minimal representation
+        return `${name}: <1%`;
+    }
+    if (percent * 100 >=1) {
+        return `${name}: ${(percent * 100).toFixed(0)}%`;
+    }
+    return null; // Don't render label for 0 value items if others exist
+  };
+
+
   return (
     <div className="bg-white shadow-lg rounded-xl p-6 h-80">
       <h3 className="text-xl font-semibold text-gray-800 mb-4">{title}</h3>
-      <ResponsiveContainer width="100%" height="90%">
-        <PieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            labelLine={false}
-            outerRadius={80}
-            fill="#8884d8"
-            dataKey="value"
-            nameKey="name"
-            label={({ name, percent }) =>
-              `${name}: ${(percent * 100).toFixed(0)}%`
-            }
-          >
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
-            ))}
-          </Pie>
-          <Tooltip
-            formatter={(value, name, props) => [
-              value,
-              props.payload.payload.name,
-            ]}
-          />
-          <Legend />
-        </PieChart>
-      </ResponsiveContainer>
+      {filteredData.length > 0 ? (
+        <ResponsiveContainer width="100%" height="90%">
+          <PieChart>
+            <Pie
+              data={filteredData}
+              cx="50%"
+              cy="50%"
+              labelLine={filteredData.length > 1 && filteredData.some(d => d.value === totalValue && totalValue > 0) ? false : true}
+              outerRadius={80}
+              fill="#8884d8"
+              dataKey="value"
+              nameKey="name"
+              label={renderLabel}
+            >
+              {filteredData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(value, name, props) => {
+                  const percentage = totalValue > 0 ? (value / totalValue * 100).toFixed(0) : 0;
+                  return [`${value} (${percentage}%)`, props.payload.payload.name];
+              }}
+            />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      ) : (
+        <div className="flex items-center justify-center h-full text-gray-500">
+          Không có dữ liệu để hiển thị.
+        </div>
+      )}
     </div>
   );
 };
@@ -361,48 +382,47 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   );
 
   const generateSummaryData = useCallback(() => {
-  if (!userStats || !eventStats || !newsStats || !startDate || !endDate) return [];
+    if (!userStats || !eventStats || !newsStats || !startDate || !endDate) return [];
 
-  const monthNames = [
-    "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", 
-    "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8",
-    "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"
-  ];
+    const monthNames = [
+      "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4",  
+      "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8",
+      "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"
+    ];
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const monthDiff = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
-  
-  // If dates are invalid or same month, return empty array
-  if (monthDiff < 0 || isNaN(monthDiff)) return [];
-
-  return Array.from({ length: monthDiff + 1 }, (_, i) => {
-    const currentMonth = new Date(start);
-    currentMonth.setMonth(start.getMonth() + i);
-    const monthLabel = monthNames[currentMonth.getMonth()] + " " + currentMonth.getFullYear();
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const monthDiff = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
     
-    // Safely calculate values with fallbacks
-    const approvedEvents = eventStats.approvedEvents || 0;
-    const totalEvents = eventStats.totalEvents || 1; // Avoid division by zero
-    const approvedNews = newsStats.approvedNews || 0;
-    const totalNews = newsStats.totalNews || 1; // Avoid division by zero
-    
-    const progress = monthDiff > 0 ? i / monthDiff : 0;
-    const monthFactor = 0.5 + progress * 0.5;
-    const approvalRate = Math.round(
-      ((approvedEvents / totalEvents) * 50 + (approvedNews / totalNews) * 50) *
-      (0.7 + progress * 0.3)
-    );
+    if (monthDiff < 0 || isNaN(monthDiff)) return [];
 
-    return {
-      name: monthLabel,
-      users: Math.round((userStats.totalUsers || 0) * monthFactor),
-      events: Math.round((eventStats.totalEvents || 0) * monthFactor),
-      news: Math.round((newsStats.totalNews || 0) * monthFactor),
-      approvalRate: isNaN(approvalRate) ? 0 : approvalRate,
-    };
-  });
-}, [userStats, eventStats, newsStats, startDate, endDate]);
+    return Array.from({ length: monthDiff + 1 }, (_, i) => {
+      const currentMonth = new Date(start);
+      currentMonth.setMonth(start.getMonth() + i);
+      const monthLabel = monthNames[currentMonth.getMonth()] + " " + currentMonth.getFullYear();
+      
+      const approvedEvents = eventStats.approvedEvents || 0;
+      const totalEvents = eventStats.totalEvents || 1; 
+      const approvedNews = newsStats.approvedNews || 0;
+      const totalNews = newsStats.totalNews || 1; 
+      
+      const progress = monthDiff > 0 ? i / monthDiff : 0;
+      const monthFactor = 0.5 + progress * 0.5;
+      const approvalRate = Math.round(
+        ((approvedEvents / totalEvents) * 50 + (approvedNews / totalNews) * 50) *
+        (0.7 + progress * 0.3)
+      );
+
+      return {
+        name: monthLabel,
+        users: Math.round((userStats.totalUsers || 0) * monthFactor),
+        events: Math.round((eventStats.totalEvents || 0) * monthFactor),
+        news: Math.round((newsStats.totalNews || 0) * monthFactor),
+        approvalRate: isNaN(approvalRate) ? 0 : approvalRate,
+      };
+    });
+  }, [userStats, eventStats, newsStats, startDate, endDate]);
+
   useEffect(() => {
     const token = localStorage.getItem("authToken");
     if (user && token) {
@@ -606,7 +626,6 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
 
   return (
     <div className="space-y-8 py-4">
-      {/* Summary Section */}
       <section>
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center">
@@ -622,7 +641,6 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
         <SummaryComboChart data={summaryData} isLoading={isLoadingSummary} />
       </section>
 
-      {/* Users Section */}
       <section>
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 flex items-center">
           <PersonIcon className="w-7 h-7 mr-3 text-blue-600" />
@@ -653,7 +671,6 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
         </div>
       </section>
 
-      {/* Events Section */}
       <section>
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 flex items-center">
           <CalendarIcon className="w-7 h-7 mr-3 text-purple-600" />
@@ -696,7 +713,6 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
         />
       </section>
 
-      {/* News Section */}
       <section>
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 flex items-center">
           <ArchiveIcon className="w-7 h-7 mr-3 text-amber-600" />

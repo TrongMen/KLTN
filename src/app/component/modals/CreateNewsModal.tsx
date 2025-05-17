@@ -29,7 +29,7 @@ interface EventForSelect {
   id: string;
   name: string;
   date?: string;
-  createdBy?: string; // Thêm ID người tạo sự kiện
+  createdBy?: string; 
 }
 
 interface CreateNewsModalProps {
@@ -38,7 +38,7 @@ interface CreateNewsModalProps {
   onActionSuccess: (updatedNewsItem?: NewsItem, wasEditMode?: boolean) => void;
   editMode: boolean;
   initialData: NewsItem | null;
-  user: User | null; // user prop để lấy user.id
+  user: User | null;
   refreshToken?: () => Promise<string | null>;
 }
 
@@ -111,7 +111,7 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
             id: e.id,
             name: e.name,
             date: e.time || e.date || e.startDate || e.eventDate || e.createdAt, 
-            createdBy: e.createdBy, // GIẢ ĐỊNH API trả về trường 'createdBy' chứa ID người tạo
+            createdBy: e.createdBy, 
           }));
 
           let temporallyFilteredEvents = approvedEventsFromApi.filter(event => {
@@ -123,7 +123,7 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
             const userSpecificEvents = temporallyFilteredEvents.filter(event => event.createdBy === user.id);
             setEventsForSelect(userSpecificEvents);
           } else {
-            setEventsForSelect([]); // Nếu không có user, không hiển thị sự kiện nào (vì cần sự kiện của chính user)
+            setEventsForSelect([]); 
           }
 
         } else {
@@ -138,14 +138,14 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
       }
     };
     
-    if (user?.id) { // Chỉ fetch sự kiện nếu có user (vì cần lọc theo user.id)
+    if (user?.id) { 
         fetchEventsForDropdown();
     } else {
         setEventsForSelect([]);
         setIsLoadingEvents(false);
     }
 
-  }, [isOpen, user]); // Thêm user vào dependency array
+  }, [isOpen, user]); 
 
   useEffect(() => {
     if (isOpen) {

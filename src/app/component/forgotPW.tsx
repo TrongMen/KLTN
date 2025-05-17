@@ -4,17 +4,17 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function ForgotPasswordPage() {
-  const [username, setUsername] = useState(""); // Thêm state cho username
+  const [username, setUsername] = useState(""); 
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState<string | null>(null); // Thêm state để xử lý lỗi
-  const [isLoading, setIsLoading] = useState(false); // Thêm state để quản lý trạng thái loading
+  const [error, setError] = useState<string | null>(null); 
+  const [isLoading, setIsLoading] = useState(false); 
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null); // Reset lỗi trước khi gửi yêu cầu mới
-    setIsLoading(true); // Bắt đầu loading
+    setError(null); 
+    setIsLoading(true); 
 
     try {
       const response = await fetch(
@@ -24,7 +24,7 @@ export default function ForgotPasswordPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ username, email }), // Gửi username và email
+          body: JSON.stringify({ username, email }), 
         }
       );
 
@@ -33,15 +33,13 @@ export default function ForgotPasswordPage() {
       if (response.ok && data.code === 1000) {
         setSubmitted(true);
       } else {
-        // Xử lý lỗi từ API (ví dụ: hiển thị message từ API)
         setError(data.message || "Đã xảy ra lỗi. Vui lòng thử lại.");
       }
     } catch (err) {
-      // Xử lý lỗi mạng hoặc lỗi không thể parse JSON
       console.error("API call failed:", err);
       setError("Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại.");
     } finally {
-      setIsLoading(false); // Kết thúc loading
+      setIsLoading(false); 
     }
   };
 
@@ -67,13 +65,13 @@ export default function ForgotPasswordPage() {
               </div>
             )}
             <input
-              type="text" // Thêm input cho username
+              type="text"
               placeholder="Tên đăng nhập"
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
-              disabled={isLoading} // Vô hiệu hóa khi đang tải
+              disabled={isLoading}
             />
             <input
               type="email"
@@ -82,12 +80,12 @@ export default function ForgotPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
-              disabled={isLoading} // Vô hiệu hóa khi đang tải
+              disabled={isLoading} 
             />
             <button
               type="submit"
               className={`w-full cursor-pointer py-3 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-all shadow-md ${
-                isLoading ? "opacity-50 cursor-not-allowed" : "" // Thay đổi giao diện khi đang tải
+                isLoading ? "opacity-50 cursor-not-allowed" : "" 
               }`}
               disabled={isLoading} 
             >

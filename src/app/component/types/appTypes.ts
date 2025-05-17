@@ -216,3 +216,76 @@ export interface PersonDetail {
   eventSpecificPositionName?: string;
   maxAttendees?: number | null;
 }
+
+//////////////////////////////////
+
+
+
+export type DetailUser = {
+  id: string;
+  username?: string | null;
+  email?: string | null;
+  role?: string; 
+};
+
+export interface UserRoleDetail { 
+  name: string;
+  description?: string;
+
+}
+
+
+export type ApiRole = {
+  id: string;
+  name: string;
+  description?: string;
+};
+export type ApiPosition = {
+  id: string;
+  name: string;
+  description?: string;
+};
+
+export interface DetailedApiUser extends DetailUser {
+  firstName?: string | null;
+  lastName?: string | null;
+  username?: string | null;
+  position?: ApiPosition | null;
+  organizerRole?: ApiRole | null; 
+  roles?: UserRoleDetail[];
+}
+
+export interface OrganizerInput {
+  userId: string;
+  roleId: string;
+  positionId: string;
+  name?: string;
+  roleName?: string;
+}
+
+export interface ParticipantInput {
+  
+  userId: string;
+  roleId: string;
+  positionId: string;
+  name?: string;
+  roleName?: string;
+
+}
+
+
+export interface EventDataForForm {
+  id: string; 
+  name: string;
+  purpose: string;
+  time: string; 
+  location: string;
+  content: string;
+  organizers: OrganizerInput[];
+  participants: ParticipantInput[];
+  status?: "PENDING" | "APPROVED" | "REJECTED"; 
+  createdBy?: string; 
+  avatarUrl?: string | null;
+   maxAttendees: number | null ; 
+}
+

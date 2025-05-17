@@ -5,10 +5,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User, NewsItem, EventDisplayInfo,  } from "../types/appTypes";
+import { User, NewsItem, EventDisplayInfo,  EventDataForForm, DetailedApiUser, ApiRole } from "../types/appTypes";
 import {  EventMemberInfo } from "../types/homeType";
 
-import { EventDataForForm, DetailedApiUser, ApiRole } from "../types/typCreateEvent";
+// import { EventDataForForm, DetailedApiUser, ApiRole } from "../types/typCreateEvent";
 import { useRouter } from "next/navigation";
 import {
   ReloadIcon,

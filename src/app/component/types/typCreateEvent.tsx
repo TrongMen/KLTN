@@ -28,11 +28,7 @@ export type ApiUser = {
 };
 
 
-export type ApiRole = {
-  id: string;
-  name: string;
-  description?: string;
-};
+
 
 
 export type ApiPosition = {
@@ -82,14 +78,6 @@ export type ParticipantData = { userId: string; roleId: string; positionId: stri
 
 
 
-export interface DetailedApiUser extends User {
-  firstName?: string | null;
-  lastName?: string | null;
-  username?: string | null;
-  position?: ApiPosition | null;
-  organizerRole?: ApiRole | null; 
-  roles?: UserRoleDetail[];
-}
 
 
 export interface OrganizerInput {
@@ -110,6 +98,20 @@ export interface ParticipantInput {
 }
 
 
+export type ApiRole = {
+  id: string;
+  name: string;
+  description?: string;
+};
+
+export interface DetailedApiUser extends User {
+  firstName?: string | null;
+  lastName?: string | null;
+  username?: string | null;
+  position?: ApiPosition | null;
+  organizerRole?: ApiRole | null; 
+  roles?: UserRoleDetail[];
+}
 
 export interface EventDataForForm {
   id: string; 

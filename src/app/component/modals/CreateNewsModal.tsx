@@ -102,7 +102,7 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
         const headers: HeadersInit = token
           ? { Authorization: `Bearer ${token}` }
           : {};
-        const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
+        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=APPROVED`;
         const res = await fetch(url, { headers, cache: "no-store" });
         if (!res.ok) throw new Error("Lỗi tải danh sách sự kiện");
         const data = await res.json();
@@ -266,11 +266,11 @@ const CreateNewsModal: React.FC<CreateNewsModalProps> = ({
     let method: string;
 
     if (currentEditMode && initialData?.id) {
-      apiUrl = `http://localhost:8080/identity/api/news/${initialData.id}?UserId=${user.id}`;
+      apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${initialData.id}?UserId=${user.id}`;
       method = "PUT";
       apiFormData.append("status", "PENDING");
     } else {
-      apiUrl = `http://localhost:8080/identity/api/news`;
+      apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news`;
       method = "POST";
       apiFormData.append("createdById", user.id);
       apiFormData.append("type", "NEWS");

@@ -227,7 +227,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       setIsLoadingCreator(true);
       setCreatorName(null);
       fetch(
-        `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${selectedEvent.createdBy}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -265,7 +265,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         try {
           const organizerPromises = organizersToFetch.map(async (org) => {
             const response = await fetch(
-              `http://localhost:8080/identity/users/notoken/${org.userId}`
+              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${org.userId}`
             );
             if (!response.ok) {
               return {
@@ -332,7 +332,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           try {
             const participantPromises = participantsToFetch.map(async (par) => {
               const response = await fetch(
-                `http://localhost:8080/identity/users/notoken/${par.userId}`
+                `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${par.userId}`
               );
               let fullName = par.name || `ID: ${par.userId.substring(0, 8)}...`;
               let positionName = par.positionName;
@@ -576,7 +576,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         router.push("/login?sessionExpired=true&redirect=/admin/home");
         return;
       }
-      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}?deletedById=${user.id}`;
 
       try {
         let response = await fetch(apiUrl, {

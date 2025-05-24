@@ -170,7 +170,7 @@ const ApprovalItemDetailModal: React.FC<ApprovalItemDetailModalProps> = ({
 
       try {
         const response = await fetch(
-          `http://localhost:8080/identity/users/notoken/${trimmedUserId}`,
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${trimmedUserId}`,
           { headers }
         );
         if (!response.ok) {

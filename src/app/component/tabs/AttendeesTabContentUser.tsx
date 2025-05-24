@@ -144,7 +144,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     setIsLoadingEvents(true);
     setErrorEvents(null);
     try {
-      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/creator/${user.id}`);
+      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${user.id}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `Lỗi ${response.status} khi tải sự kiện.`);
@@ -177,7 +177,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       setErrorAttendees(null);
       setSelectedAttendeeIds(new Set());
       try {
-        const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${eventId}/attendees`);
+        const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/attendees`);
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.message || `Lỗi ${response.status} khi tải người tham dự.`);
@@ -213,7 +213,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     setIsLoadingEventQr(true); setEventQrError(null); setEventQrCodeUrl(null);
     let tempUrlToRevoke: string | null = null;
     try {
-      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${eventId}/qr-code-image`, { method: "GET" }, true);
+      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/qr-code-image`, { method: "GET" }, true);
       if (!response.ok) {
         let errorMsg = `Lỗi ${response.status} khi tải mã QR.`;
         try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) {}
@@ -310,7 +310,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     for (const userId of selectedAttendeeIds) {
       const attendeeToUpdate = attendees.find((a) => a.id === userId);
       try {
-        const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/attendees/${userId}?isAttending=${isAttendingBoolean}`, { method: "PUT" });
+        const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/attendees/${userId}?isAttending=${isAttendingBoolean}`, { method: "PUT" });
         let responseData = null;
         const contentType = response.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) responseData = await response.json();
@@ -337,7 +337,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       for (const userId of selectedAttendeeIds) {
         const attendeeToDelete = attendees.find(a => a.id === userId);
         try {
-          const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/attendees/${userId}`, { method: "DELETE" });
+          const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/attendees/${userId}`, { method: "DELETE" });
           if (response.status === 204 || response.ok) {
             let success = response.status === 204;
             if (response.ok && response.headers.get("content-type")?.includes("application/json")) {
@@ -367,7 +367,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     setIsExporting(true);
     const toastId = toast.loading("Đang xuất file...");
     try {
-      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/attendees/export`, { method: "GET" }, true);
+      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/attendees/export`, { method: "GET" }, true);
       if (!response.ok) { let errorMsg = `Lỗi ${response.status}`; try { const d = await response.json(); errorMsg = d.message || errorMsg; } catch (e) { } throw new Error(errorMsg); }
       const disposition = response.headers.get('content-disposition');
       let filename = `attendees_${selectedEvent.id}.xlsx`;
@@ -427,7 +427,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     const toastId = toast.loading(`Đang điểm danh...`);
     const formData = new FormData(); formData.append('qrCodeData', qrData);
     try {
-      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/check-in`, { method: "POST", body: formData }, true);
+      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/check-in`, { method: "POST", body: formData }, true);
       const responseData = await response.json();
       if (!response.ok || responseData.code !== 1000) {
         let attendeeInfo = "người tham dự";

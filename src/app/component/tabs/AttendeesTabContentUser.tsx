@@ -18,7 +18,7 @@ import {
 import { MdQrCodeScanner } from "react-icons/md";
 import QrCodeModal from "../modals/QrCodeModal";
 import QRScanner from "../modals/QRScanner";
-import { EventListDisplay, AttendableEvent } from "./atten/EventListDisplay"; // Đã import
+import { EventListDisplay, AttendableEvent } from "./atten/EventListDisplay";
 
 type EventStatus = "upcoming" | "ongoing" | "ended";
 
@@ -48,14 +48,24 @@ interface AttendeesTabContentProps {
   ) => void;
 }
 
-const getEventStatusForTab = (eventTimeStr: string | undefined): EventStatus => {
-    if (!eventTimeStr) return "upcoming";
+const getEventStatusForTab = (event: AttendableEvent | null): EventStatus => {
+    if (!event) return "upcoming";
+
+    const progressStatusUpper = event.progressStatus?.toUpperCase();
+
+    if (progressStatusUpper === "ONGOING") return "ongoing";
+    if (progressStatusUpper === "UPCOMING") return "upcoming";
+    if (progressStatusUpper === "COMPLETED") return "ended";
+    
+    if (!event.time) return "upcoming";
     try {
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const eventDate = new Date(eventTimeStr);
+        const eventDate = new Date(event.time);
         if (isNaN(eventDate.getTime())) return "upcoming";
+        
         const eventDateStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+        
         if (eventDateStart < todayStart) return "ended";
         else if (eventDateStart > todayStart) return "upcoming";
         else return "ongoing";
@@ -102,8 +112,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
   const [isRequestingCameraPermission, setIsRequestingCameraPermission] = useState(false);
 
   const selectedEventStatus = useMemo(() => {
-    if (!selectedEvent) return null;
-    return getEventStatusForTab(selectedEvent.time);
+    return getEventStatusForTab(selectedEvent);
   }, [selectedEvent]);
 
   const canPerformAttendanceActions = selectedEventStatus === 'ongoing';
@@ -144,7 +153,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     setIsLoadingEvents(true);
     setErrorEvents(null);
     try {
-      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${user.id}`);
+      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/creator/${user.id}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || `Lỗi ${response.status} khi tải sự kiện.`);
@@ -177,7 +186,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       setErrorAttendees(null);
       setSelectedAttendeeIds(new Set());
       try {
-        const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/attendees`);
+        const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${eventId}/attendees`);
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.message || `Lỗi ${response.status} khi tải người tham dự.`);
@@ -213,10 +222,10 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     setIsLoadingEventQr(true); setEventQrError(null); setEventQrCodeUrl(null);
     let tempUrlToRevoke: string | null = null;
     try {
-      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/qr-code-image`, { method: "GET" }, true);
+      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${eventId}/qr-code-image`, { method: "GET" }, true);
       if (!response.ok) {
         let errorMsg = `Lỗi ${response.status} khi tải mã QR.`;
-        try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) {}
+        try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch (e) { }
         throw new Error(errorMsg);
       }
       const imageBlob = await response.blob();
@@ -235,7 +244,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     let currentEventQrUrlToRevoke: string | null = null;
     if (selectedEvent?.id) {
       fetchAttendeesForEvent(selectedEvent.id);
-      if (getEventStatusForTab(selectedEvent.time) === 'ongoing') {
+      if (selectedEventStatus === 'ongoing') {
         fetchEventQrCodeImage(selectedEvent.id).then(url => { currentEventQrUrlToRevoke = url; });
       } else { setEventQrCodeUrl(null); setIsLoadingEventQr(false); setEventQrError(null); }
     } else {
@@ -244,7 +253,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       setIsLoadingEventQr(false); setEventQrError(null);
     }
     return () => { if (currentEventQrUrlToRevoke) window.URL.revokeObjectURL(currentEventQrUrlToRevoke); }
-  }, [selectedEvent, fetchAttendeesForEvent, fetchEventQrCodeImage]);
+  }, [selectedEvent, fetchAttendeesForEvent, fetchEventQrCodeImage, selectedEventStatus]);
 
   const toggleSelectAttendee = (attendeeId: string) => {
     setSelectedAttendeeIds((prev) => {
@@ -310,7 +319,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     for (const userId of selectedAttendeeIds) {
       const attendeeToUpdate = attendees.find((a) => a.id === userId);
       try {
-        const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/attendees/${userId}?isAttending=${isAttendingBoolean}`, { method: "PUT" });
+        const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/attendees/${userId}?isAttending=${isAttendingBoolean}`, { method: "PUT" });
         let responseData = null;
         const contentType = response.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) responseData = await response.json();
@@ -337,7 +346,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       for (const userId of selectedAttendeeIds) {
         const attendeeToDelete = attendees.find(a => a.id === userId);
         try {
-          const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/attendees/${userId}`, { method: "DELETE" });
+          const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/attendees/${userId}`, { method: "DELETE" });
           if (response.status === 204 || response.ok) {
             let success = response.status === 204;
             if (response.ok && response.headers.get("content-type")?.includes("application/json")) {
@@ -367,7 +376,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     setIsExporting(true);
     const toastId = toast.loading("Đang xuất file...");
     try {
-      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/attendees/export`, { method: "GET" }, true);
+      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/attendees/export`, { method: "GET" }, true);
       if (!response.ok) { let errorMsg = `Lỗi ${response.status}`; try { const d = await response.json(); errorMsg = d.message || errorMsg; } catch (e) { } throw new Error(errorMsg); }
       const disposition = response.headers.get('content-disposition');
       let filename = `attendees_${selectedEvent.id}.xlsx`;
@@ -404,7 +413,6 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       toast.success("Sẵn sàng quét. Đang mở trình quét QR...", { id: permissionToastId });
       setIsQrScannerOpen(true);
     } catch (err: any) {
-      console.error("Lỗi yêu cầu quyền camera:", err);
       let errorMessage = "Lỗi khi yêu cầu quyền camera.";
       if (err instanceof DOMException) {
           if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") { errorMessage = "Không tìm thấy camera trên thiết bị."; }
@@ -427,7 +435,7 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
     const toastId = toast.loading(`Đang điểm danh...`);
     const formData = new FormData(); formData.append('qrCodeData', qrData);
     try {
-      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${selectedEvent.id}/check-in`, { method: "POST", body: formData }, true);
+      const response = await authenticatedFetch(`http://localhost:8080/identity/api/events/${selectedEvent.id}/check-in`, { method: "POST", body: formData }, true);
       const responseData = await response.json();
       if (!response.ok || responseData.code !== 1000) {
         let attendeeInfo = "người tham dự";
@@ -469,16 +477,16 @@ const AttendeesTabContent: React.FC<AttendeesTabContentProps> = ({
       {!selectedEvent ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2">
-             <h3 className="text-xl font-medium text-gray-700 "> Chọn một sự kiện: </h3>
-             <button
-               onClick={() => fetchAttendableEvents(true)}
-               disabled={isLoadingEvents}
-               className="px-3 py-1.5 text-sm font-semibold text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
-               title="Làm mới danh sách sự kiện"
-             >
-               <FaSyncAlt className={isLoadingEvents ? "animate-spin" : ""} />
-               
-             </button>
+            <h3 className="text-xl font-medium text-gray-700 "> Chọn một sự kiện: </h3>
+            <button
+              onClick={() => fetchAttendableEvents(true)}
+              disabled={isLoadingEvents}
+              className="px-3 py-1.5 text-sm font-semibold text-white bg-sky-600 rounded-md hover:bg-sky-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Làm mới danh sách sự kiện"
+            >
+              <FaSyncAlt className={isLoadingEvents ? "animate-spin" : ""} />
+              
+            </button>
           </div>
           <EventListDisplay
             initialEvents={attendableEvents}

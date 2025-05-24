@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { toast, Toaster } from "react-hot-toast";
-
+import { toast, Toaster } from 'react-hot-toast';
+import ConfirmationDialog from "../../utils/ConfirmationDialog";
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -50,7 +50,7 @@ export default function LoginPage() {
 
     try {
       const authResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/token`,
+        `http://localhost:8080/identity/auth/token`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -60,36 +60,49 @@ export default function LoginPage() {
 
       const authData = await authResponse.json();
       if (!authResponse.ok || authData.code !== 1000) {
-        // Giả sử API trả về code 1000 khi thành công, điều chỉnh nếu cần
-        throw new Error(authData.message || "Đăng nhập thất bại");
+        throw new Error(authData.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.");
       }
 
       const token = authData.result?.token;
-      if (!token) throw new Error("Không nhận được token");
-      localStorage.setItem("authToken", token);
-
+      if (!token) throw new Error("Không nhận được token xác thực.");
+      
       const userInfoResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/myInfo`,
+        `http://localhost:8080/identity/users/myInfo`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      const userInfo = await userInfoResponse.json();
-      if (!userInfoResponse.ok || userInfo.code !== 1000) {
-        // Giả sử API trả về code 1000 khi thành công, điều chỉnh nếu cần
-        localStorage.removeItem("authToken");
-        throw new Error(userInfo.message || "Lỗi khi lấy thông tin user");
+      const userInfoData = await userInfoResponse.json();
+      if (!userInfoResponse.ok || userInfoData.code !== 1000 || !userInfoData.result) {
+        throw new Error(userInfoData.message || "Lỗi khi lấy thông tin người dùng.");
       }
 
-      const roleName = userInfo.result?.roles?.[0]?.name?.toUpperCase();
+      const userDetails = userInfoData.result;
 
+      if (userDetails.locked) {
+        localStorage.removeItem("authToken"); 
+        let lockMessage = "Tài khoản của bạn đã bị khóa.";
+        if (userDetails.lockReason) {
+          lockMessage += ` Lý do: ${userDetails.lockReason}.`;
+        }
+        lockMessage += " Vui lòng liên hệ quản trị viên.";
+        toast.error(lockMessage, { duration: 5000 });
+        handleRefreshCaptcha();
+        setPassword("");
+        setLoading(false);
+        return;
+      }
+      
+      localStorage.setItem("authToken", token);
       toast.success("Đăng nhập thành công!");
 
-      // Delay nhẹ trước khi chuyển trang để user kịp thấy toast
+      const roleName = userDetails.roles?.[0]?.name?.toUpperCase();
+      
       setTimeout(() => {
         switch (roleName) {
           case "ADMIN":
+          case "SYSADMIN":
             router.push("/admin");
             break;
           case "GUEST":
@@ -101,34 +114,23 @@ export default function LoginPage() {
           default:
             localStorage.removeItem("authToken");
             toast.error(
-              `Role "${roleName}" không được hỗ trợ hoặc không tồn tại.`
+              `Vai trò "${roleName || 'không xác định'}" không được hỗ trợ hoặc không tồn tại.`
             );
             router.push("/");
             handleRefreshCaptcha();
             setPassword("");
-            setLoading(false); // Đảm bảo setLoading false ở đây
-            break; // Thêm break để tránh chạy vào finally quá sớm nếu switch không khớp
+            break;
         }
-        // Không cần setLoading(false) ở đây nữa vì đã có trong finally
-      }, 500); // 500ms delay
+        setLoading(false);
+      }, 500);
     } catch (error: any) {
-      console.error("Đăng nhập thất bại:", error);
       toast.error("Đăng nhập thất bại: " + error.message);
       handleRefreshCaptcha();
       setPassword("");
-      setLoading(false); // Đảm bảo setLoading false khi có lỗi
-    } finally {
-      // setLoading(false) sẽ được gọi sau khi try/catch hoàn tất,
-      // nhưng nếu có chuyển trang thì nó có thể không cần thiết
-      // Tuy nhiên, để chắc chắn nếu không chuyển trang hoặc có lỗi trước khi chuyển, nên giữ lại
-      // Hoặc chỉ gọi setLoading(false) trong các trường hợp lỗi và captcha sai
-      // Trong trường hợp thành công và chuyển trang, component sẽ unmount
-      // Giữ lại setLoading(false) trong khối catch và khi captcha sai là đủ
-      // Không cần setLoading(false) ở đây nếu logic chuyển trang trong try hoạt động đúng
-      // Đã di chuyển setLoading(false) vào các nhánh xử lý lỗi/captcha sai và trước khi return/break
+      setLoading(false);
     }
   };
-
+  
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     if (/^\d*$/.test(value) && value.length <= 10) {
@@ -158,7 +160,7 @@ export default function LoginPage() {
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
             maxLength={10}
             required
-            disabled={loading} // Vô hiệu hóa khi đang tải
+            disabled={loading}
           />
 
           <div className="relative">
@@ -169,14 +171,14 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
               required
-              disabled={loading} // Vô hiệu hóa khi đang tải
+              disabled={loading}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 ${loading ? 'cursor-not-allowed' : 'hover:text-blue-500'}`}
               aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
-              disabled={loading} // Vô hiệu hóa khi đang tải
+              disabled={loading}
             >
               {showPassword ? "🙈" : "👁️"}
             </button>
@@ -191,8 +193,8 @@ export default function LoginPage() {
               className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
               maxLength={5}
               required
-              autoComplete="off" // Tắt tự động điền cho captcha
-              disabled={loading} // Vô hiệu hóa khi đang tải
+              autoComplete="off"
+              disabled={loading}
             />
             <div className="flex items-center space-x-2">
               <div className="px-3 py-2 font-bold bg-gray-100 rounded-lg text-lg tracking-widest select-none border border-gray-300">
@@ -203,7 +205,7 @@ export default function LoginPage() {
                 onClick={handleRefreshCaptcha}
                 title="Làm mới mã"
                 className={`text-blue-500 hover:text-blue-700 text-xl p-1 rounded-full hover:bg-gray-100 transition-colors ${loading ? 'cursor-not-allowed opacity-50' : ''}`}
-                disabled={loading} // Vô hiệu hóa khi đang tải
+                disabled={loading}
               >
                 🔄
               </button>
@@ -216,10 +218,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className={`w-full mt-2 py-3 text-white font-semibold rounded-lg transition-all shadow-md ${
+            className={`w-full mt-2 py-3 text-white font-semibold rounded-lg transition-all shadow-md cursor-pointer ${
               loading
                 ? "bg-gray-400 cursor-not-allowed"
-                : "bg-blue-500 hover:bg-blue-600 cursor-pointer"
+                : "bg-blue-500 hover:bg-blue-600"
             }`}
             disabled={loading}
           >

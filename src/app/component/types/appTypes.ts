@@ -44,9 +44,11 @@ export type Event = {
   deleted?: boolean;
   deletedAt?: string | null; 
   deletedBy?: string | null; 
-  progressStatus?: string;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
+
   qrCodeUrl?: string | null;
   maxAttendees?: number | null;
+  
 };
 
 export interface EventDisplayInfo {
@@ -76,6 +78,7 @@ export interface EventDisplayInfo {
   }[];
   maxAttendees?: number | null;
   currentAttendeesCount?: number;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
 }
 
 
@@ -106,6 +109,8 @@ export interface EventDisplayInfoGuest {
   }[];
   maxAttendees?: number | null;
   currentAttendeesCount?: number;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
+
 }
 
 export interface NewsItem {
@@ -129,6 +134,7 @@ export interface NewsItem {
   coverImageUrl?: string;
   rejectionReason?: string | null;
   maxAttendees?: number|null ;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
   
 }
 
@@ -287,5 +293,7 @@ export interface EventDataForForm {
   createdBy?: string; 
   avatarUrl?: string | null;
    maxAttendees: number | null ; 
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
+
 }
 

@@ -53,7 +53,7 @@ const fetchUserFullNameById = async (userId: string): Promise<string> => {
   }
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`
+      `http://localhost:8080/identity/users/notoken/${userId}`
     );
     if (!response.ok) {
       return `ID: ${userId.substring(0, 8)}... (Lỗi ${response.status})`;
@@ -242,7 +242,7 @@ export default function Dashboard() {
     setErrorEvents(null);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status/notoken?status=APPROVED`
+        `http://localhost:8080/identity/api/events/status/notoken?status=APPROVED`
       );
       if (!response.ok) {
         let errorMessage = `Lỗi HTTP: ${response.status} - ${response.statusText}`;
@@ -294,7 +294,7 @@ export default function Dashboard() {
     setErrorNews(null);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status/notoken?status=APPROVED`
+        `http://localhost:8080/identity/api/news/status/notoken?status=APPROVED`
       );
       if (!response.ok) {
         let errorMessage = `Lỗi HTTP: ${response.status} - ${response.statusText}`;

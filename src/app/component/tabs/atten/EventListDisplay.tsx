@@ -12,7 +12,7 @@ export type AttendableEvent = {
   time: string;
   endTime?: string | null;
   avatarUrl?: string;
-  progressStatus?: 'UPCOMING' | 'ONGOING' | 'COMPLETED';
+  progressStatus?: 'UPCOMING' | 'ONGOING' | 'COMPLETED' | string;
 };
 
 export type EventSortKey = "name" | "time";
@@ -29,14 +29,22 @@ interface EventListDisplayProps {
   listHeight?: string;
 }
 
-const getEventStatus = (eventTimeStr: string | undefined): EventStatus => {
-    if (!eventTimeStr) return "upcoming";
+const getEventStatus = (event: AttendableEvent): EventStatus => {
+    const progressStatusUpper = event.progressStatus?.toUpperCase();
+
+    if (progressStatusUpper === "ONGOING") return "ongoing";
+    if (progressStatusUpper === "UPCOMING") return "upcoming";
+    if (progressStatusUpper === "COMPLETED") return "ended";
+
+    if (!event.time) return "upcoming";
     try {
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const eventDate = new Date(eventTimeStr);
+        const eventDate = new Date(event.time);
         if (isNaN(eventDate.getTime())) return "upcoming";
+        
         const eventDateStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+        
         if (eventDateStart < todayStart) return "ended";
         else if (eventDateStart > todayStart) return "upcoming";
         else return "ongoing";
@@ -162,13 +170,13 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
         events = events.filter(event => new Date(event.time) <= endDate);
       }
     } else if (eventTimeFilter !== "all") {
-        events = events.filter(event => getEventStatus(event.time) === eventTimeFilter);
+        events = events.filter(event => getEventStatus(event) === eventTimeFilter);
     }
 
     events.sort((a, b) => {
       let valA, valB;
-      const statusA = getEventStatus(a.time);
-      const statusB = getEventStatus(b.time);
+      const statusA = getEventStatus(a);
+      const statusB = getEventStatus(b);
       const timeA = new Date(a.time).getTime();
       const timeB = new Date(b.time).getTime();
 
@@ -177,7 +185,7 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
         if (valA < valB) return eventSortConfig.direction === "asc" ? -1 : 1;
         if (valA > valB) return eventSortConfig.direction === "asc" ? 1 : -1;
         return 0;
-      } else { // Sort by time with status priority
+      } else { 
         if (statusA === "ongoing" && statusB !== "ongoing") return -1;
         if (statusB === "ongoing" && statusA !== "ongoing") return 1;
         if (statusA === "upcoming" && statusB === "ended") return -1;
@@ -187,8 +195,9 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
 
         if (statusA === "upcoming" && statusB === "upcoming") return (timeA - timeB) * timeSortDirection;
         if (statusA === "ended" && statusB === "ended") return (timeB - timeA) * timeSortDirection;
-
-        return (timeA - timeB) * timeSortDirection;
+        if (statusA === "ongoing" && statusB === "ongoing") return (timeA - timeB) * timeSortDirection;
+        
+        return (timeB - timeA) * (eventSortConfig.direction === 'desc' ? 1 : -1);
       }
     });
     return events;
@@ -254,16 +263,16 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
             {eventViewMode === 'card' && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ">
                 {displayedEvents.map((event) => {
-                  const status = getEventStatus(event.time);
+                  const status = getEventStatus(event);
                   return (
                     <div key={event.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow duration-300 overflow-hidden cursor-pointer flex flex-col border" onClick={() => onSelectEvent(event)}>
-                       <div className="relative">
+                        <div className="relative">
                           <EventImage src={event.avatarUrl} alt={`Ảnh ${event.name}`} className="w-full h-40 object-cover" placeholderType="card" />
                           <span className={`absolute top-2 right-2 ${getStatusBadgeClasses(status)} shadow-sm`}>
                             {getStatusIcon(status)}
                             {getStatusText(status)}
                           </span>
-                       </div>
+                        </div>
                       <div className="p-4 flex flex-col flex-grow">
                         <h4 className="text-md font-semibold text-gray-800 truncate mb-2" title={event.name}>{event.name}</h4>
                         <div className="space-y-1 text-sm text-gray-600 mt-auto">
@@ -281,24 +290,24 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
               <div className="bg-white shadow border border-gray-200 rounded-lg overflow-hidden">
                 <ul role="list" className="divide-y divide-gray-200">
                   {displayedEvents.map((event) => {
-                     const status = getEventStatus(event.time);
-                     return (
-                      <li key={event.id} className="px-4 py-3 hover:bg-gray-50 cursor-pointer sm:px-6" onClick={() => onSelectEvent(event)}>
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center truncate">
-                            <EventImage src={event.avatarUrl} alt="" className="h-10 w-10 rounded-full mr-4 object-cover flex-shrink-0" placeholderType="thumbnail"/>
-                            <div className="truncate">
-                              <p className="text-md font-medium text-indigo-600 truncate" title={event.name}>{event.name}</p>
-                              <p className="text-sm text-gray-500 truncate" title={event.location}>{event.location || "Chưa có địa điểm"}</p>
+                      const status = getEventStatus(event);
+                      return (
+                        <li key={event.id} className="px-4 py-3 hover:bg-gray-50 cursor-pointer sm:px-6" onClick={() => onSelectEvent(event)}>
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center truncate">
+                              <EventImage src={event.avatarUrl} alt="" className="h-10 w-10 rounded-full mr-4 object-cover flex-shrink-0" placeholderType="thumbnail"/>
+                              <div className="truncate">
+                                <p className="text-md font-medium text-indigo-600 truncate" title={event.name}>{event.name}</p>
+                                <p className="text-sm text-gray-500 truncate" title={event.location}>{event.location || "Chưa có địa điểm"}</p>
+                              </div>
+                            </div>
+                            <div className="ml-2 flex-shrink-0 text-right space-y-1">
+                                <p className={`text-xs font-medium ${getStatusBadgeClasses(status)}`}>{getStatusText(status)}</p>
+                                <p className="text-sm text-gray-700">{new Date(event.time).toLocaleDateString("vi-VN")}</p>
                             </div>
                           </div>
-                          <div className="ml-2 flex-shrink-0 text-right space-y-1">
-                             <p className={`text-xs font-medium ${getStatusBadgeClasses(status)}`}>{getStatusText(status)}</p>
-                             <p className="text-sm text-gray-700">{new Date(event.time).toLocaleDateString("vi-VN")}</p>
-                          </div>
-                        </div>
-                      </li>
-                    )}
+                        </li>
+                      )}
                   )}
                 </ul>
               </div>

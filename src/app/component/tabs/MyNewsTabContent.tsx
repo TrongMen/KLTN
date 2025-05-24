@@ -162,6 +162,10 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
   const currentUserId = user?.id ?? null;
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
+  const isAdmin = useMemo(() => {
+    return user?.roles?.some(role => role.name?.toUpperCase() === "ADMIN" || role.name?.toUpperCase() === "SYSADMIN");
+  }, [user]);
+
   const fetchMyNewsData = useCallback(
     async (
       status: "approved" | "pending" | "rejected"
@@ -174,7 +178,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
           ? { Authorization: `Bearer ${token}` }
           : {};
         const statusParam = status.toUpperCase();
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status?status=${statusParam}`;
+        const url = `http://localhost:8080/identity/api/news/status?status=${statusParam}`;
         const newsRes = await fetch(url, { headers, cache: "no-store" });
 
         if (!newsRes.ok) {
@@ -205,20 +209,14 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
             deleted: item.deleted,
             deletedAt: item.deletedAt,
             deletedBy: item.deletedBy,
-            maxAttendees: item.maxAttendees // Đảm bảo trường này được map nếu có từ API
+            maxAttendees: item.maxAttendees 
           }));
           userNewsOfStatus = allNewsOfStatus.filter(
             (item) => item.createdBy?.id === currentUserId && !item.deleted 
           );
-        } else {
-          console.warn(
-            "API fetchMyNewsData không trả về cấu trúc mong đợi:",
-            data
-          );
         }
         return { count: userNewsOfStatus.length, items: userNewsOfStatus };
       } catch (err: any) {
-        console.error(`Lỗi tải tin tức trạng thái ${status}:`, err);
         throw err;
       }
     },
@@ -227,12 +225,6 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
 
   const fetchDeletedNews = useCallback(
     async (page = 0, size = 10) => {
-      if (!currentUserId) {
-        setDeletedNewsItems([]);
-        setIsLoadingDeleted(false);
-        setDeletedNewsError("Không tìm thấy thông tin người dùng.");
-        return;
-      }
       setIsLoadingDeleted(true);
       setDeletedNewsError("");
       try {
@@ -240,7 +232,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
         const headers: HeadersInit = token
           ? { Authorization: `Bearer ${token}` }
           : {};
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/deleted?page=${page}&size=${size}`;
+        const url = `http://localhost:8080/identity/api/news/deleted?page=${page}&size=${size}`;
         const res = await fetch(url, { headers, cache: "no-store" });
 
         if (!res.ok) {
@@ -254,69 +246,54 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
           data.result &&
           Array.isArray(data.result.content)
         ) {
-          const userDeletedNews: NewsItem[] = data.result.content
-            .filter((item: any) => item.createdBy?.id === currentUserId) // Chỉ lấy tin tức đã xóa do người dùng hiện tại tạo
-            .map((item: any) => ({
-              id: item.id,
-              title: item.title || "N/A",
-              content: item.content,
-              summary:
-                item.summary ||
-                item.content?.substring(0, 150) +
-                  (item.content?.length > 150 ? "..." : "") ||
-                "",
-              imageUrl: item.coverImageUrl,
-              status: item.status,
-              createdAt: item.createdAt,
-              publishedAt: item.publishedAt,
-              rejectionReason: item.rejectionReason,
-              createdBy: item.createdBy,
-              event: item.event,
-              deleted: item.deleted,
-              deletedAt: item.deletedAt,
-              deletedBy: item.deletedBy,
-              maxAttendees: item.maxAttendees 
-            }));
-
-          setDeletedNewsItems(userDeletedNews);
-          const totalUserElements = data.result.totalElements;
-          const totalUserPages = Math.ceil(totalUserElements / size);
+          let allUserDeletedNews: NewsItem[] = data.result.content.map((item: any) => ({
+            id: item.id,
+            title: item.title || "N/A",
+            content: item.content,
+            summary:
+              item.summary ||
+              item.content?.substring(0, 150) +
+                (item.content?.length > 150 ? "..." : "") ||
+              "",
+            imageUrl: item.coverImageUrl,
+            status: item.status,
+            createdAt: item.createdAt,
+            publishedAt: item.publishedAt,
+            rejectionReason: item.rejectionReason,
+            createdBy: item.createdBy,
+            event: item.event,
+            deleted: item.deleted,
+            deletedAt: item.deletedAt,
+            deletedBy: item.deletedBy, 
+            maxAttendees: item.maxAttendees 
+          }));
           
+          let relevantDeletedNews = allUserDeletedNews;
+          if (!isAdmin) {
+            relevantDeletedNews = allUserDeletedNews.filter((item: any) => item.createdBy?.id === currentUserId);
+          }
+
+          setDeletedNewsItems(relevantDeletedNews);
           setDeletedNewsPagination({
             page: data.result.number,
             size: data.result.size,
-            totalPages: totalUserPages,
-            totalElements: totalUserElements,
+            totalPages: isAdmin ? data.result.totalPages : Math.ceil(relevantDeletedNews.length / size),
+            totalElements: isAdmin ? data.result.totalElements : relevantDeletedNews.length,
           });
         } else {
-          console.warn(
-            "API bảng tin đã xóa không trả về cấu trúc mong đợi:",
-            data
-          );
           setDeletedNewsItems([]);
-          setDeletedNewsPagination({
-            page: 0,
-            size: 10,
-            totalPages: 0,
-            totalElements: 0,
-          });
+          setDeletedNewsPagination({ page: 0, size: 10, totalPages: 0, totalElements: 0 });
           setDeletedNewsError("Dữ liệu tin tức đã xóa không hợp lệ");
         }
       } catch (err: any) {
-        console.error("Lỗi tải tin tức đã xóa:", err);
         setDeletedNewsError(err.message || "Lỗi tải tin tức đã xóa");
         setDeletedNewsItems([]);
-        setDeletedNewsPagination({
-          page: 0,
-          size: 10,
-          totalPages: 0,
-          totalElements: 0,
-        });
+        setDeletedNewsPagination({ page: 0, size: 10, totalPages: 0, totalElements: 0 });
       } finally {
         setIsLoadingDeleted(false);
       }
     },
-    [currentUserId]
+    [currentUserId, isAdmin]
   );
   
   const handleRefresh = useCallback(async () => {
@@ -337,7 +314,6 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
       }
       toast.success("Dữ liệu đã được làm mới!", { id: toastId });
     } catch (error: any) {
-      console.error("Lỗi trong quá trình làm mới:", error);
       toast.error(`Làm mới thất bại: ${error.message || "Lỗi không xác định"}`, { id: toastId });
     } finally {
       setIsRefreshing(false);
@@ -380,10 +356,6 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
                 initialTabItems = result.value.items;
               }
             } else {
-              console.error(
-                `Failed fetch count/data for ${status}:`,
-                result.reason
-              );
               newCounts[status] = 0;
               const errorMsg =
                 result.reason instanceof Error
@@ -395,10 +367,10 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
 
           setMyNewsItemCounts(newCounts);
           setMyNewsError(combinedErrorMessages.trim());
-          if (initialTabItems !== null) { // Chỉ cập nhật nếu có dữ liệu mới cho tab hiện tại
+          if (initialTabItems !== null) {
             setCurrentMyNewsItems(initialTabItems);
-          } else if (myNewsTab) { // Nếu không có, thử fetch lại cho tab hiện tại nếu nó được set
-             fetchMyNewsData(myNewsTab).then(res => setCurrentMyNewsItems(res.items)).catch(err => setMyNewsError(err.message));
+          } else if (myNewsTab) { 
+              fetchMyNewsData(myNewsTab).then(res => setCurrentMyNewsItems(res.items)).catch(err => setMyNewsError(err.message));
           }
           setIsLoadingMyNewsContent(false);
         })
@@ -414,11 +386,10 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
     mainTab,
     currentUserId,
     fetchMyNewsData,
-    myNewsTab, // Thêm myNewsTab vào dependency để load lại khi tab con thay đổi
+    myNewsTab, 
     refreshMyNewsTrigger,
   ]);
   
-  // Effect riêng để load content của sub-tab khi myNewsTab thay đổi (và không phải là initial load của counts)
   useEffect(() => {
     if (mainTab === "myNews" && currentUserId && !isLoadingMyNewsCounts) {
       setIsLoadingMyNewsContent(true);
@@ -491,7 +462,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Vui lòng đăng nhập lại.");
 
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${newsId}?deletedById=${currentUserId}`;
+        const url = `http://localhost:8080/identity/api/news/${newsId}?deletedById=${currentUserId}`;
         const res = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -506,7 +477,6 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
           throw new Error(d?.message || `Lỗi xóa tin tức (${res.status})`);
         }
       } catch (err: any) {
-        console.error(`Lỗi xóa tin ${newsId}:`, err);
         toast.error(`Xóa thất bại: ${err.message}`, { id: toastId });
       } finally {
         setIsDeleting(null);
@@ -551,7 +521,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Vui lòng đăng nhập lại.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${newsId}/restore`;
+        const url = `http://localhost:8080/identity/api/news/${newsId}/restore`;
         const res = await fetch(url, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}` },
@@ -572,7 +542,6 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
         );
         setRefreshMyNewsTrigger((prev) => prev + 1); 
       } catch (err: any) {
-        console.error(`Lỗi khôi phục tin ${newsId}:`, err);
         toast.error(`Khôi phục thất bại: ${err.message}`, { id: toastId });
       } finally {
         setIsRestoring(null);
@@ -645,7 +614,6 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
               return true;
           }
         } catch (e) {
-          console.error("Lỗi parse ngày:", dateStrToUse, e);
           return false;
         }
       });
@@ -718,12 +686,12 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
   };
 
   const renderNewsDetails = (item: NewsItem) => {
-    const isDeleted = mainTab === "deletedNews";
+    const isDeletedTab = mainTab === "deletedNews";
     const processing =
       isDeleting === item.id || isRestoring === item.id;
-    const canEdit = !isDeleted && user?.id === item.createdBy?.id;
-    const canDelete = !isDeleted && user?.id === item.createdBy?.id;
-    const canRestore = isDeleted && user?.id === item.createdBy?.id;
+    const canEdit = !isDeletedTab && user?.id === item.createdBy?.id;
+    const canDelete = !isDeletedTab && user?.id === item.createdBy?.id;
+    const canRestore = isDeletedTab && (isAdmin || user?.id === item.createdBy?.id);
 
     return (
       <div className="p-1 overflow-y-auto mb-4 pr-2 bg-white p-4 rounded-lg shadow border scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
@@ -749,7 +717,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
         )}
 
         <div className="space-y-3 text-sm text-gray-700 mb-4">
-          {!isDeleted && (
+          {!isDeletedTab && (
             <p>
               <strong className="font-medium text-gray-900 w-28 inline-block">
                 Trạng thái:
@@ -757,7 +725,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
               {renderStatusBadge(item.status)}
             </p>
           )}
-          {!isDeleted && item.status === "REJECTED" && item.rejectionReason && (
+          {!isDeletedTab && item.status === "REJECTED" && item.rejectionReason && (
             <p className="text-red-600">
               <strong className="font-medium text-red-800 w-28 inline-block">
                 Lý do từ chối:
@@ -771,7 +739,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
             </strong>{" "}
             {formatDate(item.createdAt)}
           </p>
-          {!isDeleted && item.publishedAt && (
+          {!isDeletedTab && item.publishedAt && (
             <p>
               <strong className="font-medium text-gray-900 w-28 inline-block">
                 Ngày đăng:
@@ -779,7 +747,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
               {formatDate(item.publishedAt)}
             </p>
           )}
-          {isDeleted && item.deletedAt && (
+          {isDeletedTab && item.deletedAt && (
             <p className="text-red-700">
               <strong className="font-medium text-red-900 w-28 inline-block">
                 Ngày xóa:
@@ -787,12 +755,14 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
               {formatDate(item.deletedAt)}
             </p>
           )}
-          {isDeleted && item.deletedBy && (
+          {isDeletedTab && item.deletedBy && (
             <p className="text-red-700">
               <strong className="font-medium text-red-900 w-28 inline-block">
                 Người xóa:
               </strong>{" "}
+              {/* @ts-ignore */}
               {item.deletedBy.lastName} {item.deletedBy.firstName} (
+              {/* @ts-ignore */}
               {item.deletedBy.username})
             </p>
           )}
@@ -960,7 +930,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
                     <h3 className="font-semibold text-base text-gray-800 line-clamp-2 mb-1">
                       {item.title}
                     </h3>
-                 
+                  
                   </div>
                   <div className="mt-auto pt-2 border-t border-gray-100 text-xs space-y-1">
                     <p className="text-gray-500 flex items-center gap-1">
@@ -1165,7 +1135,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
                 className="p-4 bg-white shadow rounded-lg flex flex-col justify-between border border-gray-200 relative group hover:shadow-md transition-shadow duration-150"
               >
                 <div className="absolute top-2 right-2 flex items-center gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  {user?.id === item.createdBy?.id && (
+                  {(isAdmin || user?.id === item.createdBy?.id) && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1270,7 +1240,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
                     </div>
                   </div>
                   <div className="mt-2 sm:mt-0 sm:ml-4 flex-shrink-0">
-                    {user?.id === item.createdBy?.id && (
+                    {(isAdmin || user?.id === item.createdBy?.id) && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1574,21 +1544,21 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
         ) : ( 
           <>
             <div className="flex items-center gap-3 mb-4 flex-shrink-0">
-                <h2 className="text-xl md:text-2xl font-bold text-red-600">
-                    Tin tức đã xóa
-                </h2>
-                 <button
-                    onClick={handleRefresh}
-                    disabled={isRefreshing || isLoadingDeleted || !!isRestoring }
-                    className="p-1.5 sm:p-2 cursor-pointer border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
-                    title="Làm mới danh sách tin đã xóa"
-                >
-                    {isRefreshing ? (
-                        <ReloadIcon className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-red-600" />
-                    ) : (
-                        <ReloadIcon className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
-                    )}
-                </button>
+              <h2 className="text-xl md:text-2xl font-bold text-red-600">
+                 Tin tức đã xóa
+              </h2>
+               <button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing || isLoadingDeleted || !!isRestoring }
+                  className="p-1.5 sm:p-2 cursor-pointer border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
+                  title="Làm mới danh sách tin đã xóa"
+              >
+                  {isRefreshing ? (
+                      <ReloadIcon className="w-4 h-4 sm:w-5 sm:h-5 animate-spin text-red-600" />
+                  ) : (
+                      <ReloadIcon className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+                  )}
+              </button>
             </div>
             <div className="overflow-y-auto flex-grow mb-1 pr-1 min-h-[300px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
               {renderDeletedNewsList()}

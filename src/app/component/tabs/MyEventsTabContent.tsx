@@ -15,7 +15,7 @@ import {
   EventDataForForm as ModalEventType,
 } from "../types/typCreateEvent";
 
-import ConfirmationDialog from "../../../utils/ConfirmationDialog";
+import ConfirmationDialog, { ConfirmationDialogProps } from "../../../utils/ConfirmationDialog";
 import MyCreatedEventsTab, {
   EventType as MyCreatedEventType,
 } from "./event/MyEvent";
@@ -29,6 +29,11 @@ import {
   ExclamationTriangleIcon,
   ChevronLeftIcon,
   CalendarIcon as RadixCalendarIcon,
+  CheckCircledIcon,
+  ClockIcon,
+  Component1Icon,
+  ListBulletIcon,
+  MagnifyingGlassIcon,
 } from "@radix-ui/react-icons";
 
 
@@ -72,12 +77,15 @@ export interface EventType {
   deletedBy?: PersonDetail | null;
   avatarUrl?: string | null;
   qrCodeUrl?: string | null;
-  progressStatus?: string;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
   title?: string;
   date?: string;
   maxAttendees?: number |null;
   currentAttendeesCount?: number;
 }
+
+type EventStatusOperational = "upcoming" | "ongoing" | "ended";
+
 
 const getFilenameFromHeader = (header: string | null): string => {
   const defaultFilename = "event_export.docx";
@@ -96,7 +104,6 @@ const getFilenameFromHeader = (header: string | null): string => {
       try {
         filename = decodeURIComponent(filename);
       } catch (e2) {
-        console.warn("Could not decode filename:", filename, e, e2);
       }
     }
     if (!filename.toLowerCase().endsWith(".docx")) {
@@ -116,12 +123,9 @@ async function fetchUserDetailsAPI(
   if (!userId) return null;
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`
+      `http://localhost:8080/identity/users/notoken/${userId}`
     );
     if (!response.ok) {
-      console.warn(
-        `Failed to fetch user details for ${userId}: ${response.status}`
-      );
       return { userId, fullName: `ID: ${userId}` };
     }
     const data = await response.json();
@@ -153,13 +157,8 @@ async function fetchUserDetailsAPI(
             : undefined,
       };
     }
-    console.warn(
-      `User details API for ${userId} did not return expected data:`,
-      data.message
-    );
     return { userId, fullName: `ID: ${userId}` };
   } catch (error) {
-    console.error(`Error fetching user details for ${userId}:`, error);
     return { userId, fullName: `ID: ${userId}` };
   }
 }
@@ -180,6 +179,70 @@ const getVietnameseEventStatus = (status?: string): string => {
       return status;
   }
 };
+
+
+const getEventOperationalStatus = (event: EventType | null): EventStatusOperational => {
+    if (!event) {
+        console.log("[MyEventsTab/getEventOperationalStatus] Event is null, returning upcoming.");
+        return "upcoming";
+    }
+    console.log(
+        `[MyEventsTab/getEventOperationalStatus] Checking event: ID=${event.id}, Name=${event.name || event.title}, MappedProgressStatus=${event.progressStatus}, MappedTime=${event.time}`
+    );
+
+    const progressStatusUpper = event.progressStatus?.toUpperCase();
+
+    if (progressStatusUpper === "ONGOING") return "ongoing";
+    if (progressStatusUpper === "UPCOMING") return "upcoming";
+    if (progressStatusUpper === "COMPLETED") return "ended";
+    
+    const dateForStatus = event.time || event.date; 
+    if (!dateForStatus) return "upcoming";
+
+    try {
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const eventDate = new Date(dateForStatus);
+        if (isNaN(eventDate.getTime())) return "upcoming";
+        
+        const eventDateStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+        
+        if (eventDateStart < todayStart) return "ended";
+        else if (eventDateStart > todayStart) return "upcoming";
+        else return "ongoing";
+    } catch (e) {
+        return "upcoming";
+    }
+};
+
+const getStatusBadgeClassesOperational = (status: EventStatusOperational): string => {
+  const base = "px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1";
+  switch (status) {
+    case "ongoing": return `${base} bg-green-100 text-green-800`;
+    case "upcoming": return `${base} bg-blue-100 text-blue-800`;
+    case "ended": return `${base} bg-gray-100 text-gray-700`;
+    default: return `${base} bg-gray-100 text-gray-600`;
+  }
+};
+
+const getStatusOperationalText = (status: EventStatusOperational): string => {
+  switch (status) {
+    case "ongoing": return "Đang diễn ra";
+    case "upcoming": return "Sắp diễn ra";
+    case "ended": return "Đã kết thúc";
+    default: return "Không rõ";
+  }
+};
+
+const getStatusOperationalIcon = (status: EventStatusOperational) => {
+  switch (status) {
+    case "ongoing": return <ClockIcon className="w-3 h-3" />;
+    case "upcoming": return <ClockIcon className="w-3 h-3" />;
+    case "ended": return <CheckCircledIcon className="w-3 h-3" />;
+    default: return null;
+  }
+};
+
 
 interface MyEventsTabContentProps {
   user: MainUserType | null;
@@ -295,7 +358,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Chưa xác thực để tải vai trò.");
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`,
+          `http://localhost:8080/identity/api/organizerrole`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!response.ok) {
@@ -336,7 +399,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Chưa đăng nhập.");
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${currentUserId}`,
+        `http://localhost:8080/identity/api/events/creator/${currentUserId}`,
         { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
       );
       if (!res.ok) {
@@ -347,13 +410,24 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       }
       const data = await res.json();
       if (data.code === 1000 && Array.isArray(data.result)) {
-        const transformedEvents = data.result.map((event: any) => ({
-          ...event,
-          organizers:
-            event.organizers?.map(transformApiEventMemberToLocal) || [],
-          participants:
-            event.participants?.map(transformApiEventMemberToLocal) || [],
-        }));
+        const transformedEvents = data.result.map((event: any) => {
+          console.log(
+            `[MyEventsTab/fetchMyEvents] Raw API event: ID=${event.id}, Name=${event.name}, BackendProgressStatus=${event.progressStatus}, BackendTime=${event.time}`
+          );
+          const mappedEvent = {
+            ...event,
+            organizers:
+              event.organizers?.map(transformApiEventMemberToLocal) || [],
+            participants:
+              event.participants?.map(transformApiEventMemberToLocal) || [],
+            title: event.name, 
+            date: event.time, 
+          };
+          console.log(
+            `[MyEventsTab/fetchMyEvents] Transformed event: ID=${mappedEvent.id}, Name=${mappedEvent.name}, MappedProgressStatus=${mappedEvent.progressStatus}, MappedTime=${mappedEvent.time}`
+          );
+          return mappedEvent;
+        });
         setMyEvents(transformedEvents);
       } else {
         setMyEvents([]);
@@ -365,7 +439,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     } finally {
       setMyLoading(false);
     }
-  }, [currentUserId, transformApiEventMemberToLocal, allSystemRoles]);
+  }, [currentUserId, transformApiEventMemberToLocal]);
 
   const fetchDeletedEvents = useCallback(
     async (page = 0, size = 20) => {
@@ -381,7 +455,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Chưa đăng nhập.");
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/deleted?page=${page}&size=${size}&sort=deletedAt,desc`,
+          `http://localhost:8080/identity/api/events/deleted?page=${page}&size=${size}&sort=deletedAt,desc`,
           { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }
         );
         if (!res.ok) {
@@ -396,13 +470,24 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           data.result &&
           Array.isArray(data.result.content)
         ) {
-          const transformedEvents = data.result.content.map((event: any) => ({
-            ...event,
-            organizers:
-              event.organizers?.map(transformApiEventMemberToLocal) || [],
-            participants:
-              event.participants?.map(transformApiEventMemberToLocal) || [],
-          }));
+          const transformedEvents = data.result.content.map((event: any) => {
+             console.log(
+                `[MyEventsTab/fetchDeletedEvents] Raw API event: ID=${event.id}, Name=${event.name}, BackendProgressStatus=${event.progressStatus}, BackendTime=${event.time}`
+             );
+            const mappedEvent = {
+              ...event,
+              organizers:
+                event.organizers?.map(transformApiEventMemberToLocal) || [],
+              participants:
+                event.participants?.map(transformApiEventMemberToLocal) || [],
+              title: event.name,
+              date: event.time,
+            };
+            console.log(
+              `[MyEventsTab/fetchDeletedEvents] Transformed event: ID=${mappedEvent.id}, Name=${mappedEvent.name}, MappedProgressStatus=${mappedEvent.progressStatus}, MappedTime=${mappedEvent.time}`
+            );
+            return mappedEvent;
+          });
           setDeletedEvents(transformedEvents);
         } else {
           setDeletedEvents([]);
@@ -415,7 +500,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         setDeletedLoading(false);
       }
     },
-    [currentUserId, transformApiEventMemberToLocal, allSystemRoles]
+    [currentUserId, transformApiEventMemberToLocal]
   );
 
   useEffect(() => {
@@ -497,6 +582,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       avatarUrl: eventFromMyCreatedTab.avatarUrl,
       organizers: organizersForModal,
       participants: participantsForModal,
+      progressStatus: eventFromMyCreatedTab.progressStatus,
     };
     openModalCallback(eventForModal);
   };
@@ -513,7 +599,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       return;
     }
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToDelete.id}?deletedById=${currentUserId}`;
+      const url = `http://localhost:8080/identity/api/events/${eventToDelete.id}?deletedById=${currentUserId}`;
       const res = await fetch(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
@@ -617,7 +703,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
       return;
     }
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToRestore.id}/restore`;
+      const url = `http://localhost:8080/identity/api/events/${eventToRestore.id}/restore`;
       const res = await fetch(url, {
         method: "PUT",
         headers: {
@@ -718,7 +804,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Token không hợp lệ.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventId}/export`;
+      const url = `http://localhost:8080/identity/api/events/${eventId}/export`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -914,7 +1000,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               }
             } catch (error: any) {
               if (error.name !== "AbortError" && !newController.signal.aborted) {
-                console.error("Lỗi khi làm giàu chi tiết sự kiện:", error);
               }
             } finally {
               if (!newController.signal.aborted) {
@@ -928,7 +1013,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
         }
       } else {
         setViewingEventDetails(null);
-        // lastActiveMyCreatedSubTabKey is not reset here
       }
     },
     [enhanceEventDetailsWithNames, isLoadingSystemRoles, enhancementController]
@@ -953,7 +1037,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           }
         } catch (error: any) {
           if (error.name !== "AbortError" && !controller.signal.aborted) {
-            console.error("Lỗi khi làm giàu lại chi tiết sự kiện:", error);
           }
         } finally {
           if (!controller.signal.aborted) {
@@ -975,6 +1058,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     viewingEventDetails,
     isEnhancementPending,
     enhanceEventDetailsWithNames,
+    enhancementController
   ]);
 
 
@@ -1003,14 +1087,17 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
 
     const isDeletedEvent = event.deleted;
     const eventName = event.name || event.title || "Sự kiện không tên";
-    const vietnameseStatus = getVietnameseEventStatus(event.status);
-    let statusColorClass = "text-gray-600 bg-gray-200 border-gray-300";
+    const approvalStatusText = getVietnameseEventStatus(event.status);
+    const operationalStatus = getEventOperationalStatus(event);
+
+
+    let approvalStatusColorClass = "text-gray-600 bg-gray-200 border-gray-300";
     if (event.status) {
         const upperStatus = event.status.toUpperCase();
-        if (upperStatus === "APPROVED") statusColorClass = "text-green-700 bg-green-100 border-green-300";
-        else if (upperStatus === "PENDING") statusColorClass = "text-yellow-700 bg-yellow-100 border-yellow-300";
-        else if (upperStatus === "REJECTED") statusColorClass = "text-red-700 bg-red-100 border-red-300";
-        else if (upperStatus === "CANCELLED") statusColorClass = "text-neutral-700 bg-neutral-200 border-neutral-300";
+        if (upperStatus === "APPROVED") approvalStatusColorClass = "text-green-700 bg-green-100 border-green-300";
+        else if (upperStatus === "PENDING") approvalStatusColorClass = "text-yellow-700 bg-yellow-100 border-yellow-300";
+        else if (upperStatus === "REJECTED") approvalStatusColorClass = "text-red-700 bg-red-100 border-red-300";
+        else if (upperStatus === "CANCELLED") approvalStatusColorClass = "text-neutral-700 bg-neutral-200 border-neutral-300";
     }
 
     let creatorDisplay = "Không rõ";
@@ -1024,6 +1111,10 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
     }
     if (creatorDisplay.startsWith("ID:") && creatorDisplay.length < 10)
       creatorDisplay = "Không rõ";
+      
+    console.log(
+        `[MyEventsTab/renderEventDetails] Event: ID=${event.id}, Title=${event.name || event.title}, CalculatedOperationalStatus=${operationalStatus}, ProgressStatusFromData=${event.progressStatus}`
+    );
 
     return (
       <div className="p-4 bg-white rounded-lg shadow border">
@@ -1057,13 +1148,19 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
               <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3 leading-tight">
                 {eventName}
               </h1>
-              {!isDeletedEvent && event.status && (
-                <div className="mb-5">
-                  <span
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${statusColorClass} border`}
-                  >
-                    {vietnameseStatus}
-                  </span>
+              {!isDeletedEvent && (
+                <div className="mb-2 flex flex-wrap gap-2 items-center">
+                    {event.status && (
+                         <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${approvalStatusColorClass} border`}
+                          >
+                            {approvalStatusText}
+                        </span>
+                    )}
+                    <span className={`${getStatusBadgeClassesOperational(operationalStatus)} shadow-sm border`}>
+                        {getStatusOperationalIcon(operationalStatus)}
+                        {getStatusOperationalText(operationalStatus)}
+                    </span>
                 </div>
               )}
               {isDeletedEvent && (
@@ -1136,7 +1233,7 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.268-.25-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.084-1.268.25-1.857m0 0A5.002 5.002 0 0112 15a5.002 5.002 0 014.745 3.143M12 13a3 3 0 100-6 3 3 0 000 6z"
+                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.084-1.268-.25-1.857M7 20v-2c0-.653.084-1.268.25-1.857m0 0A5.002 5.002 0 0112 15a5.002 5.002 0 014.745 3.143M12 13a3 3 0 100-6 3 3 0 000 6z"
                       />
                     </svg>
                     <div>
@@ -1396,7 +1493,6 @@ const MyEventsTabContent: React.FC<MyEventsTabContentProps> = ({
           onClick={() => {
             setMainTab("myEvents");
             handleSetViewingEventDetails(null);
-            // setLastActiveMyCreatedSubTabKey(null); // Uncomment if you want MyCreatedEventsTab to always default when "My Events" is clicked
           }}
           className={`pb-2 font-semibold cursor-pointer text-base md:text-lg transition-colors duration-150 ${
             mainTab === "myEvents"

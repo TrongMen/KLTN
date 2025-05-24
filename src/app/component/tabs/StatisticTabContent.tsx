@@ -121,12 +121,14 @@ const StatCard: React.FC<StatCardProps> = ({
   isLoading,
   color = "bg-indigo-500",
 }) => {
-  const displayValue = typeof value === 'number' && !isNaN(value) ? value : 0;
+  const displayValue = typeof value === "number" && !isNaN(value) ? value : 0;
 
   return (
     <div className="bg-white shadow-lg rounded-xl p-5 transform transition-all hover:scale-105">
       <div className="flex items-center">
-        <div className={`p-3 rounded-full ${color} text-white mr-4`}>{icon}</div>
+        <div className={`p-3 rounded-full ${color} text-white mr-4`}>
+          {icon}
+        </div>
         <div>
           <p className="text-sm text-gray-500 font-medium">{title}</p>
           {isLoading ? (
@@ -151,7 +153,9 @@ const DateRangePicker: React.FC<{
 }> = ({ startDate, endDate, onChange }) => {
   return (
     <div className="flex items-center space-x-2">
-      <span className="text-sm font-medium text-gray-700">Chọn khoảng thời gian:</span>
+      <span className="text-sm font-medium text-gray-700">
+        Chọn khoảng thời gian:
+      </span>
       <div className="flex space-x-2">
         <DatePicker
           selected={startDate}
@@ -260,23 +264,27 @@ const CustomPieChart: React.FC<{
     );
   }
 
-  const totalValue = useMemo(() => data.reduce((sum, entry) => sum + entry.value, 0), [data]);
-  const filteredData = data.filter(entry => entry.value > 0);
+  const totalValue = useMemo(
+    () => data.reduce((sum, entry) => sum + entry.value, 0),
+    [data]
+  );
+  const filteredData = data.filter((entry) => entry.value > 0);
 
   const renderLabel = ({ name, percent, value }: any) => {
     if (totalValue === 0) return null;
-    if (value === totalValue && totalValue > 0) { // One item takes 100%
+    if (value === totalValue && totalValue > 0) {
+      // One item takes 100%
       return `${name}: 100%`;
     }
-    if (percent * 100 < 1 && value > 0) { // For very small percentages, show a minimal representation
-        return `${name}: <1%`;
+    if (percent * 100 < 1 && value > 0) {
+      // For very small percentages, show a minimal representation
+      return `${name}: <1%`;
     }
-    if (percent * 100 >=1) {
-        return `${name}: ${(percent * 100).toFixed(0)}%`;
+    if (percent * 100 >= 1) {
+      return `${name}: ${(percent * 100).toFixed(0)}%`;
     }
     return null; // Don't render label for 0 value items if others exist
   };
-
 
   return (
     <div className="bg-white shadow-lg rounded-xl p-6 h-80">
@@ -288,7 +296,14 @@ const CustomPieChart: React.FC<{
               data={filteredData}
               cx="50%"
               cy="50%"
-              labelLine={filteredData.length > 1 && filteredData.some(d => d.value === totalValue && totalValue > 0) ? false : true}
+              labelLine={
+                filteredData.length > 1 &&
+                filteredData.some(
+                  (d) => d.value === totalValue && totalValue > 0
+                )
+                  ? false
+                  : true
+              }
               outerRadius={80}
               fill="#8884d8"
               dataKey="value"
@@ -301,8 +316,12 @@ const CustomPieChart: React.FC<{
             </Pie>
             <Tooltip
               formatter={(value, name, props) => {
-                  const percentage = totalValue > 0 ? (value / totalValue * 100).toFixed(0) : 0;
-                  return [`${value} (${percentage}%)`, props.payload.payload.name];
+                const percentage =
+                  totalValue > 0 ? ((value / totalValue) * 100).toFixed(0) : 0;
+                return [
+                  `${value} (${percentage}%)`,
+                  props.payload.payload.name,
+                ];
               }}
             />
             <Legend />
@@ -369,7 +388,9 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
         }
         const apiResponse = await res.json();
         if (apiResponse.code !== 1000 || !Array.isArray(apiResponse.result)) {
-          throw new Error(apiResponse.message || "Định dạng dữ liệu không hợp lệ");
+          throw new Error(
+            apiResponse.message || "Định dạng dữ liệu không hợp lệ"
+          );
         }
         setter(processor(apiResponse.result));
       } catch (e: any) {
@@ -382,35 +403,50 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   );
 
   const generateSummaryData = useCallback(() => {
-    if (!userStats || !eventStats || !newsStats || !startDate || !endDate) return [];
+    if (!userStats || !eventStats || !newsStats || !startDate || !endDate)
+      return [];
 
     const monthNames = [
-      "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4",  
-      "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8",
-      "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"
+      "Tháng 1",
+      "Tháng 2",
+      "Tháng 3",
+      "Tháng 4",
+      "Tháng 5",
+      "Tháng 6",
+      "Tháng 7",
+      "Tháng 8",
+      "Tháng 9",
+      "Tháng 10",
+      "Tháng 11",
+      "Tháng 12",
     ];
 
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const monthDiff = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
-    
+    const monthDiff =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      end.getMonth() -
+      start.getMonth();
+
     if (monthDiff < 0 || isNaN(monthDiff)) return [];
 
     return Array.from({ length: monthDiff + 1 }, (_, i) => {
       const currentMonth = new Date(start);
       currentMonth.setMonth(start.getMonth() + i);
-      const monthLabel = monthNames[currentMonth.getMonth()] + " " + currentMonth.getFullYear();
-      
+      const monthLabel =
+        monthNames[currentMonth.getMonth()] + " " + currentMonth.getFullYear();
+
       const approvedEvents = eventStats.approvedEvents || 0;
-      const totalEvents = eventStats.totalEvents || 1; 
+      const totalEvents = eventStats.totalEvents || 1;
       const approvedNews = newsStats.approvedNews || 0;
-      const totalNews = newsStats.totalNews || 1; 
-      
+      const totalNews = newsStats.totalNews || 1;
+
       const progress = monthDiff > 0 ? i / monthDiff : 0;
       const monthFactor = 0.5 + progress * 0.5;
       const approvalRate = Math.round(
-        ((approvedEvents / totalEvents) * 50 + (approvedNews / totalNews) * 50) *
-        (0.7 + progress * 0.3)
+        ((approvedEvents / totalEvents) * 50 +
+          (approvedNews / totalNews) * 50) *
+          (0.7 + progress * 0.3)
       );
 
       return {
@@ -427,16 +463,19 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
     const token = localStorage.getItem("authToken");
     if (user && token) {
       fetchData<UserStats>(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`,
+        `http://localhost:8080/identity/users`,
         token,
         (usersData: ApiUserDetail[]) => {
           const totalUsers = usersData.length;
+
           const activeUsers = usersData.filter(
-            (u) => u.status === 0 || u.isBanned === false
+            (u) => u.isBanned !== true
           ).length;
+
           const bannedUsers = usersData.filter(
-            (u) => u.status === 1 || u.isBanned === true
+            (u) => u.isBanned === true
           ).length;
+
           return { totalUsers, activeUsers, bannedUsers };
         },
         setUserStats,
@@ -445,14 +484,17 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
       );
 
       fetchData<EventStats>(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events`,
+        `http://localhost:8080/identity/api/events`,
         token,
         (eventsData: EventDisplayInfo[]) => {
           return {
             totalEvents: eventsData.length,
-            approvedEvents: eventsData.filter((e) => e.status === "APPROVED").length,
-            pendingEvents: eventsData.filter((e) => e.status === "PENDING").length,
-            rejectedEvents: eventsData.filter((e) => e.status === "REJECTED").length,
+            approvedEvents: eventsData.filter((e) => e.status === "APPROVED")
+              .length,
+            pendingEvents: eventsData.filter((e) => e.status === "PENDING")
+              .length,
+            rejectedEvents: eventsData.filter((e) => e.status === "REJECTED")
+              .length,
             upcomingEvents: eventsData.filter(
               (e) => e.event_status === "UPCOMING" && e.status === "APPROVED"
             ).length,
@@ -470,14 +512,16 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
       );
 
       fetchData<NewsStats>(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status`,
+        `http://localhost:8080/identity/api/news/status`,
         token,
         (newsData: NewsItem[]) => {
           return {
             totalNews: newsData.length,
-            approvedNews: newsData.filter((n) => n.status === "APPROVED").length,
+            approvedNews: newsData.filter((n) => n.status === "APPROVED")
+              .length,
             pendingNews: newsData.filter((n) => n.status === "PENDING").length,
-            rejectedNews: newsData.filter((n) => n.status === "REJECTED").length,
+            rejectedNews: newsData.filter((n) => n.status === "REJECTED")
+              .length,
           };
         },
         setNewsStats,
@@ -608,7 +652,10 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   const hasError =
     errorUserStats || errorEventStats || errorNewsStats || errorSummary;
   const isLoading =
-    isLoadingUserStats || isLoadingEventStats || isLoadingNewsStats || isLoadingSummary;
+    isLoadingUserStats ||
+    isLoadingEventStats ||
+    isLoadingNewsStats ||
+    isLoadingSummary;
 
   if (hasError && !isLoading) {
     return (
@@ -632,7 +679,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
             <UpdateIcon className="w-7 h-7 mr-3 text-indigo-600" />
             Tổng quan hệ thống
           </h2>
-          <DateRangePicker 
+          <DateRangePicker
             startDate={startDate}
             endDate={endDate}
             onChange={setDateRange}

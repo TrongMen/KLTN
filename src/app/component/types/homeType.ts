@@ -55,6 +55,8 @@ export interface EventDisplayInfo {
   }[];
   maxAttendees?: number | null;
   currentAttendeesCount?: number;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
+
 }
 
 
@@ -85,6 +87,8 @@ export interface EventDisplayInfoGuest {
   }[];
   maxAttendees?: number | null;
   currentAttendeesCount?: number;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
+
 }
 
 export interface NewsItem {

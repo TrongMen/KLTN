@@ -185,7 +185,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       let response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/byuser/${user.id}`,
+        `http://localhost:8080/identity/users/byuser/${user.id}`,
         { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
       );
 
@@ -199,7 +199,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
           localStorage.setItem("authToken", newAuthToken);
           headers["Authorization"] = `Bearer ${newAuthToken}`;
           response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/byuser/${user.id}`,
+            `http://localhost:8080/identity/users/byuser/${user.id}`,
             { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
           );
         } else {
@@ -259,7 +259,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       let response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/byuser/${user.id}`,
+        `http://localhost:8080/identity/users/byuser/${user.id}`,
         { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
       );
 
@@ -273,7 +273,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
           localStorage.setItem("authToken", newAuthToken);
           headers["Authorization"] = `Bearer ${newAuthToken}`;
           response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/byuser/${user.id}`,
+            `http://localhost:8080/identity/users/byuser/${user.id}`,
             { method: "PUT", headers, body: JSON.stringify(bodyToSend) }
           );
         } else {
@@ -323,7 +323,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
       let response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/${user.id}/avatar`,
+        `http://localhost:8080/identity/users/${user.id}/avatar`,
         { method: "PATCH", headers, body: formData }
       );
 
@@ -337,7 +337,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
           localStorage.setItem("authToken", newAuthToken);
           headers["Authorization"] = `Bearer ${newAuthToken}`;
           response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/${user.id}/avatar`,
+            `http://localhost:8080/identity/users/${user.id}/avatar`,
             { method: "PATCH", headers, body: formData }
           );
         } else {

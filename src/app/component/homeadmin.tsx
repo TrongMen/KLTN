@@ -222,7 +222,7 @@ export default function HomeAdmin() {
         return null;
       }
       try {
-        const userUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`;
+        const userUrl = `http://localhost:8080/identity/users/notoken/${userId}`;
         const userRes = await fetch(userUrl, {
           headers: { Authorization: `Bearer ${effectiveToken}` },
         });
@@ -290,7 +290,7 @@ export default function HomeAdmin() {
       token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
 
-      const listUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/user/${userId}`;
+      const listUrl = `http://localhost:8080/identity/api/events/group-chats/user/${userId}`;
       const listResponse = await fetch(listUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -330,7 +330,7 @@ export default function HomeAdmin() {
         let lastMessageSenderNameDisplay: string | undefined = undefined;
 
         try {
-          const messagesUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
+          const messagesUrl = `http://localhost:8080/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
           const messagesResponse = await fetch(messagesUrl, {
             headers: { Authorization: `Bearer ${token!}` },
           });
@@ -430,7 +430,7 @@ export default function HomeAdmin() {
         return;
       }
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         const response = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -543,7 +543,7 @@ export default function HomeAdmin() {
         return;
       }
       try {
-        const groupUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}`;
+        const groupUrl = `http://localhost:8080/identity/api/events/group-chats/${groupId}`;
         const groupResponse = await fetch(groupUrl, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -650,7 +650,7 @@ export default function HomeAdmin() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Auth required.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/media`;
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/media`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -687,7 +687,7 @@ export default function HomeAdmin() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Auth required.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/files`;
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/files`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -724,7 +724,7 @@ export default function HomeAdmin() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Auth required.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/audios`;
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audios`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -765,7 +765,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
         const res = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -800,7 +800,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
         const res = await fetch(url, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -848,7 +848,7 @@ export default function HomeAdmin() {
         }
 
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}/deactivate?leaderId=${leaderId}`,
+          `http://localhost:8080/identity/api/events/group-chats/${groupId}/deactivate?leaderId=${leaderId}`,
           {
             method: "PATCH",
             headers: {
@@ -926,7 +926,7 @@ export default function HomeAdmin() {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
         if (!groupId) throw new Error("Group ID không tồn tại.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         const form = new FormData();
         form.append("senderId", senderId);
         form.append("content", messageText);
@@ -998,7 +998,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         const form = new FormData();
         form.append("senderId", senderId);
         form.append("file", file);
@@ -1070,7 +1070,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Yêu cầu xác thực.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/messages/${messageId}?userId=${userId}`;
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}?userId=${userId}`;
         const response = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -1155,7 +1155,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/messages/${messageId}/download`;
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}/download`;
         const res = await fetch(url, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
@@ -1224,7 +1224,7 @@ export default function HomeAdmin() {
     try {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status?status=APPROVED`;
+      const url = `http://localhost:8080/identity/api/news/status?status=APPROVED`;
       let res = await fetch(url, { headers, cache: "no-store" });
       if (
         (res.status === 401 || res.status === 403) &&
@@ -1285,7 +1285,7 @@ export default function HomeAdmin() {
     try {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=APPROVED`;
+      const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
       let res = await fetch(url, { headers, cache: "no-store" });
       if (
         (res.status === 401 || res.status === 403) &&
@@ -1324,6 +1324,7 @@ export default function HomeAdmin() {
             content: e.content,
             purpose: e.purpose,
             avatarUrl: e.avatarUrl || null,
+            progressStatus: e.progressStatus ,
             status: e.status,
             createdBy: e.createdBy,
             organizers: e.organizers || [],
@@ -1353,7 +1354,7 @@ export default function HomeAdmin() {
       setIsLoadingCreatedEventIds(true);
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${userIdParam}`;
+        const url = `http://localhost:8080/identity/api/events/creator/${userIdParam}`;
         let res = await fetch(url, {
           headers: { Authorization: `Bearer ${currentToken}` },
           cache: "no-store",
@@ -1397,7 +1398,7 @@ export default function HomeAdmin() {
       setIsLoadingRegisteredIds(true);
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/attendee/${userIdParam}`;
+        const url = `http://localhost:8080/identity/api/events/attendee/${userIdParam}`;
         let res = await fetch(url, {
           headers: { Authorization: `Bearer ${currentToken}` },
           cache: "no-store",
@@ -1444,7 +1445,7 @@ export default function HomeAdmin() {
       const limit = 10;
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/notifications?userId=${userIdParam}&limit=${limit}`;
+        const url = `http://localhost:8080/identity/api/notifications?userId=${userIdParam}&limit=${limit}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers, cache: "no-store" });
         if (res.status === 401 || res.status === 403) {
@@ -1514,7 +1515,7 @@ export default function HomeAdmin() {
           const headers: HeadersInit = {
             Authorization: `Bearer ${currentAuthToken}`,
           };
-          const userInfoUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/myInfo`;
+          const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
           let userRes = await fetch(userInfoUrl, {
             headers,
             cache: "no-store",
@@ -1591,7 +1592,7 @@ export default function HomeAdmin() {
   useEffect(() => {
     if (user?.id && user.roles?.some((r) => r.name === "ADMIN")) {
       if (socketRef.current) socketRef.current.disconnect();
-      const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`, {
+      const socket = io(`ws://localhost:9099`, {
         path: "/socket.io",
         query: { userId: user.id },
         transports: ["websocket"],
@@ -1673,7 +1674,7 @@ export default function HomeAdmin() {
       return;
     }
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}/attendees?userId=${user.id}`;
+      const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
       let res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -1783,7 +1784,7 @@ export default function HomeAdmin() {
     try {
       const t = localStorage.getItem("authToken");
       if (t)
-        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/logout`, {
+        await fetch(`http://localhost:8080/identity/auth/logout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: t }),
@@ -1831,7 +1832,7 @@ export default function HomeAdmin() {
 
     let currentToken = token;
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/notifications/${notificationId}/read`;
+      const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
       let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
       let res = await fetch(url, { method: "PUT", headers: headers });
 
@@ -1897,12 +1898,12 @@ export default function HomeAdmin() {
     if (formData.eventId) {
       apiFormData.append("eventId", formData.eventId);
     }
-    let API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news`;
+    let API_URL = `http://localhost:8080/identity/api/news`;
     let method = "POST";
     let currentToken = localStorage.getItem("authToken");
 
     if (newsId) {
-      API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${newsId}`;
+      API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
       method = "PUT";
       if (formData.imageFile) {
         apiFormData.append("coverImage", formData.imageFile);

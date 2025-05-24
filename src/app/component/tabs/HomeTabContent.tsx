@@ -38,8 +38,22 @@ interface DetailedMember {
   positionId?: string;
 }
 
-const getEventStatus = (eventDateStr: string | undefined): EventStatus => {
-  if (!eventDateStr) return "upcoming";
+const getEventStatus = (event: EventDisplayInfo): EventStatus => {
+  const progressStatusUpper = event.progressStatus?.toUpperCase();
+
+  if (progressStatusUpper === "ONGOING") {
+    return "ongoing";
+  }
+  if (progressStatusUpper === "UPCOMING") {
+    return "upcoming";
+  }
+  if (progressStatusUpper === "COMPLETED") {
+    return "ended";
+  }
+
+  if (!event.date) {
+    return "upcoming";
+  }
   try {
     const now = new Date();
     const todayStart = new Date(
@@ -47,16 +61,24 @@ const getEventStatus = (eventDateStr: string | undefined): EventStatus => {
       now.getMonth(),
       now.getDate()
     );
-    const eventDate = new Date(eventDateStr);
-    if (isNaN(eventDate.getTime())) return "upcoming";
+    const eventDate = new Date(event.date);
+    if (isNaN(eventDate.getTime())) {
+      return "upcoming";
+    }
+
     const eventDateStart = new Date(
       eventDate.getFullYear(),
       eventDate.getMonth(),
       eventDate.getDate()
     );
-    if (eventDateStart < todayStart) return "ended";
-    else if (eventDateStart > todayStart) return "upcoming";
-    else return "ongoing";
+
+    if (eventDateStart < todayStart) {
+      return "ended";
+    } else if (eventDateStart > todayStart) {
+      return "upcoming";
+    } else {
+      return "ongoing";
+    }
   } catch (e) {
     return "upcoming";
   }
@@ -217,7 +239,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       setIsLoadingCreator(true);
       setCreatorName(null);
       fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${selectedEvent.createdBy}`
+        `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -255,7 +277,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         try {
           const organizerPromises = organizersToFetch.map(async (org: any) => {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${org.userId}`
+              `http://localhost:8080/identity/users/notoken/${org.userId}`
             );
             let fullName = org.name || `ID: ${org.userId.substring(0, 8)}...`;
             let positionName = org.positionName;
@@ -284,7 +306,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           const settledOrganizers = await Promise.all(organizerPromises);
           setDetailedOrganizers(settledOrganizers as DetailedMember[]);
         } catch (error) {
-          console.error("Lỗi tải thông tin ban tổ chức:", error);
           setDetailedOrganizers(
             organizersToFetch.map((org: any) => ({
               userId: org.userId,
@@ -319,7 +340,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         try {
           const participantPromises = participantsToFetch.map(async (par: any) => {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${par.userId}`
+              `http://localhost:8080/identity/users/notoken/${par.userId}`
             );
             let fullName = par.name || `ID: ${par.userId.substring(0, 8)}...`;
             let positionName = par.positionName;
@@ -348,7 +369,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           const settledParticipants = await Promise.all(participantPromises);
           setDetailedParticipants(settledParticipants as DetailedMember[]);
         } catch (error) {
-          console.error("Lỗi tải thông tin người tham dự:", error);
           setDetailedParticipants(
             participantsToFetch.map((par: any) => ({
               userId: par.userId,
@@ -379,11 +399,11 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     todayEnd.setHours(23, 59, 59, 999);
 
     if (timeFilterOption === "upcoming")
-      evts = evts.filter((e) => getEventStatus(e.date) === "upcoming");
+      evts = evts.filter((e) => getEventStatus(e) === "upcoming");
     else if (timeFilterOption === "ongoing")
-      evts = evts.filter((e) => getEventStatus(e.date) === "ongoing");
+      evts = evts.filter((e) => getEventStatus(e) === "ongoing");
     else if (timeFilterOption === "ended")
-      evts = evts.filter((e) => getEventStatus(e.date) === "ended");
+      evts = evts.filter((e) => getEventStatus(e) === "ended");
     else if (timeFilterOption === "today")
       evts = evts.filter((e) => {
         try {
@@ -433,10 +453,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
             }
           });
         } else if (start > end) {
-          console.warn("Start date is after end date.");
         }
       } catch (e) {
-        console.error("Error parsing date range:", e);
       }
     }
 
@@ -460,8 +478,8 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     else {
       evts.sort((a, b) => {
         try {
-          const statusA = getEventStatus(a.date);
-          const statusB = getEventStatus(b.date);
+          const statusA = getEventStatus(a);
+          const statusB = getEventStatus(b);
           const dateA = a.date ? new Date(a.date).getTime() : 0;
           const dateB = b.date ? new Date(b.date).getTime() : 0;
           if (isNaN(dateA) && isNaN(dateB)) return 0;
@@ -474,7 +492,12 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           if (statusA === "upcoming" && statusB === "upcoming")
             return dateA - dateB;
           if (statusA === "ended" && statusB === "ended") return dateB - dateA;
-          return dateB - dateA;
+          
+          if (statusA === statusB) { 
+               if (statusA === "upcoming") return dateA - dateB; 
+               if (statusA === "ended") return dateB - dateA; 
+          }
+          return dateA - dateB;
         } catch {
           return 0;
         }
@@ -538,7 +561,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       await onRefreshEvents();
       toast.success("Đã làm mới!");
     } catch (error) {
-      console.error("Lỗi khi làm mới:", error);
       toast.error("Không thể làm mới.");
     }
   };
@@ -556,7 +578,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     let tempEventRoles: ApiRole[] = [];
 
     try {
-      const usersRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`, {
+      const usersRes = await fetch(`http://localhost:8080/identity/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!usersRes.ok) {
@@ -570,7 +592,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         throw new Error(usersData.message || "Lỗi xử lý dữ liệu người dùng.");
       }
 
-      const rolesRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`, {
+      const rolesRes = await fetch(`http://localhost:8080/identity/api/organizerrole`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!rolesRes.ok) {
@@ -629,6 +651,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         status: eventToEdit.status || "PENDING",
         organizers: eventToEdit.organizers?.map(org => mapMemberToInput(org as EventMemberInfo)) || [],
         participants: eventToEdit.participants?.map(par => mapMemberToInput(par as EventMemberInfo)) || [],
+        progressStatus: eventToEdit.progressStatus
       };
       
       toast.dismiss(loadingToastId);
@@ -637,7 +660,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     } catch (error: any) {
       toast.dismiss(loadingToastId);
       toast.error(`Không thể chuẩn bị dữ liệu: ${error.message}`);
-      console.error("Lỗi khi chuẩn bị dữ liệu sửa sự kiện:", error);
       return null;
     }
   };
@@ -667,7 +689,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         });
         return;
       }
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}?deletedById=${user.id}`;
+      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
       try {
         let response = await fetch(apiUrl, {
           method: "DELETE",
@@ -709,7 +731,6 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
           throw new Error(errorMsg);
         }
       } catch (error: any) {
-        console.error("Lỗi xoá sự kiện:", error);
         toast.error(`Xoá thất bại: ${error.message || "Lỗi không xác định"}`);
       } finally {
         setIsDeleting(null);
@@ -945,7 +966,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   {selectedEvent.title}
                 </h2>
                 {(() => {
-                  const status = getEventStatus(selectedEvent.date);
+                  const status = getEventStatus(selectedEvent);
                   return (
                     <span
                       className={`${getStatusBadgeClasses(
@@ -1068,7 +1089,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   const isCreated = user?.id === selectedEvent.createdBy;
                   const isRegistered = registeredEventIds.has(selectedEvent.id);
                   const processing = isRegistering === selectedEvent.id;
-                  const status = getEventStatus(selectedEvent.date);
+                  const status = getEventStatus(selectedEvent);
                   const showRegisterBtn = !isCreated && status !== "ended";
                   
                   return (
@@ -1131,7 +1152,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                         </button>
                       )}
                       {status === "ended" && !isCreated && (
-                         <button
+                          <button
                             className="px-4 py-2 rounded-lg bg-gray-300 text-gray-600 cursor-not-allowed text-sm font-medium"
                             disabled
                           >
@@ -1139,7 +1160,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           </button>
                       )}
                       {!user && status !== "ended" && (
-                         <button
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               toast("Vui lòng đăng nhập.", { icon: "🔒" });
@@ -1165,7 +1186,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                   const isRegistered = registeredEventIds.has(event.id);
                   const isCreatedByUser = createdEventIds.has(event.id);
                   const processing = isRegistering === event.id;
-                  const status = getEventStatus(event.date);
+                  const status = getEventStatus(event);
                   const showRegisterButton =
                     user && !isCreatedByUser && status !== "ended";
                   const canClickRegister =
@@ -1333,7 +1354,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
               <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
                 <ul className="divide-y divide-gray-200">
                   {paginatedEvents.map((event) => {
-                    const status = getEventStatus(event.date);
+                    const status = getEventStatus(event);
                     const isCreatedByUser = createdEventIds.has(event.id);
                     const canEdit = isCreatedByUser && status === "upcoming";
                     const isRegistered = registeredEventIds.has(event.id);
@@ -1407,7 +1428,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
                           </div>
                         </div>
                         <div className="mt-2 sm:mt-0 sm:ml-4 flex-shrink-0 flex items-center gap-2 justify-end">
-                           {isCreatedByUser ? (
+                            {isCreatedByUser ? (
                             <div className="px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium">
                               ✨ Của bạn
                             </div>

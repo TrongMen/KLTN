@@ -13,8 +13,11 @@ import {
   Pencil1Icon,
   TrashIcon,
   ArchiveIcon,
+  ClockIcon as RadixClockIcon,
+  CheckCircledIcon as RadixCheckCircledIcon,
 } from "@radix-ui/react-icons";
 import { toast } from "react-hot-toast";
+import { User as MainUserType } from "../../types/appTypes";
 
 interface RoleInfo {
   id: string;
@@ -57,37 +60,41 @@ export interface EventType {
   } | null;
   avatarUrl?: string | null;
   qrCodeUrl?: string | null;
-  progressStatus?: string;
+  progressStatus?: "UPCOMING" | "ONGOING" | "COMPLETED" | string;
   title?: string;
   date?: string;
   maxAttendees?: number | null;
   currentAttendeesCount?: number;
 }
 
-type EventStatus = "upcoming" | "ongoing" | "ended";
+type EventStatusOperational = "upcoming" | "ongoing" | "ended";
 
-const getEventStatus = (eventTimeStr: string | undefined): EventStatus => {
-  if (!eventTimeStr) return "upcoming";
-  try {
-    const now = new Date();
-    const todayStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-    const eventDate = new Date(eventTimeStr);
-    if (isNaN(eventDate.getTime())) return "upcoming";
-    const eventDateStart = new Date(
-      eventDate.getFullYear(),
-      eventDate.getMonth(),
-      eventDate.getDate()
-    );
-    if (eventDateStart < todayStart) return "ended";
-    else if (eventDateStart > todayStart) return "upcoming";
-    else return "ongoing";
-  } catch (e) {
-    return "upcoming";
-  }
+const getEventOperationalStatus = (event: EventType | null): EventStatusOperational => {
+    if (!event) return "upcoming";
+
+    const progressStatusUpper = event.progressStatus?.toUpperCase();
+
+    if (progressStatusUpper === "ONGOING") return "ongoing";
+    if (progressStatusUpper === "UPCOMING") return "upcoming";
+    if (progressStatusUpper === "COMPLETED") return "ended";
+    
+    const dateForStatus = event.time || event.date || event.createdAt;
+    if (!dateForStatus) return "upcoming";
+
+    try {
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const eventDate = new Date(dateForStatus);
+        if (isNaN(eventDate.getTime())) return "upcoming";
+        
+        const eventDateStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+        
+        if (eventDateStart < todayStart) return "ended";
+        else if (eventDateStart > todayStart) return "upcoming";
+        else return "ongoing";
+    } catch (e) {
+        return "upcoming";
+    }
 };
 
 
@@ -137,6 +144,66 @@ interface MyCreatedEventsTabProps {
   handleRefresh: () => Promise<void>;
   fetchOrganizerDetailsById: (userId: string) => Promise<Partial<OrganizerInfo> | null>;
 }
+
+const getStatusBadgeClasses = (status: EventStatusOperational): string => {
+  const base = "px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1.5";
+  switch (status) {
+    case "ongoing": return `${base} bg-green-100 text-green-800`;
+    case "upcoming": return `${base} bg-blue-100 text-blue-800`;
+    case "ended": return `${base} bg-gray-100 text-gray-700`;
+    default: return `${base} bg-gray-100 text-gray-600`;
+  }
+};
+
+const getStatusText = (status: EventStatusOperational): string => {
+  switch (status) {
+    case "ongoing": return "Đang diễn ra";
+    case "upcoming": return "Sắp diễn ra";
+    case "ended": return "Đã kết thúc";
+    default: return "";
+  }
+};
+
+const getStatusIcon = (status: EventStatusOperational) => {
+  switch (status) {
+    case "ongoing": return <RadixClockIcon />;
+    case "upcoming": return <RadixClockIcon />;
+    case "ended": return <RadixCheckCircledIcon />;
+    default: return null;
+  }
+};
+
+
+const EventImage: React.FC<{
+  src?: string;
+  alt: string;
+  className: string;
+  placeholderType?: 'card' | 'thumbnail';
+}> = ({ src, alt, className, placeholderType = 'card' }) => {
+  const [imgSrc, setImgSrc] = useState(src);
+
+  useEffect(() => {
+    setImgSrc(src);
+  }, [src]);
+
+  const handleError = () => {
+    setImgSrc(undefined);
+  };
+
+  if (!imgSrc) {
+    const placeholderClass = placeholderType === 'card' 
+      ? "w-12 h-12" 
+      : "w-5 h-5";
+    return (
+      <div className={`${className} flex items-center justify-center bg-gray-200`}>
+        <FaImage className={`text-gray-400 ${placeholderClass}`} />
+      </div>
+    );
+  }
+
+  return <img src={imgSrc} alt={alt} className={className} onError={handleError} />;
+};
+
 
 const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   user,
@@ -192,7 +259,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
 
           if (event.organizers && event.organizers.length > 0) {
             for (let i = 0; i < newOrganizers.length; i++) {
-              let org = { ...newOrganizers[i] };
+              let org = { ...newOrganizers[i] } as OrganizerInfo;
               if (org.userId && (!org.fullName && (!org.firstName || !org.lastName))) {
                 let details: Partial<OrganizerInfo> | null = null;
                 if (organizerDetailsCacheRef.current[org.userId]) {
@@ -258,14 +325,10 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
     });
 
     if (myTimeFilterOption !== "all") {
-        const now = new Date();
-        const todayDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
         eventsToProcess = eventsToProcess.filter(event => {
-            const dateStrToUse = event.time || event.date;
-
             if (myTimeFilterOption === "dateRange") {
                 if (!myStartDateFilter || !myEndDateFilter) return true;
+                const dateStrToUse = event.time || event.date || event.createdAt;
                 if (!dateStrToUse) return false;
                 try {
                     const eventDate = new Date(dateStrToUse);
@@ -275,18 +338,11 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                     return !isNaN(startFilter.getTime()) && !isNaN(endFilter.getTime()) && startFilter <= endFilter &&
                             eventDate >= startFilter && eventDate <= endFilter;
                 } catch (e) {
-                    console.error("Error parsing date for dateRange (My Events):", dateStrToUse, e);
                     return false;
                 }
             } else {
-                if (!dateStrToUse) return false;
-                try {
-                    const eventRealStatus = getEventStatus(dateStrToUse);
-                    return eventRealStatus === myTimeFilterOption;
-                } catch (e) {
-                    console.error("Error parsing event date for temporal status (My Events):", dateStrToUse, e);
-                    return false;
-                }
+                const eventRealStatus = getEventOperationalStatus(event);
+                return eventRealStatus === myTimeFilterOption;
             }
         });
     }
@@ -302,9 +358,24 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
     eventsToProcess.sort((a, b) => {
       const nameA = a.name || a.title || "";
       const nameB = b.name || b.title || "";
-      return mySortOrder === "za" 
+      const statusA = getEventOperationalStatus(a);
+      const statusB = getEventOperationalStatus(b);
+      const timeA = new Date(a.time || a.date || a.createdAt || 0).getTime();
+      const timeB = new Date(b.time || b.date || b.createdAt || 0).getTime();
+
+      if (mySortOrder === "az" || mySortOrder === "za") {
+         return mySortOrder === "za" 
         ? nameB.localeCompare(nameA, "vi", { sensitivity: "base" }) 
         : nameA.localeCompare(nameB, "vi", { sensitivity: "base" });
+      } else { // Default sort by operational status then time
+        if (statusA === "ongoing" && statusB !== "ongoing") return -1;
+        if (statusB === "ongoing" && statusA !== "ongoing") return 1;
+        if (statusA === "upcoming" && statusB === "ended") return -1;
+        if (statusB === "upcoming" && statusA === "ended") return 1;
+        if (statusA === "upcoming" && statusB === "upcoming") return timeA - timeB;
+        if (statusA === "ended" && statusB === "ended") return timeB - timeA;
+        return timeB - timeA; // Default to newest first if statuses are mixed otherwise
+      }
     });
     return eventsToProcess;
   }, [enrichedMyEvents, myTab, myTimeFilterOption, myStartDateFilter, myEndDateFilter, mySearchTerm, mySortOrder]);
@@ -315,8 +386,9 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
     let eventsToProcess = [...enrichedDeletedEvents];
 
     if (deletedTimeFilterOption !== "all") {
-        const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-        const todayEnd = new Date(); todayEnd.setHours(23,59,59,999);
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()); todayStart.setHours(0,0,0,0);
+        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate()); todayEnd.setHours(23,59,59,999);
     
         eventsToProcess = eventsToProcess.filter(event => {
           const dateStrToUse = event.deletedAt || event.time || event.createdAt || event.date;
@@ -324,7 +396,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
           try {
             const eventDate = new Date(dateStrToUse);
             if(isNaN(eventDate.getTime())) return false;
-    
+        
             switch(deletedTimeFilterOption) {
               case "today":
                 return eventDate >= todayStart && eventDate <= todayEnd;
@@ -342,7 +414,6 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
               default: return true;
             }
           } catch (e) {
-            console.error("Error parsing date (Deleted Events):", dateStrToUse, e);
             return false;
           }
         });
@@ -360,9 +431,13 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
     eventsToProcess.sort((a, b) => {
       const nameA = a.name || a.title || "";
       const nameB = b.name || b.title || "";
-      return deletedSortOrder === "za" 
-        ? nameB.localeCompare(nameA, "vi", { sensitivity: "base" }) 
-        : nameA.localeCompare(nameB, "vi", { sensitivity: "base" });
+      const timeA = new Date(a.deletedAt || 0).getTime();
+      const timeB = new Date(b.deletedAt || 0).getTime();
+
+      if (deletedSortOrder === "az") return nameA.localeCompare(nameB, "vi", { sensitivity: "base" });
+      if (deletedSortOrder === "za") return nameB.localeCompare(nameA, "vi", { sensitivity: "base" });
+      
+      return timeB - timeA; // Default sort by newest deleted
     });
     return eventsToProcess;
   }, [enrichedDeletedEvents, myTab, deletedTimeFilterOption, deletedStartDateFilter, deletedEndDateFilter, deletedSearchTerm, deletedSortOrder]);
@@ -399,7 +474,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   
   const handleEditClick = (event: EventType) => {
     if (deletingEventId || restoringEventId) return;
-    const eventRealStatus = getEventStatus(event.time || event.date);
+    const eventRealStatus = getEventOperationalStatus(event);
     if (eventRealStatus !== "upcoming") {
         toast.error("Chỉ có thể sửa sự kiện đang ở trạng thái 'Sắp diễn ra'.");
         return;
@@ -445,7 +520,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
             const isDeletingThis = deletingEventId === event.id;
             const isProcessing = isRestoringThis || isDeletingThis;
             const eventName = event.name || event.title || "Sự kiện không tên";
-            const eventRealStatus = getEventStatus(event.time || event.date);
+            const operationalStatus = getEventOperationalStatus(event);
             return (
               <div key={event.id}
                 className={`bg-white shadow rounded-lg flex flex-col border border-gray-200 transition-shadow duration-150 overflow-hidden ${
@@ -482,6 +557,12 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                       </p>
                     )}
                     {event.location && (<p className="text-xs text-gray-500 flex items-center gap-1"><span className="opacity-70">📍</span> {event.location}</p>)}
+                     <div className="mt-1">
+                        <span className={`${getStatusBadgeClasses(operationalStatus)} shadow-sm border-opacity-50`}>
+                            {getStatusIcon(operationalStatus)}
+                            {getStatusText(operationalStatus)}
+                        </span>
+                    </div>
                   </div>
                   {currentTabType === "rejected" && event.rejectionReason && (
                     <p className="text-xs text-red-500 mt-2 pt-1 border-t border-dashed border-red-100 truncate" title={event.rejectionReason}>
@@ -491,12 +572,12 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   {currentTabType === "deleted" && event.deletedBy && (
                     <div className="text-xs text-gray-500 mt-2 pt-1 border-t border-dashed border-gray-200 flex items-center gap-1.5">
                         <span className="font-medium">Bởi:</span>
-                        {event.deletedBy.avatar && <img src={event.deletedBy.avatar} alt="Avatar" className="w-4 h-4 rounded-full"/>}
+                        {event.deletedBy.avatar && <Image src={event.deletedBy.avatar} alt={event.deletedBy.username || ""} width={16} height={16} className="w-4 h-4 rounded-full"/>}
                         <span>{event.deletedBy.username}</span>
                     </div>
                   )}
                   <div className="mt-3 pt-2 border-t border-gray-100 flex gap-2 justify-end items-center">
-                    {currentTabType !== "deleted" && eventRealStatus === "upcoming" && (
+                    {currentTabType !== "deleted" && operationalStatus === "upcoming" && (
                       <button onClick={(e) => { e.stopPropagation(); handleEditClick(event); }} disabled={isProcessing} title="Chỉnh sửa"
                         className={`p-1.5 rounded text-xs cursor-pointer font-medium flex items-center justify-center gap-1 transition ${isProcessing ? "bg-gray-200 text-gray-400 cursor-wait" : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"}`}>
                         <Pencil1Icon className="w-3 h-3" />
@@ -528,7 +609,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
               const isDeletingThis = deletingEventId === event.id;
               const isProcessing = isRestoringThis || isDeletingThis;
               const eventName = event.name || event.title || "Sự kiện không tên";
-              const eventRealStatus = getEventStatus(event.time || event.date);
+              const operationalStatus = getEventOperationalStatus(event);
             return (
               <li key={event.id}
                 className={`bg-white shadow-lg rounded-xl overflow-hidden transition transform hover:scale-[1.01] hover:shadow-xl flex flex-col md:flex-row border border-gray-200 ${
@@ -559,20 +640,26 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                                 <p className="flex items-center gap-1"><TrashIcon className="w-3 h-3 opacity-70" /> Xóa lúc: {new Date(event.deletedAt).toLocaleString('vi-VN', {dateStyle: 'short', timeStyle: 'short'})}</p>
                             )}
                             {event.location && (<p className="flex items-center gap-1"><span className="opacity-70">📍</span>{event.location}</p>)}
-                            {currentTabType === "rejected" && event.rejectionReason && (
-                                <p className="text-red-500 truncate" title={event.rejectionReason}><span className="font-medium">Lý do từ chối:</span> {event.rejectionReason}</p>
-                            )}
-                            {currentTabType === "deleted" && event.deletedBy && (
-                                <p className="flex items-center gap-1.5">
-                                    <span className="font-medium">Bởi:</span>
-                                    {event.deletedBy.avatar && <Image src={event.deletedBy.avatar} alt={event.deletedBy.username} width={16} height={16} className="w-4 h-4 rounded-full"/>}
-                                    <span>{event.deletedBy.username}</span>
-                                </p>
-                            )}
+                            <div className="pt-0.5">
+                                <span className={`${getStatusBadgeClasses(operationalStatus)} shadow-sm border-opacity-50`}>
+                                    {getStatusIcon(operationalStatus)}
+                                    {getStatusText(operationalStatus)}
+                                </span>
+                            </div>
                         </div>
+                        {currentTabType === "rejected" && event.rejectionReason && (
+                            <p className="text-xs text-red-500 mt-1.5 truncate" title={event.rejectionReason}><span className="font-medium">Lý do từ chối:</span> {event.rejectionReason}</p>
+                        )}
+                         {currentTabType === "deleted" && event.deletedBy && (
+                            <div className="text-xs text-gray-500 mt-1.5 flex items-center gap-1.5">
+                                <span className="font-medium">Bởi:</span>
+                                {event.deletedBy.avatar && <Image src={event.deletedBy.avatar} alt={event.deletedBy.username || ""} width={16} height={16} className="w-4 h-4 rounded-full"/>}
+                                <span>{event.deletedBy.username}</span>
+                            </div>
+                        )}
                     </div>
                     <div className="mt-2 pt-2 border-t border-gray-100 flex justify-end gap-2">
-                        {currentTabType !== "deleted" && eventRealStatus === "upcoming" && (
+                        {currentTabType !== "deleted" && operationalStatus === "upcoming" && (
                             <button onClick={(e) => { e.stopPropagation(); handleEditClick(event); }} disabled={isProcessing} title="Chỉnh sửa"
                                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 cursor-pointer ${isProcessing ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"}`}>
                                 <Pencil1Icon className="w-3 h-3" /> <span className="hidden sm:inline">Sửa</span>
@@ -618,16 +705,16 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-2 mb-5 border-b border-gray-200 flex-shrink-0">
         <button onClick={() => setMyTab("approved")} className={`pb-2 font-semibold cursor-pointer text-sm md:text-base flex items-center gap-1 ${myTab === "approved" ? "border-b-2 border-green-500 text-green-600" : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"}`}>
-            <CheckIcon /> Đã duyệt ({initialMyEvents.filter(e => e.status?.toUpperCase() === "APPROVED").length})
+            <CheckIcon /> Đã duyệt 
         </button>
         <button onClick={() => setMyTab("pending")} className={`pb-2 font-semibold cursor-pointer text-sm md:text-base flex items-center gap-1 ${myTab === "pending" ? "border-b-2 border-yellow-500 text-yellow-600" : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"}`}>
-            <ReloadIcon /> Chờ duyệt ({initialMyEvents.filter(e => e.status?.toUpperCase() === "PENDING").length})
+            <ReloadIcon /> Chờ duyệt 
         </button>
         <button onClick={() => setMyTab("rejected")} className={`pb-2 font-semibold cursor-pointer text-sm md:text-base flex items-center gap-1 ${myTab === "rejected" ? "border-b-2 border-red-500 text-red-600" : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"}`}>
-            <Cross2Icon /> Từ chối ({initialMyEvents.filter(e => e.status?.toUpperCase() === "REJECTED").length})
+            <Cross2Icon /> Từ chối 
         </button>
         <button onClick={() => setMyTab("deleted")} className={`pb-2 font-semibold cursor-pointer text-sm md:text-base flex items-center gap-1 ${myTab === "deleted" ? "border-b-2 border-gray-500 text-gray-600" : "text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300"}`}>
-            <TrashIcon /> Đã xóa ({initialDeletedEvents.length})
+            <TrashIcon /> Đã xóa 
         </button>
       </div>
 
@@ -644,13 +731,13 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                     <label htmlFor="sortMyEvents" className="block text-xs font-medium text-gray-600 mb-1">Sắp xếp</label>
                     <select id="sortMyEvents" value={mySortOrder} onChange={(e) => setMySortOrder(e.target.value as "az" | "za")}
                         className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
-                        style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}>
+                         style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}>
                         <option value="az">A - Z</option>
                         <option value="za">Z - A</option>
                     </select>
                 </div>
                 <div>
-                    <label htmlFor="timeFilterMyEvents" className="block text-xs font-medium text-gray-600 mb-1">Lọc theo trạng thái</label>
+                    <label htmlFor="timeFilterMyEvents" className="block text-xs font-medium text-gray-600 mb-1">Lọc theo trạng thái hoạt động</label>
                     <select id="timeFilterMyEvents" value={myTimeFilterOption} onChange={(e) => setMyTimeFilterOption(e.target.value as MyEventTemporalFilterOption)}
                         className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
                         style={{ backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 0.5rem center", backgroundSize: "1.5em 1.5em" }}>
@@ -693,7 +780,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
 
       {myTab === "deleted" && (
         <div className="mb-5 p-4 bg-white rounded-lg shadow-sm border border-gray-200 flex-shrink-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-end">
                 <div className="relative lg:col-span-1 xl:col-span-1">
                     <label htmlFor="searchDeletedEvents" className="block text-xs font-medium text-gray-600 mb-1">Tìm kiếm (Đã xóa)</label>
                     <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400"><MagnifyingGlassIcon /></span>
@@ -750,6 +837,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
             )}
         </div>
       )}
+
 
       <div className="overflow-y-auto flex-grow mb-1 pr-1 min-h-[300px] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
         {renderMyEventsSection()}

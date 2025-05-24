@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
-import { User, NewsItem, EventDisplayInfo } from "../types/appTypes";
-import { EventDataForForm } from "../types/typCreateEvent";
+import { User, NewsItem, EventDisplayInfo, EventDataForForm } from "../types/appTypes";
 import { useRouter } from "next/navigation";
 import {
   ReloadIcon,
@@ -36,8 +35,14 @@ interface DetailedMember {
   positionName?: string;
 }
 
-const getEventStatus = (eventDateStr: string | undefined): EventStatus => {
-  if (!eventDateStr) return "upcoming";
+const getEventStatus = (event: EventDisplayInfo): EventStatus => {
+  const progressStatusUpper = event.progressStatus?.toUpperCase();
+
+  if (progressStatusUpper === "ONGOING") return "ongoing";
+  if (progressStatusUpper === "UPCOMING") return "upcoming";
+  if (progressStatusUpper === "COMPLETED") return "ended";
+
+  if (!event.date) return "upcoming";
   try {
     const now = new Date();
     const todayStart = new Date(
@@ -45,13 +50,15 @@ const getEventStatus = (eventDateStr: string | undefined): EventStatus => {
       now.getMonth(),
       now.getDate()
     );
-    const eventDate = new Date(eventDateStr);
+    const eventDate = new Date(event.date);
     if (isNaN(eventDate.getTime())) return "upcoming";
+
     const eventDateStart = new Date(
       eventDate.getFullYear(),
       eventDate.getMonth(),
       eventDate.getDate()
     );
+
     if (eventDateStart < todayStart) return "ended";
     else if (eventDateStart > todayStart) return "upcoming";
     else return "ongoing";
@@ -221,7 +228,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       setIsLoadingCreator(true);
       setCreatorName(null);
       fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${selectedEvent.createdBy}`
+        `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -259,7 +266,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         try {
           const organizerPromises = organizersToFetch.map(async (org: any) => {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${org.userId}`
+              `http://localhost:8080/identity/users/notoken/${org.userId}`
             );
             if (!response.ok) {
               return {
@@ -294,7 +301,6 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           const settledOrganizers = await Promise.all(organizerPromises);
           setDetailedOrganizers(settledOrganizers as DetailedMember[]);
         } catch (error) {
-          console.error("Lỗi tải thông tin ban tổ chức:", error);
           setDetailedOrganizers(
             organizersToFetch.map((org: any) => ({
               userId: org.userId,
@@ -327,7 +333,7 @@ useEffect(() => {
         try {
           const participantPromises = participantsToFetch.map(async (par: any) => {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${par.userId}`
+              `http://localhost:8080/identity/users/notoken/${par.userId}`
             );
             let fullName = par.name || `ID: ${par.userId.substring(0, 8)}...`;
             let positionName = par.positionName;
@@ -356,7 +362,6 @@ useEffect(() => {
           const settledParticipants = await Promise.all(participantPromises);
           setDetailedParticipants(settledParticipants as DetailedMember[]);
         } catch (error) {
-          console.error("Lỗi tải thông tin người tham dự:", error);
           setDetailedParticipants(
             participantsToFetch.map((par:any) => ({
               userId: par.userId,
@@ -387,11 +392,11 @@ useEffect(() => {
     todayEnd.setHours(23, 59, 59, 999);
 
     if (timeFilterOption === "upcoming")
-      evts = evts.filter((e) => getEventStatus(e.date) === "upcoming");
+      evts = evts.filter((e) => getEventStatus(e) === "upcoming");
     else if (timeFilterOption === "ongoing")
-      evts = evts.filter((e) => getEventStatus(e.date) === "ongoing");
+      evts = evts.filter((e) => getEventStatus(e) === "ongoing");
     else if (timeFilterOption === "ended")
-      evts = evts.filter((e) => getEventStatus(e.date) === "ended");
+      evts = evts.filter((e) => getEventStatus(e) === "ended");
     else if (timeFilterOption === "today")
       evts = evts.filter((e) => {
         try {
@@ -440,11 +445,8 @@ useEffect(() => {
               return false;
             }
           });
-        } else if (start > end) {
-          console.warn("Start date is after end date.");
         }
       } catch (e) {
-        console.error("Error parsing date range:", e);
       }
     }
 
@@ -468,20 +470,30 @@ useEffect(() => {
     else {
       evts.sort((a, b) => {
         try {
-          const statusA = getEventStatus(a.date);
-          const statusB = getEventStatus(b.date);
+          const statusA = getEventStatus(a);
+          const statusB = getEventStatus(b);
           const dateA = a.date ? new Date(a.date).getTime() : 0;
           const dateB = b.date ? new Date(b.date).getTime() : 0;
+
           if (isNaN(dateA) && isNaN(dateB)) return 0;
           if (isNaN(dateA)) return 1;
           if (isNaN(dateB)) return -1;
+
           if (statusA === "ongoing" && statusB !== "ongoing") return -1;
           if (statusB === "ongoing" && statusA !== "ongoing") return 1;
+
           if (statusA === "upcoming" && statusB === "ended") return -1;
           if (statusB === "upcoming" && statusA === "ended") return 1;
-          if (statusA === "upcoming" && statusB === "upcoming")
-            return dateA - dateB;
+          
+          if (statusA === statusB) {
+            if (statusA === "upcoming") return dateA - dateB;
+            if (statusA === "ongoing") return dateA - dateB; 
+            if (statusA === "ended") return dateB - dateA; 
+          }
+          
+          if (statusA === "upcoming" && statusB === "upcoming") return dateA - dateB;
           if (statusA === "ended" && statusB === "ended") return dateB - dateA;
+          
           return dateB - dateA;
         } catch {
           return 0;
@@ -545,12 +557,11 @@ useEffect(() => {
       await onRefreshEvents();
       toast.success("Đã làm mới!");
     } catch (error) {
-      console.error("Lỗi khi làm mới:", error);
       toast.error("Không thể làm mới.");
     }
   };
   const handleEditEvent = (event: EventDisplayInfo) => {
-    onOpenUpdateModal(event as EventDataForForm);
+    onOpenUpdateModal(event as unknown as EventDataForForm);
   };
 
   const handleDeleteEvent = (event: EventDisplayInfo) => {
@@ -573,7 +584,7 @@ useEffect(() => {
         router.push("/login?sessionExpired=true&redirect=/admin/home");
         return;
       }
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}?deletedById=${user.id}`;
+      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
 
       try {
         let response = await fetch(apiUrl, {
@@ -623,7 +634,6 @@ useEffect(() => {
           throw new Error(errorMsg);
         }
       } catch (error: any) {
-        console.error("Lỗi xoá sự kiện:", error);
         toast.error(`Xoá thất bại: ${error.message || "Lỗi không xác định"}`);
       } finally {
         setIsDeleting(null);
@@ -861,7 +871,7 @@ useEffect(() => {
                   {selectedEvent.title}
                 </h2>
                 {(() => {
-                  const status = getEventStatus(selectedEvent.date);
+                  const status = getEventStatus(selectedEvent);
                   return (
                     <span
                       className={`${getStatusBadgeClasses(
@@ -905,7 +915,7 @@ useEffect(() => {
                     ? "Đang tải..."
                     : creatorName || selectedEvent.createdBy || "N/A"}
                 </p>
-                 {selectedEvent.purpose && (
+                  {selectedEvent.purpose && (
                   <p>
                     <strong className="font-medium w-28 inline-block align-top">
                       🎯 Mục đích:
@@ -984,7 +994,7 @@ useEffect(() => {
                 {user?.id === selectedEvent.createdBy && (
                   <button
                     onClick={() => handleEditEvent(selectedEvent)}
-                    disabled={isDeleting === selectedEvent.id || getEventStatus(selectedEvent.date) !== "upcoming"}
+                    disabled={isDeleting === selectedEvent.id || getEventStatus(selectedEvent) !== "upcoming"}
                     className="px-4 py-2 cursor-pointer rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Pencil1Icon className="w-4 h-4" /> Sửa
@@ -1006,11 +1016,11 @@ useEffect(() => {
                     {isDeleting === selectedEvent.id ? "Đang xoá..." : "Xoá"}
                   </button>
                 )}
-                 {(() => {
+                  {(() => {
                   const isCreated = user?.id === selectedEvent.createdBy;
                   const isRegistered = registeredEventIds.has(selectedEvent.id);
                   const processing = isRegistering === selectedEvent.id;
-                  const status = getEventStatus(selectedEvent.date);
+                  const status = getEventStatus(selectedEvent);
                   const showRegisterBtn = !isCreated && status !== "ended";
 
                   if (user && showRegisterBtn) {
@@ -1087,7 +1097,7 @@ useEffect(() => {
             viewMode === "card" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {paginatedEvents.map((event) => {
-                  const status = getEventStatus(event.date);
+                  const status = getEventStatus(event);
                   const isCreatedByUser = user?.id === event.createdBy; 
                   const canEdit = isCreatedByUser && status === "upcoming";
                   const isRegistered = registeredEventIds.has(event.id);
@@ -1229,7 +1239,7 @@ useEffect(() => {
                               <Pencil1Icon className="w-4 h-4" />
                             </button>
                           )}
-                          {user && ( 
+                          {user && (
                             <button
                               onClick={() => handleDeleteEvent(event)}
                               disabled={isDeleting === event.id}
@@ -1257,7 +1267,7 @@ useEffect(() => {
               <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
                 <ul className="divide-y divide-gray-200">
                   {paginatedEvents.map((event) => {
-                    const status = getEventStatus(event.date);
+                    const status = getEventStatus(event);
                     const isCreatedByUser = user?.id === event.createdBy;
                     const canEdit = isCreatedByUser && status === "upcoming";
                     const isRegistered = registeredEventIds.has(event.id);
@@ -1330,7 +1340,7 @@ useEffect(() => {
                           </div>
                         </div>
                         <div className="mt-2 sm:mt-0 sm:ml-4 flex-shrink-0 flex items-center gap-2 justify-end">
-                          {isCreatedByUser ? (
+                            {isCreatedByUser ? (
                             <div className="px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium">
                               ✨ Của bạn
                             </div>

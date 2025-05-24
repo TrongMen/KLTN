@@ -4,9 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast, Toaster } from 'react-hot-toast';
 
-import "react-toastify/dist/ReactToastify.css";
-
-const InputWithIcon = ({
+const InputWithIcon: React.FC<{icon: React.ReactNode, value: string, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, placeholder: string, type?: string}> = ({
   icon,
   value,
   onChange,
@@ -30,9 +28,8 @@ const InputWithIcon = ({
 export default function Register() {
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [gender, setGender] = useState("male");
   const [dob, setDob] = useState("");
   const [email, setEmail] = useState("");
@@ -59,7 +56,7 @@ export default function Register() {
     try {
       setLoading(true);
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`, {
+      const response = await fetch(`http://localhost:8080/identity/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -70,14 +67,25 @@ export default function Register() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || "Đăng ký thất bại");
+        let errorMessage = "Đăng ký thất bại";
+        if (result && result.message) {
+            errorMessage = result.message;
+        } else if (response.status === 409) {
+            errorMessage = "Mã số sinh viên hoặc email đã tồn tại.";
+        }
+        throw new Error(errorMessage);
+      }
+      
+      if (result.code !== 1000) {
+         throw new Error(result.message || "Đăng ký thất bại do lỗi không xác định từ máy chủ.");
       }
 
-      toast.success(" Đăng ký thành công!");
-      router.push("/login");
-    } catch (error) {
-      console.error("Error:", error);
-      toast.error(" Đăng ký thất bại: " + error.message);
+      toast.success("Đăng ký thành công! Bạn sẽ được chuyển đến trang đăng nhập.");
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
+    } catch (error: any) {
+      toast.error(error.message || "Đăng ký thất bại do lỗi không mong muốn.");
     } finally {
       setLoading(false);
     }

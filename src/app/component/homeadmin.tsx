@@ -10,6 +10,7 @@ import React, {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
+import Image from "next/image";
 import UserMenu from "../component/menu";
 import ContactModal from "../component/modals/ContactModal";
 import AboutModal from "../component/modals/AboutModal";
@@ -62,7 +63,12 @@ import CreateEventForm from "./tabs/CreateEventForm";
 
 import StatisticTabContent from "./tabs/StatisticTabContent";
 import ModalUpdateEvent from "./modals/ModalUpdateEvent";
+import { Playfair_Display } from "next/font/google";
 
+const playfair = Playfair_Display({
+  subsets: ["vietnamese", "latin"],
+  weight: ["700"],
+});
 type ActiveTab =
   | "home"
   | "news"
@@ -216,7 +222,7 @@ export default function HomeAdmin() {
         return null;
       }
       try {
-        const userUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`;
+        const userUrl = `http://localhost:8080/identity/users/notoken/${userId}`;
         const userRes = await fetch(userUrl, {
           headers: { Authorization: `Bearer ${effectiveToken}` },
         });
@@ -284,7 +290,7 @@ export default function HomeAdmin() {
       token = localStorage.getItem("authToken");
       if (!token) throw new Error("Yêu cầu xác thực.");
 
-      const listUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/user/${userId}`;
+      const listUrl = `http://localhost:8080/identity/api/events/group-chats/user/${userId}`;
       const listResponse = await fetch(listUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -324,7 +330,7 @@ export default function HomeAdmin() {
         let lastMessageSenderNameDisplay: string | undefined = undefined;
 
         try {
-          const messagesUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
+          const messagesUrl = `http://localhost:8080/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
           const messagesResponse = await fetch(messagesUrl, {
             headers: { Authorization: `Bearer ${token!}` },
           });
@@ -424,7 +430,7 @@ export default function HomeAdmin() {
         return;
       }
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         const response = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -537,7 +543,7 @@ export default function HomeAdmin() {
         return;
       }
       try {
-        const groupUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}`;
+        const groupUrl = `http://localhost:8080/identity/api/events/group-chats/${groupId}`;
         const groupResponse = await fetch(groupUrl, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -644,7 +650,7 @@ export default function HomeAdmin() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Auth required.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/media`;
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/media`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -681,7 +687,7 @@ export default function HomeAdmin() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Auth required.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/files`;
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/files`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -718,7 +724,7 @@ export default function HomeAdmin() {
     try {
       const token = localStorage.getItem("authToken");
       if (!token) throw new Error("Auth required.");
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/audios`;
+      const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audios`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -759,7 +765,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
         const res = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -794,7 +800,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
         const res = await fetch(url, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -821,93 +827,93 @@ export default function HomeAdmin() {
     []
   );
 
-    const handleDisbandGroupChatAPI = useCallback(
-      async (groupId: string, leaderId: string): Promise<void> => {
-        if (!groupId || !leaderId) {
-          toast.error("Thiếu thông tin để giải tán nhóm.");
-          return;
+  const handleDisbandGroupChatAPI = useCallback(
+    async (groupId: string, leaderId: string): Promise<void> => {
+      if (!groupId || !leaderId) {
+        toast.error("Thiếu thông tin để giải tán nhóm.");
+        return;
+      }
+      if (!user || user.id !== leaderId) {
+        toast.error("Chỉ có trưởng nhóm mới có thể giải tán nhóm.");
+        return;
+      }
+
+      setIsProcessingChatAction(true);
+      const toastId = toast.loading("Đang giải tán nhóm...");
+
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          throw new Error("Yêu cầu xác thực.");
         }
-        if (!user || user.id !== leaderId) {
-          toast.error("Chỉ có trưởng nhóm mới có thể giải tán nhóm.");
-          return;
+
+        const response = await fetch(
+          `http://localhost:8080/identity/api/events/group-chats/${groupId}/deactivate?leaderId=${leaderId}`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          let errorMessage = `Lỗi ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage;
+          } catch (e) {
+            errorMessage =
+              response.statusText ||
+              `Lỗi máy chủ khi giải tán nhóm. Mã lỗi: ${response.status}`;
+          }
+          throw new Error(errorMessage);
         }
-  
-        setIsProcessingChatAction(true);
-        const toastId = toast.loading("Đang giải tán nhóm...");
-  
-        try {
-          const token = localStorage.getItem("authToken");
-          if (!token) {
-            throw new Error("Yêu cầu xác thực.");
-          }
-  
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}/deactivate?leaderId=${leaderId}`,
-            {
-              method: "PATCH",
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-  
-          if (!response.ok) {
-            let errorMessage = `Lỗi ${response.status}`;
-            try {
-              const errorData = await response.json();
-              errorMessage = errorData.message || errorMessage;
-            } catch (e) {
-              errorMessage =
-                response.statusText ||
-                `Lỗi máy chủ khi giải tán nhóm. Mã lỗi: ${response.status}`;
-            }
-            throw new Error(errorMessage);
-          }
-          const responseText = await response.text();
-          if (responseText) {
-            try {
-              const responseData = JSON.parse(responseText);
-              if (responseData.code !== 1000 && responseData.message) {
-                throw new Error(
-                  responseData.message ||
-                    "Giải tán nhóm không thành công từ máy chủ."
-                );
-              } else if (responseData.code !== 1000 && !responseData.message) {
-                throw new Error(
-                  "Giải tán nhóm không thành công, phản hồi không rõ ràng từ máy chủ."
-                );
-              }
-            } catch (e: any) {
-              console.error(
-                "Lỗi phân tích phản hồi JSON khi giải tán nhóm:",
-                e.message
-              );
+        const responseText = await response.text();
+        if (responseText) {
+          try {
+            const responseData = JSON.parse(responseText);
+            if (responseData.code !== 1000 && responseData.message) {
               throw new Error(
-                "Phản hồi không hợp lệ từ máy chủ sau khi giải tán nhóm."
+                responseData.message ||
+                  "Giải tán nhóm không thành công từ máy chủ."
+              );
+            } else if (responseData.code !== 1000 && !responseData.message) {
+              throw new Error(
+                "Giải tán nhóm không thành công, phản hồi không rõ ràng từ máy chủ."
               );
             }
+          } catch (e: any) {
+            console.error(
+              "Lỗi phân tích phản hồi JSON khi giải tán nhóm:",
+              e.message
+            );
+            throw new Error(
+              "Phản hồi không hợp lệ từ máy chủ sau khi giải tán nhóm."
+            );
           }
-  
-          toast.success("Đã giải tán nhóm thành công!", { id: toastId });
-  
-          setChatConversations((prevConversations) =>
-            prevConversations.filter((c) => String(c.id) !== String(groupId))
-          );
-  
-          if (selectedChatConversation?.id === groupId) {
-            setSelectedChatConversation(null);
-          }
-        } catch (error: any) {
-          toast.error(`Giải tán nhóm thất bại: ${error.message}`, {
-            id: toastId,
-          });
-          console.error("Lỗi giải tán nhóm:", error);
-        } finally {
-          setIsProcessingChatAction(false);
         }
-      },
-      [user, selectedChatConversation?.id]
-    );
+
+        toast.success("Đã giải tán nhóm thành công!", { id: toastId });
+
+        setChatConversations((prevConversations) =>
+          prevConversations.filter((c) => String(c.id) !== String(groupId))
+        );
+
+        if (selectedChatConversation?.id === groupId) {
+          setSelectedChatConversation(null);
+        }
+      } catch (error: any) {
+        toast.error(`Giải tán nhóm thất bại: ${error.message}`, {
+          id: toastId,
+        });
+        console.error("Lỗi giải tán nhóm:", error);
+      } finally {
+        setIsProcessingChatAction(false);
+      }
+    },
+    [user, selectedChatConversation?.id]
+  );
   const handleSendMessageChatAPI = useCallback(
     async (
       groupId: string,
@@ -920,7 +926,7 @@ export default function HomeAdmin() {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
         if (!groupId) throw new Error("Group ID không tồn tại.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         const form = new FormData();
         form.append("senderId", senderId);
         form.append("content", messageText);
@@ -992,7 +998,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         const form = new FormData();
         form.append("senderId", senderId);
         form.append("file", file);
@@ -1064,7 +1070,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Yêu cầu xác thực.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/messages/${messageId}?userId=${userId}`;
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}?userId=${userId}`;
         const response = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -1149,7 +1155,7 @@ export default function HomeAdmin() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Auth required.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/messages/${messageId}/download`;
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}/download`;
         const res = await fetch(url, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
@@ -1218,7 +1224,7 @@ export default function HomeAdmin() {
     try {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status?status=APPROVED`;
+      const url = `http://localhost:8080/identity/api/news/status?status=APPROVED`;
       let res = await fetch(url, { headers, cache: "no-store" });
       if (
         (res.status === 401 || res.status === 403) &&
@@ -1279,7 +1285,7 @@ export default function HomeAdmin() {
     try {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=APPROVED`;
+      const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
       let res = await fetch(url, { headers, cache: "no-store" });
       if (
         (res.status === 401 || res.status === 403) &&
@@ -1347,7 +1353,7 @@ export default function HomeAdmin() {
       setIsLoadingCreatedEventIds(true);
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${userIdParam}`;
+        const url = `http://localhost:8080/identity/api/events/creator/${userIdParam}`;
         let res = await fetch(url, {
           headers: { Authorization: `Bearer ${currentToken}` },
           cache: "no-store",
@@ -1391,7 +1397,7 @@ export default function HomeAdmin() {
       setIsLoadingRegisteredIds(true);
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/attendee/${userIdParam}`;
+        const url = `http://localhost:8080/identity/api/events/attendee/${userIdParam}`;
         let res = await fetch(url, {
           headers: { Authorization: `Bearer ${currentToken}` },
           cache: "no-store",
@@ -1438,7 +1444,7 @@ export default function HomeAdmin() {
       const limit = 10;
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/notifications?userId=${userIdParam}&limit=${limit}`;
+        const url = `http://localhost:8080/identity/api/notifications?userId=${userIdParam}&limit=${limit}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers, cache: "no-store" });
         if (res.status === 401 || res.status === 403) {
@@ -1508,7 +1514,7 @@ export default function HomeAdmin() {
           const headers: HeadersInit = {
             Authorization: `Bearer ${currentAuthToken}`,
           };
-          const userInfoUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/myInfo`;
+          const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
           let userRes = await fetch(userInfoUrl, {
             headers,
             cache: "no-store",
@@ -1585,7 +1591,7 @@ export default function HomeAdmin() {
   useEffect(() => {
     if (user?.id && user.roles?.some((r) => r.name === "ADMIN")) {
       if (socketRef.current) socketRef.current.disconnect();
-      const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`, {
+      const socket = io(`ws://localhost:9099`, {
         path: "/socket.io",
         query: { userId: user.id },
         transports: ["websocket"],
@@ -1667,7 +1673,7 @@ export default function HomeAdmin() {
       return;
     }
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}/attendees?userId=${user.id}`;
+      const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
       let res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -1777,7 +1783,7 @@ export default function HomeAdmin() {
     try {
       const t = localStorage.getItem("authToken");
       if (t)
-        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/logout`, {
+        await fetch(`http://localhost:8080/identity/auth/logout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: t }),
@@ -1803,71 +1809,74 @@ export default function HomeAdmin() {
   const handleNotificationClick = () =>
     setShowNotificationDropdown((prev) => !prev);
 
-const handleMarkAsRead = async (notificationId: string) => {
-  let token = localStorage.getItem("authToken");
-  if (!token || !user?.id) {
-    toast.error("Vui lòng đăng nhập lại.");
-    return;
-  }
+  const handleMarkAsRead = async (notificationId: string) => {
+    let token = localStorage.getItem("authToken");
+    if (!token || !user?.id) {
+      toast.error("Vui lòng đăng nhập lại.");
+      return;
+    }
 
-  console.log("ADMIN: Attempting to mark as read, ID sent to API:", notificationId);
-
-  if (notificationId.startsWith("socket-admin-")) {
-    console.warn(
-      "ADMIN: Attempted to mark a client-generated ID notification as read. Skipping API call.",
+    console.log(
+      "ADMIN: Attempting to mark as read, ID sent to API:",
       notificationId
     );
-    return;
-  }
 
-  let currentToken = token;
-  try {
-    const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/notifications/${notificationId}/read`;
-    let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
-    let res = await fetch(url, { method: "PUT", headers: headers });
-
-    if (res.status === 401 || res.status === 403) {
-      const newToken = await refreshToken();
-      if (newToken) {
-        currentToken = newToken;
-        localStorage.setItem("authToken", newToken);
-        headers["Authorization"] = `Bearer ${newToken}`;
-        res = await fetch(url, { method: "PUT", headers: headers });
-      } else {
-        throw new Error("Không thể làm mới phiên đăng nhập.");
-      }
-    }
-
-    if (!res.ok) {
-      let errorMsg = `Lỗi ${res.status}`;
-      try {
-        const errorData = await res.json();
-        errorMsg = errorData.message || errorMsg;
-        if (res.status === 404) {
-          errorMsg = "Lỗi không tìm thấy thông báo trên server.";
-        }
-      } catch (_) {
-        if (res.status === 404) {
-          errorMsg = "Lỗi không tìm thấy thông báo trên server.";
-        }
-      }
-      throw new Error(errorMsg);
-    }
-
-    if (isMountedRef.current) {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+    if (notificationId.startsWith("socket-admin-")) {
+      console.warn(
+        "ADMIN: Attempted to mark a client-generated ID notification as read. Skipping API call.",
+        notificationId
       );
-      toast.success("Đã đánh dấu là đã đọc!");
+      return;
     }
-  } catch (error: any) {
-    if (isMountedRef.current) {
-      toast.error(`${error.message || "Không thể đánh dấu đã đọc."}`);
+
+    let currentToken = token;
+    try {
+      const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
+      let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
+      let res = await fetch(url, { method: "PUT", headers: headers });
+
+      if (res.status === 401 || res.status === 403) {
+        const newToken = await refreshToken();
+        if (newToken) {
+          currentToken = newToken;
+          localStorage.setItem("authToken", newToken);
+          headers["Authorization"] = `Bearer ${newToken}`;
+          res = await fetch(url, { method: "PUT", headers: headers });
+        } else {
+          throw new Error("Không thể làm mới phiên đăng nhập.");
+        }
+      }
+
+      if (!res.ok) {
+        let errorMsg = `Lỗi ${res.status}`;
+        try {
+          const errorData = await res.json();
+          errorMsg = errorData.message || errorMsg;
+          if (res.status === 404) {
+            errorMsg = "Lỗi không tìm thấy thông báo trên server.";
+          }
+        } catch (_) {
+          if (res.status === 404) {
+            errorMsg = "Lỗi không tìm thấy thông báo trên server.";
+          }
+        }
+        throw new Error(errorMsg);
+      }
+
+      if (isMountedRef.current) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+        );
+        toast.success("Đã đánh dấu là đã đọc!");
+      }
+    } catch (error: any) {
+      if (isMountedRef.current) {
+        toast.error(`${error.message || "Không thể đánh dấu đã đọc."}`);
+      }
+      if (error.message?.includes("Unauthorized"))
+        router.push("/login?sessionExpired=true");
     }
-    if (error.message?.includes("Unauthorized"))
-      router.push("/login?sessionExpired=true");
-  }
-};
+  };
 
   const refreshNewsList = useCallback(() => {
     fetchNews();
@@ -1888,12 +1897,12 @@ const handleMarkAsRead = async (notificationId: string) => {
     if (formData.eventId) {
       apiFormData.append("eventId", formData.eventId);
     }
-    let API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news`;
+    let API_URL = `http://localhost:8080/identity/api/news`;
     let method = "POST";
     let currentToken = localStorage.getItem("authToken");
 
     if (newsId) {
-      API_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${newsId}`;
+      API_URL = `http://localhost:8080/identity/api/news/${newsId}`;
       method = "PUT";
       if (formData.imageFile) {
         apiFormData.append("coverImage", formData.imageFile);
@@ -2190,29 +2199,41 @@ const handleMarkAsRead = async (notificationId: string) => {
     currentTabSetPage < totalOtherTabPages - 1 &&
     otherTabsList.length > TABS_PER_PAGE;
 
-  const openModalForEventUpdateHandler = (eventDataForForm: EventDataForForm) => {
-          setEventToEditInModal(eventDataForForm);
-          setIsUpdateEventModalOpen(true);
-      };
+  const openModalForEventUpdateHandler = (
+    eventDataForForm: EventDataForForm
+  ) => {
+    setEventToEditInModal(eventDataForForm);
+    setIsUpdateEventModalOpen(true);
+  };
 
-  
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
       <Toaster toastOptions={{ duration: 4000 }} position="top-center" />
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
+            <nav className="bg-white text-gray-800 px-4 py-4 shadow-md mb-6 sticky top-0 z-40 ">
+
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="text-lg sm:text-xl font-bold">
-            Quản lý sự kiện (Admin)
+          <div className="flex items-center">
+            <Image
+              src="https://icc.iuh.edu.vn/web/wp-content/uploads/2024/09/iuh_logo-rut-gon-1024x577.png"
+              alt="Logo IUH"
+              width={70}
+              height={40}
+              className="h-10 w-auto"
+              priority
+            />
+            <span className={`font-bold text-xl ml-3 ${playfair.className}`}>
+              IUH TSE
+            </span>
           </div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
             <span
-              className="cursor-pointer hover:text-gray-300 transition-colors"
+              className="cursor-pointer hover:text-indigo-600 transition-colors"
               onClick={() => setShowAboutModal(true)}
             >
               Giới thiệu
             </span>
             <span
-              className="cursor-pointer hover:text-gray-300"
+              className="cursor-pointer hover:text-indigo-600"
               onClick={() => setShowContactModal(true)}
             >
               Liên hệ
@@ -2504,12 +2525,12 @@ const handleMarkAsRead = async (notificationId: string) => {
           {showNotificationDropdown && (
             <div className="absolute bottom-full right-0 mb-2 w-80 sm:w-96 ">
               <NotificationDropdown
-  notifications={notifications}
-  isLoading={isLoadingNotifications && notifications.length === 0}
-  error={errorNotifications}
-  onMarkAsRead={handleMarkAsRead}
-  onClose={() => setShowNotificationDropdown(false)}
-/>
+                notifications={notifications}
+                isLoading={isLoadingNotifications && notifications.length === 0}
+                error={errorNotifications}
+                onMarkAsRead={handleMarkAsRead}
+                onClose={() => setShowNotificationDropdown(false)}
+              />
             </div>
           )}
         </div>

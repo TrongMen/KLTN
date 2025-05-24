@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Quản lý sự kiện CLB",
+  title: "IUH TSE",
   description: "Ứng dụng quản lý sự kiện CLB dễ dàng và hiệu quả.",
   icons: {
-    icon: "./iuh.png",
+    icon: "/faviconiuh.jpg",
   },
   
 };

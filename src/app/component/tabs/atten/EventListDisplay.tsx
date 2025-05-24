@@ -1,8 +1,7 @@
-// ../components/EventListDisplay.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { FaList, FaThLarge, FaSortAlphaDown, FaSortAlphaUp, FaCalendarTimes, FaImage } from "react-icons/fa"; // Thêm FaImage cho placeholder
+import { FaList, FaThLarge, FaSortAlphaDown, FaSortAlphaUp, FaCalendarTimes, FaImage, FaClock, FaMapMarkerAlt, FaPlay, FaCheck } from "react-icons/fa";
 
 export type AttendableEvent = {
   id: string;
@@ -12,27 +11,69 @@ export type AttendableEvent = {
   status: string;
   time: string;
   endTime?: string | null;
-  avatarUrl?: string; // Đã thêm
+  avatarUrl?: string;
+  progressStatus?: 'UPCOMING' | 'ONGOING' | 'COMPLETED';
 };
 
 export type EventSortKey = "name" | "time";
 export type EventSortDirection = "asc" | "desc";
-export type EventTimeFilter = "all" | "ongoing" | "upcoming" | "past" | "customRange";
+export type EventTimeFilter = "all" | "ongoing" | "upcoming" | "ended" | "customRange";
 export type EventViewMode = "card" | "list";
+type EventStatus = "upcoming" | "ongoing" | "ended";
 
 interface EventListDisplayProps {
   initialEvents: AttendableEvent[];
   isLoading: boolean;
   error: string | null;
   onSelectEvent: (event: AttendableEvent) => void;
-  defaultEventDurationHours?: number;
+  listHeight?: string;
 }
 
-const DEFAULT_EVENT_DURATION_HOURS_INTERNAL = 2;
-const PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/300x200.png?text=Sự+Kiện"; // URL ảnh placeholder chung
-const PLACEHOLDER_THUMBNAIL_URL = "https://via.placeholder.com/40.png?text=E"; // URL ảnh thumbnail placeholder
+const getEventStatus = (eventTimeStr: string | undefined): EventStatus => {
+    if (!eventTimeStr) return "upcoming";
+    try {
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const eventDate = new Date(eventTimeStr);
+        if (isNaN(eventDate.getTime())) return "upcoming";
+        const eventDateStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
+        if (eventDateStart < todayStart) return "ended";
+        else if (eventDateStart > todayStart) return "upcoming";
+        else return "ongoing";
+    } catch (e) {
+        return "upcoming";
+    }
+};
 
-// Component Image với fallback
+const getStatusBadgeClasses = (status: EventStatus): string => {
+  const base = "px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1.5";
+  switch (status) {
+    case "ongoing": return `${base} bg-green-100 text-green-800`;
+    case "upcoming": return `${base} bg-blue-100 text-blue-800`;
+    case "ended": return `${base} bg-gray-100 text-gray-700`;
+    default: return `${base} bg-gray-100 text-gray-600`;
+  }
+};
+
+const getStatusText = (status: EventStatus): string => {
+  switch (status) {
+    case "ongoing": return "Đang diễn ra";
+    case "upcoming": return "Sắp diễn ra";
+    case "ended": return "Đã kết thúc";
+    default: return "";
+  }
+};
+
+const getStatusIcon = (status: EventStatus) => {
+  switch (status) {
+    case "ongoing": return <FaPlay />;
+    case "upcoming": return <FaClock />;
+    case "ended": return <FaCheck />;
+    default: return null;
+  }
+};
+
+
 const EventImage: React.FC<{
   src?: string;
   alt: string;
@@ -42,28 +83,23 @@ const EventImage: React.FC<{
   const [imgSrc, setImgSrc] = useState(src);
 
   useEffect(() => {
-    setImgSrc(src); // Cập nhật imgSrc khi prop src thay đổi
+    setImgSrc(src);
   }, [src]);
 
   const handleError = () => {
-    setImgSrc(placeholderType === 'card' ? PLACEHOLDER_IMAGE_URL : PLACEHOLDER_THUMBNAIL_URL);
+    setImgSrc(undefined);
   };
 
-  if (!imgSrc && placeholderType === 'card') { // Nếu không có src ban đầu và là card
+  if (!imgSrc) {
+    const placeholderClass = placeholderType === 'card' 
+      ? "w-12 h-12" 
+      : "w-5 h-5";
     return (
-      <div className={`${className} flex items-center justify-center bg-gray-200 rounded-md`}>
-        <FaImage className="text-gray-400 w-12 h-12" />
+      <div className={`${className} flex items-center justify-center bg-gray-200`}>
+        <FaImage className={`text-gray-400 ${placeholderClass}`} />
       </div>
     );
   }
-   if (!imgSrc && placeholderType === 'thumbnail') { // Nếu không có src ban đầu và là thumbnail
-    return (
-      <div className={`${className} flex items-center justify-center bg-gray-200 rounded-full`}>
-        <FaImage className="text-gray-400 w-5 h-5" />
-      </div>
-    );
-  }
-
 
   return <img src={imgSrc} alt={alt} className={className} onError={handleError} />;
 };
@@ -74,10 +110,10 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
   isLoading,
   error,
   onSelectEvent,
-  defaultEventDurationHours = DEFAULT_EVENT_DURATION_HOURS_INTERNAL,
+  listHeight = "h-[calc(120vh-200px)]",
 }) => {
   const [eventViewMode, setEventViewMode] = useState<EventViewMode>("card");
-  const [eventSortConfig, setEventSortConfig] = useState<{ key: EventSortKey; direction: EventSortDirection }>({ key: "name", direction: "asc" });
+  const [eventSortConfig, setEventSortConfig] = useState<{ key: EventSortKey; direction: EventSortDirection }>({ key: "time", direction: "asc" });
   const [eventTimeFilter, setEventTimeFilter] = useState<EventTimeFilter>("all");
   const [filterStartDate, setFilterStartDate] = useState<string>("");
   const [filterEndDate, setFilterEndDate] = useState<string>("");
@@ -99,11 +135,7 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
   };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newStartDate = e.target.value;
-    setFilterStartDate(newStartDate);
-    if (filterEndDate && newStartDate && new Date(filterEndDate) < new Date(newStartDate)) {
-      setFilterEndDate(newStartDate);
-    }
+    setFilterStartDate(e.target.value);
   };
 
   const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,7 +149,6 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
 
   const displayedEvents = useMemo(() => {
     let events = [...initialEvents];
-    const now = new Date();
 
     if (eventTimeFilter === "customRange") {
       if (filterStartDate) {
@@ -131,37 +162,38 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
         events = events.filter(event => new Date(event.time) <= endDate);
       }
     } else if (eventTimeFilter !== "all") {
-      events = events.filter(event => {
-        const startTime = new Date(event.time);
-        let eventEffectiveEndTime;
-        if (event.endTime) {
-          eventEffectiveEndTime = new Date(event.endTime);
-        } else {
-          eventEffectiveEndTime = new Date(startTime.getTime() + defaultEventDurationHours * 60 * 60 * 1000);
-        }
-        switch (eventTimeFilter) {
-          case "ongoing": return startTime <= now && eventEffectiveEndTime >= now;
-          case "upcoming": return startTime > now;
-          case "past": return eventEffectiveEndTime < now;
-          default: return true;
-        }
-      });
+        events = events.filter(event => getEventStatus(event.time) === eventTimeFilter);
     }
 
     events.sort((a, b) => {
       let valA, valB;
+      const statusA = getEventStatus(a.time);
+      const statusB = getEventStatus(b.time);
+      const timeA = new Date(a.time).getTime();
+      const timeB = new Date(b.time).getTime();
+
       if (eventSortConfig.key === "name") {
         valA = a.name.toLowerCase(); valB = b.name.toLowerCase();
-      } else {
-        valA = new Date(a.time).getTime(); valB = new Date(b.time).getTime();
+        if (valA < valB) return eventSortConfig.direction === "asc" ? -1 : 1;
+        if (valA > valB) return eventSortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      } else { // Sort by time with status priority
+        if (statusA === "ongoing" && statusB !== "ongoing") return -1;
+        if (statusB === "ongoing" && statusA !== "ongoing") return 1;
+        if (statusA === "upcoming" && statusB === "ended") return -1;
+        if (statusB === "upcoming" && statusA === "ended") return 1;
+
+        const timeSortDirection = eventSortConfig.direction === "asc" ? 1 : -1;
+
+        if (statusA === "upcoming" && statusB === "upcoming") return (timeA - timeB) * timeSortDirection;
+        if (statusA === "ended" && statusB === "ended") return (timeB - timeA) * timeSortDirection;
+
+        return (timeA - timeB) * timeSortDirection;
       }
-      if (valA < valB) return eventSortConfig.direction === "asc" ? -1 : 1;
-      if (valA > valB) return eventSortConfig.direction === "asc" ? 1 : -1;
-      return 0;
     });
     return events;
-  }, [initialEvents, eventTimeFilter, filterStartDate, filterEndDate, eventSortConfig, defaultEventDurationHours]);
-
+  }, [initialEvents, eventTimeFilter, filterStartDate, filterEndDate, eventSortConfig]);
+  
   if (isLoading) return <p className="text-center text-gray-500 py-4">Đang tải danh sách sự kiện...</p>;
   if (error) return <p className="text-center text-red-500 py-4">Lỗi tải sự kiện: {error}</p>;
   if (initialEvents.length === 0 && !isLoading) return <p className="text-gray-600 py-4 text-center">Bạn không có sự kiện nào đã duyệt để điểm danh.</p>;
@@ -172,27 +204,27 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
         <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
             <div>
-              <label htmlFor="eventTimeFilter" className="block text-sm font-medium text-gray-700 mb-1">Lọc theo thời gian</label>
+              <label htmlFor="eventTimeFilter" className="block text-sm font-medium text-gray-700 mb-1">Lọc theo trạng thái</label>
               <select id="eventTimeFilter" name="eventTimeFilter" className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm" value={eventTimeFilter} onChange={(e) => setEventTimeFilter(e.target.value as EventTimeFilter)}>
                 <option value="all">Tất cả</option>
                 <option value="upcoming">Sắp diễn ra</option>
                 <option value="ongoing">Đang diễn ra</option>
-                <option value="past">Đã diễn ra</option>
+                <option value="ended">Đã kết thúc</option>
                 <option value="customRange">Khoảng ngày...</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sắp xếp theo</label>
               <div className="flex space-x-2">
-                <button onClick={() => handleSortChange("name")} className={`flex-1 px-3 py-2 border rounded-md text-sm flex items-center justify-center gap-1 ${eventSortConfig.key === "name" ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-white hover:bg-gray-100 border-gray-300"}`}>Tên {eventSortConfig.key === "name" && (eventSortConfig.direction === "asc" ? <FaSortAlphaUp className="ml-1" /> : <FaSortAlphaDown className="ml-1" />)}</button>
-                <button onClick={() => handleSortChange("time")} className={`flex-1 px-3 py-2 border rounded-md text-sm flex items-center justify-center gap-1 ${eventSortConfig.key === "time" ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-white hover:bg-gray-100 border-gray-300"}`}>Thời gian {eventSortConfig.key === "time" && (eventSortConfig.direction === "asc" ? "▲" : "▼")}</button>
+                <button onClick={() => handleSortChange("name")} className={`flex-1 px-3 py-2 border cursor-pointer rounded-md text-sm flex items-center justify-center gap-1 ${eventSortConfig.key === "name" ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-white hover:bg-gray-100 border-gray-300"}`}>Tên {eventSortConfig.key === "name" && (eventSortConfig.direction === "asc" ? <FaSortAlphaUp /> : <FaSortAlphaDown />)}</button>
+                <button onClick={() => handleSortChange("time")} className={`flex-1 px-3 py-2 border cursor-pointer rounded-md text-sm flex items-center justify-center gap-1 ${eventSortConfig.key === "time" ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-white hover:bg-gray-100 border-gray-300"}`}>Thời gian {eventSortConfig.key === "time" && (eventSortConfig.direction === "asc" ? "▲" : "▼")}</button>
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Chế độ xem</label>
               <div className="flex rounded-md shadow-sm">
-                <button onClick={() => setEventViewMode("card")} className={`px-3 py-2 rounded-l-md border text-sm focus:outline-none flex items-center justify-center gap-1.5 w-1/2 ${eventViewMode === "card" ? "bg-indigo-600 text-white border-indigo-600 z-10" : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300 cursor-pointer"}`}><FaThLarge /> Thẻ</button>
-                <button onClick={() => setEventViewMode("list")} className={`px-3 py-2 rounded-r-md border text-sm focus:outline-none flex items-center justify-center gap-1.5 w-1/2 -ml-px ${eventViewMode === "list" ? "bg-indigo-600 text-white border-indigo-600 z-10" : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300 cursor-pointer"}`}><FaList /> DSách</button>
+                <button onClick={() => setEventViewMode("card")} className={`px-3 py-2 rounded-l-md border cursor-pointer text-sm focus:outline-none flex items-center justify-center gap-1.5 w-1/2 ${eventViewMode === "card" ? "bg-indigo-600 text-white border-indigo-600 z-10" : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300"}`}><FaThLarge /> Thẻ</button>
+                <button onClick={() => setEventViewMode("list")} className={`px-3 py-2 rounded-r-md border cursor-pointer text-sm focus:outline-none flex items-center justify-center gap-1.5 w-1/2 -ml-px ${eventViewMode === "list" ? "bg-indigo-600 text-white border-indigo-600 z-10" : "bg-white hover:bg-gray-50 text-gray-700 border-gray-300"}`}><FaList /> DSách</button>
               </div>
             </div>
           </div>
@@ -207,7 +239,6 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
                 <input type="date" id="filterEndDate" name="filterEndDate" value={filterEndDate} onChange={handleEndDateChange} min={filterStartDate || undefined} className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm" disabled={!filterStartDate} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 opacity-0">Xóa</label>
                 {(filterStartDate || filterEndDate) && (<button onClick={clearDateFilters} className="w-full px-3 py-2 border border-red-300 text-red-700 rounded-md text-sm hover:bg-red-50 flex items-center justify-center gap-1.5" title="Xóa bộ lọc ngày"><FaCalendarTimes /> Xóa ngày</button>)}
               </div>
             </div>
@@ -217,69 +248,64 @@ export const EventListDisplay: React.FC<EventListDisplayProps> = ({
 
       {displayedEvents.length === 0 && initialEvents.length > 0 && (<p className="text-gray-600 py-4 text-center">Không tìm thấy sự kiện nào khớp với bộ lọc.</p>)}
 
-      {displayedEvents.length > 0 && (
-        <>
-          {eventViewMode === 'card' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 "> {/* Tăng gap một chút */}
-              {displayedEvents.map((event) => (
-                <div key={event.id} className="bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden cursor-pointer flex flex-col" onClick={() => onSelectEvent(event)}>
-                  <EventImage
-                    src={event.avatarUrl}
-                    alt={`Ảnh bìa ${event.name}`}
-                    className="w-full h-48 object-cover" // Kích thước ảnh card
-                    placeholderType="card"
-                  />
-                  <div className="p-4 flex flex-col flex-grow">
-                    <h4 className="text-lg font-semibold text-indigo-700 truncate mb-1" title={event.name}>{event.name}</h4>
-                    <p className="text-sm text-gray-500 mb-0.5">
-                      Bắt đầu: {new Date(event.time).toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" })}
-                    </p>
-                    {event.endTime && (
-                      <p className="text-sm text-gray-500 mb-0.5">
-                        Kết thúc: {new Date(event.endTime).toLocaleString("vi-VN", { dateStyle: "medium", timeStyle: "short" })}
-                      </p>
-                    )}
-                    <p className="text-sm text-gray-600 mt-1 truncate flex-grow" title={event.location}>
-                      <span className="font-medium">Địa điểm:</span> {event.location || "Chưa có"}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {eventViewMode === 'list' && (
-            <div className="bg-white shadow border border-gray-200 rounded-lg overflow-hidden">
-              <ul role="list" className="divide-y divide-gray-200">
-                {displayedEvents.map((event) => (
-                  <li key={event.id} className="px-4 py-3 hover:bg-gray-50 cursor-pointer sm:px-6" onClick={() => onSelectEvent(event)}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center truncate">
-                        <EventImage
-                          src={event.avatarUrl}
-                          alt="" // Alt rỗng vì ảnh ở đây mang tính trang trí hơn
-                          className="h-10 w-10 rounded-full mr-3 object-cover flex-shrink-0"
-                          placeholderType="thumbnail"
-                        />
-                        <div className="truncate">
-                          <p className="text-md font-medium text-indigo-600 truncate" title={event.name}>{event.name}</p>
-                          <p className="text-sm text-gray-500 truncate" title={event.location}>{event.location || "Chưa có địa điểm"}</p>
+      <div className={`${listHeight} overflow-y-auto pr-1`}>
+        {displayedEvents.length > 0 && (
+          <>
+            {eventViewMode === 'card' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ">
+                {displayedEvents.map((event) => {
+                  const status = getEventStatus(event.time);
+                  return (
+                    <div key={event.id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow duration-300 overflow-hidden cursor-pointer flex flex-col border" onClick={() => onSelectEvent(event)}>
+                       <div className="relative">
+                          <EventImage src={event.avatarUrl} alt={`Ảnh ${event.name}`} className="w-full h-40 object-cover" placeholderType="card" />
+                          <span className={`absolute top-2 right-2 ${getStatusBadgeClasses(status)} shadow-sm`}>
+                            {getStatusIcon(status)}
+                            {getStatusText(status)}
+                          </span>
+                       </div>
+                      <div className="p-4 flex flex-col flex-grow">
+                        <h4 className="text-md font-semibold text-gray-800 truncate mb-2" title={event.name}>{event.name}</h4>
+                        <div className="space-y-1 text-sm text-gray-600 mt-auto">
+                            <p className="flex items-center gap-2"><FaClock className="text-gray-400"/> {new Date(event.time).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" })}</p>
+                            <p className="flex items-center gap-2 truncate"><FaMapMarkerAlt className="text-gray-400 flex-shrink-0"/> <span className="truncate" title={event.location}>{event.location || "Chưa có"}</span></p>
                         </div>
                       </div>
-                      <div className="ml-2 flex-shrink-0 text-right">
-                        <p className="text-sm text-gray-900">
-                          {new Date(event.time).toLocaleString("vi-VN", { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                        {event.endTime && (<p className="text-xs text-gray-500">Đến {new Date(event.endTime).toLocaleTimeString("vi-VN", { hour: '2-digit', minute: '2-digit' })}</p>)}
-                      </div>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </>
-      )}
+                  )
+                })}
+              </div>
+            )}
+
+            {eventViewMode === 'list' && (
+              <div className="bg-white shadow border border-gray-200 rounded-lg overflow-hidden">
+                <ul role="list" className="divide-y divide-gray-200">
+                  {displayedEvents.map((event) => {
+                     const status = getEventStatus(event.time);
+                     return (
+                      <li key={event.id} className="px-4 py-3 hover:bg-gray-50 cursor-pointer sm:px-6" onClick={() => onSelectEvent(event)}>
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center truncate">
+                            <EventImage src={event.avatarUrl} alt="" className="h-10 w-10 rounded-full mr-4 object-cover flex-shrink-0" placeholderType="thumbnail"/>
+                            <div className="truncate">
+                              <p className="text-md font-medium text-indigo-600 truncate" title={event.name}>{event.name}</p>
+                              <p className="text-sm text-gray-500 truncate" title={event.location}>{event.location || "Chưa có địa điểm"}</p>
+                            </div>
+                          </div>
+                          <div className="ml-2 flex-shrink-0 text-right space-y-1">
+                             <p className={`text-xs font-medium ${getStatusBadgeClasses(status)}`}>{getStatusText(status)}</p>
+                             <p className="text-sm text-gray-700">{new Date(event.time).toLocaleDateString("vi-VN")}</p>
+                          </div>
+                        </div>
+                      </li>
+                    )}
+                  )}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

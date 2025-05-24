@@ -1,3 +1,5 @@
+"use client";
+
 import React, { RefObject } from "react";
 import {
   ChevronLeftIcon,
@@ -20,6 +22,7 @@ import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import ConfirmationDialog from "../../../../utils/ConfirmationDialog";
 import { User as MainUserType, Participant } from "../../types/appTypes";
 import { MainConversationType, Message } from "./ChatTabContentTypes";
+import Image from 'next/image';
 
 export interface GroupChatDetailViewProps {
   conversation: MainConversationType;
@@ -172,6 +175,81 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
     }
   };
 
+ const getFileIcon = (fileName?: string | null): React.ReactNode => {
+  if (!fileName) return <FileTextIcon className="w-5 h-5 flex-shrink-0 text-gray-500" />;
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  const imageIconSize = 100;
+  const radixIconClasses = "w-5 h-5 flex-shrink-0";
+
+  switch (extension) {
+    case 'doc':
+    case 'docx':
+      return (
+        <Image
+          src="/icons/word.png" 
+          alt="Word document icon"
+          width={imageIconSize}
+          height={imageIconSize}
+          className="flex-shrink-0 object-contain"
+        />
+      );
+    case 'xls':
+    case 'xlsx':
+      return (
+        <Image
+          src="/icons/excel.jpg" 
+          alt="Excel spreadsheet icon"
+          width={imageIconSize}
+          height={imageIconSize}
+          className="flex-shrink-0 object-contain"
+        />
+      );
+    case 'ppt':
+    case 'pptx':
+      return (
+        <Image
+          src="/icons/pp.jpg" 
+          alt="PowerPoint presentation icon"
+          width={imageIconSize}
+          height={imageIconSize}
+          className="flex-shrink-0 object-contain"
+        />
+      );
+    case 'pdf':
+      return (
+        <Image
+          src="/icons/pdf.png" 
+          alt="PDF document icon"
+          width={imageIconSize}
+          height={imageIconSize}
+          className="flex-shrink-0 object-contain"
+        />
+      );
+    case 'txt': 
+      return (
+        <Image
+          src="/icons/txt.png" // 
+          alt="Text document icon"
+          width={imageIconSize}
+          height={imageIconSize}
+          className="flex-shrink-0 object-contain"
+        />
+      );
+    case 'zip':
+    case 'rar':
+      return <FileTextIcon className={`${radixIconClasses} text-purple-600`} />;
+    case 'png':
+    case 'jpg':
+    case 'jpeg':
+    case 'gif':
+    case 'bmp':
+    case 'webp':
+      return <ImageIcon className={`${radixIconClasses} text-indigo-600`} />;
+    default:
+      return <FileTextIcon className={`${radixIconClasses} text-gray-500`} />;
+  }
+};
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative h-150">
       <div className="flex justify-between items-center p-3 md:p-4 border-b bg-gray-50 flex-shrink-0">
@@ -283,7 +361,9 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
               )}
             {!isLoadingMessages &&
               !errorMessages &&
-              messages.map((msg) => (
+              messages
+                .filter(msg => msg.content !== "Tin nhắn đã bị xóa")
+                .map((msg) => (
                 <div
                   key={msg.id}
                   className={`flex items-end gap-2 group relative ${
@@ -292,7 +372,7 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
                       : "justify-start"
                   }`}
                 >
-                  {msg.senderId === currentUser?.id && (
+                  {msg.senderId === currentUser?.id && ( 
                     <button
                       onClick={() => confirmDeleteMessage(msg)}
                       disabled={isProcessingAction}
@@ -337,34 +417,34 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
                       </p>
                     )}
                     {msg.type === "IMAGE" && msg.fileUrl && (
-                      <div className="relative group/image">
-                        <a
-                          href={msg.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={msg.fileName || "Xem ảnh"}
-                        >
-                          <img
-                            src={msg.fileUrl}
-                            alt={msg.fileName || "Hình ảnh đã gửi"}
-                            className="max-w-xs max-h-48 rounded object-contain cursor-pointer"
-                          />
-                        </a>
-                        <button
-                          onClick={() =>
-                            handleDownloadFile(msg.id, msg.fileName)
-                          }
-                          disabled={downloadingFileId === msg.id}
-                          aria-label={`Tải ${msg.fileName || "ảnh"}`}
-                          className={`absolute top-1 right-1 cursor-pointer bg-black/50 text-white p-1 rounded-full hover:bg-black/75 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-wait`}
-                        >
-                          {downloadingFileId === msg.id ? (
-                            <UpdateIcon className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <DownloadIcon className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
+                       <div className="relative group/image">
+                         <a
+                           href={msg.fileUrl}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           title={msg.fileName || "Xem ảnh"}
+                         >
+                           <img
+                             src={msg.fileUrl}
+                             alt={msg.fileName || "Hình ảnh đã gửi"}
+                             className="max-w-xs max-h-48 rounded object-contain cursor-pointer"
+                           />
+                         </a>
+                         <button
+                           onClick={() =>
+                             handleDownloadFile(msg.id, msg.fileName)
+                           }
+                           disabled={downloadingFileId === msg.id}
+                           aria-label={`Tải ${msg.fileName || "ảnh"}`}
+                           className={`absolute top-1 right-1 cursor-pointer bg-black/50 text-white p-1 rounded-full hover:bg-black/75 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-wait`}
+                         >
+                           {downloadingFileId === msg.id ? (
+                             <UpdateIcon className="w-4 h-4 animate-spin" />
+                           ) : (
+                             <DownloadIcon className="w-4 h-4" />
+                           )}
+                         </button>
+                       </div>
                     )}
                     {msg.type === "FILE" && (
                       <button
@@ -375,9 +455,9 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
                         className="flex items-center gap-2 cursor-pointer p-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-wait"
                       >
                         {downloadingFileId === msg.id ? (
-                          <UpdateIcon className="w-4 h-4 flex-shrink-0 animate-spin" />
+                          <UpdateIcon className="w-5 h-5 flex-shrink-0 animate-spin" />
                         ) : (
-                          <DownloadIcon className="w-4 h-4 flex-shrink-0 cursor-pointer" />
+                          getFileIcon(msg.fileName)
                         )}
                         <span className="text-sm font-medium truncate">
                           {msg.fileName || "Tệp đính kèm"}
@@ -399,49 +479,49 @@ const GroupChatDetailView: React.FC<GroupChatDetailViewProps> = ({
                             controls={false}
                           />
                         </a>
-                        <button
-                          onClick={() =>
-                            handleDownloadFile(msg.id, msg.fileName)
-                          }
-                          disabled={downloadingFileId === msg.id}
-                          aria-label={`Tải ${msg.fileName || "video"}`}
-                          className={`absolute top-1 right-1 cursor-pointer bg-black/50 text-white p-1 rounded-full hover:bg-black/75 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-wait`}
-                        >
-                          {downloadingFileId === msg.id ? (
-                            <UpdateIcon className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <DownloadIcon className="w-4 h-4" />
-                          )}
-                        </button>
-                        <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
-                          {msg.fileName || "Video"}
-                        </span>
+                         <button
+                           onClick={() =>
+                             handleDownloadFile(msg.id, msg.fileName)
+                           }
+                           disabled={downloadingFileId === msg.id}
+                           aria-label={`Tải ${msg.fileName || "video"}`}
+                           className={`absolute top-1 right-1 cursor-pointer bg-black/50 text-white p-1 rounded-full hover:bg-black/75 transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-wait`}
+                         >
+                           {downloadingFileId === msg.id ? (
+                             <UpdateIcon className="w-4 h-4 animate-spin" />
+                           ) : (
+                             <DownloadIcon className="w-4 h-4" />
+                           )}
+                         </button>
+                         <span className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                           {msg.fileName || "Video"}
+                         </span>
                       </div>
                     )}
                     {msg.type === "AUDIO" && msg.fileUrl && (
-                      <div className="flex items-center gap-2 p-2 bg-gray-200 rounded">
-                        <audio
-                          controls
-                          src={msg.fileUrl}
-                          className="flex-1 h-8"
-                        >
-                          Your browser does not support the audio element.
-                        </audio>
-                        <button
-                          onClick={() =>
-                            handleDownloadFile(msg.id, msg.fileName)
-                          }
-                          disabled={downloadingFileId === msg.id}
-                          aria-label={`Tải ${msg.fileName || "audio"}`}
-                          className="text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-wait"
-                        >
-                          {downloadingFileId === msg.id ? (
-                            <UpdateIcon className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <DownloadIcon className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
+                       <div className="flex items-center gap-2 p-2 bg-gray-200 rounded">
+                         <audio
+                           controls
+                           src={msg.fileUrl}
+                           className="flex-1 h-8"
+                         >
+                           Your browser does not support the audio element.
+                         </audio>
+                         <button
+                           onClick={() =>
+                             handleDownloadFile(msg.id, msg.fileName)
+                           }
+                           disabled={downloadingFileId === msg.id}
+                           aria-label={`Tải ${msg.fileName || "audio"}`}
+                           className="text-gray-600 hover:text-blue-600 disabled:opacity-50 disabled:cursor-wait"
+                         >
+                           {downloadingFileId === msg.id ? (
+                             <UpdateIcon className="w-4 h-4 animate-spin" />
+                           ) : (
+                             <DownloadIcon className="w-4 h-4" />
+                           )}
+                         </button>
+                       </div>
                     )}
                     <span
                       className={`text-xs mt-1 block text-left ${

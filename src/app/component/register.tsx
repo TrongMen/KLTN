@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState } from "react"
-import { useRouter } from "next/navigation"
-import { toast, Toaster } from 'react-hot-toast'
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast, Toaster } from 'react-hot-toast';
 
-import "react-toastify/dist/ReactToastify.css"
-
+import "react-toastify/dist/ReactToastify.css";
 
 const InputWithIcon = ({
   icon,
@@ -33,48 +32,47 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [firstName, setFirstName] = useState(""); 
-  const [phone, setPhone] = useState("");
+  const [firstName, setFirstName] = useState("");
   const [gender, setGender] = useState("male");
   const [dob, setDob] = useState("");
-  const [email, setEmail] = useState(""); // Định nghĩa email
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
 
   const handleRegister = async () => {
-    if (!password || !firstName || !lastName || !phone || !dob || !email || !studentId) {
+    if (!password || !firstName || !lastName || !dob || !email || !studentId) {
       toast.error("Vui lòng nhập đầy đủ thông tin!");
       return;
     }
-  
+
     const requestBody = {
-      username: studentId, 
-      password, 
-      firstName, 
-      lastName, 
-      dob,       
-      email,    
-      gender: gender === "male", 
+      username: studentId,
+      password,
+      firstName,
+      lastName,
+      dob,
+      email,
+      gender: gender === "male",
     };
-  
+
     try {
       setLoading(true);
-  
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`, {
+
+      const response = await fetch(`http://localhost:8080/identity/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
       });
-  
+
       const result = await response.json();
-  
+
       if (!response.ok) {
         throw new Error(result.message || "Đăng ký thất bại");
       }
-  
+
       toast.success(" Đăng ký thành công!");
       router.push("/login");
     } catch (error) {
@@ -88,7 +86,7 @@ export default function Register() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-400 to-blue-600 p-4">
       <Toaster toastOptions={{ duration: 3500 }} />
-      
+
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
         <h1
           className="text-3xl font-extrabold text-gray-800 text-center mb-6"
@@ -120,14 +118,6 @@ export default function Register() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             icon="👨‍💻"
-          />
-
-          <InputWithIcon
-            type="tel"
-            placeholder="Số điện thoại"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            icon="📱"
           />
 
           <InputWithIcon

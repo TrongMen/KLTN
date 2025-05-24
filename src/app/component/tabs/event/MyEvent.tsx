@@ -1,14 +1,7 @@
 "use client";
 
-import React, {
-  useState,
-  useMemo,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
-import { User as MainUserType } from "../../types/appTypes";
 import {
   CheckIcon,
   Cross2Icon,
@@ -71,6 +64,33 @@ export interface EventType {
   currentAttendeesCount?: number;
 }
 
+type EventStatus = "upcoming" | "ongoing" | "ended";
+
+const getEventStatus = (eventTimeStr: string | undefined): EventStatus => {
+  if (!eventTimeStr) return "upcoming";
+  try {
+    const now = new Date();
+    const todayStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+    const eventDate = new Date(eventTimeStr);
+    if (isNaN(eventDate.getTime())) return "upcoming";
+    const eventDateStart = new Date(
+      eventDate.getFullYear(),
+      eventDate.getMonth(),
+      eventDate.getDate()
+    );
+    if (eventDateStart < todayStart) return "ended";
+    else if (eventDateStart > todayStart) return "upcoming";
+    else return "ongoing";
+  } catch (e) {
+    return "upcoming";
+  }
+};
+
+
 const getWeekRange = (refDate: Date): { startOfWeek: Date; endOfWeek: Date } => {
   const d = new Date(refDate);
   const day = d.getDay();
@@ -104,7 +124,8 @@ interface MyCreatedEventsTabProps {
   myError: string;
   deletedError: string;
   viewingEventDetails: EventType | null;
-  setViewingEventDetails: (event: EventType | null) => void;
+  initialActiveSubTabKey: string | null;
+  setViewingEventDetails: (event: EventType | null, activeSubTab?:string) => void;
   onOpenUpdateModal: (event: EventType) => void;
   onDeleteClick: (event: EventType) => void;
   onRestoreClick: (event: EventType) => void;
@@ -135,8 +156,11 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   isExporting,
   handleRefresh,
   fetchOrganizerDetailsById,
+  initialActiveSubTabKey
 }) => {
-  const [myTab, setMyTab] = useState<"approved" | "pending" | "rejected" | "deleted">("approved");
+  const [myTab, setMyTab] = useState<"approved" | "pending" | "rejected" | "deleted">(
+    (initialActiveSubTabKey as "approved" | "pending" | "rejected" | "deleted") || "approved"
+    );
   const [mySearchTerm, setMySearchTerm] = useState("");
   const [mySortOrder, setMySortOrder] = useState<"az" | "za">("az");
   const [myTimeFilterOption, setMyTimeFilterOption] = useState<MyEventTemporalFilterOption>("all");
@@ -216,6 +240,8 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
         enrichEventsWithFullNames(initialDeletedEvents)
         .then(setEnrichedDeletedEvents)
         .catch(error => console.error("Error enriching deleted events:", error));
+    } else if (myTab !== "deleted") {
+        setEnrichedDeletedEvents([]); 
     }
   }, [initialDeletedEvents, myTab, enrichEventsWithFullNames]);
 
@@ -247,7 +273,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                     const startFilter = new Date(myStartDateFilter); startFilter.setHours(0,0,0,0);
                     const endFilter = new Date(myEndDateFilter); endFilter.setHours(23,59,59,999);
                     return !isNaN(startFilter.getTime()) && !isNaN(endFilter.getTime()) && startFilter <= endFilter &&
-                           eventDate >= startFilter && eventDate <= endFilter;
+                            eventDate >= startFilter && eventDate <= endFilter;
                 } catch (e) {
                     console.error("Error parsing date for dateRange (My Events):", dateStrToUse, e);
                     return false;
@@ -255,20 +281,8 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
             } else {
                 if (!dateStrToUse) return false;
                 try {
-                    const eventDate = new Date(dateStrToUse);
-                    if (isNaN(eventDate.getTime())) return false;
-                    const eventDayStart = new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate());
-
-                    switch (myTimeFilterOption) {
-                        case "upcoming":
-                            return eventDayStart > todayDayStart;
-                        case "ongoing":
-                            return eventDayStart.getTime() === todayDayStart.getTime();
-                        case "ended":
-                            return eventDayStart < todayDayStart;
-                        default:
-                            return true;
-                    }
+                    const eventRealStatus = getEventStatus(dateStrToUse);
+                    return eventRealStatus === myTimeFilterOption;
                 } catch (e) {
                     console.error("Error parsing event date for temporal status (My Events):", dateStrToUse, e);
                     return false;
@@ -385,6 +399,11 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
   
   const handleEditClick = (event: EventType) => {
     if (deletingEventId || restoringEventId) return;
+    const eventRealStatus = getEventStatus(event.time || event.date);
+    if (eventRealStatus !== "upcoming") {
+        toast.error("Chỉ có thể sửa sự kiện đang ở trạng thái 'Sắp diễn ra'.");
+        return;
+    }
     onOpenUpdateModal(event);
   };
 
@@ -398,8 +417,8 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
     const currentTabType = myTab;
 
     const noResultMessage =
-      (myTab !== "deleted" && (mySearchTerm || myTimeFilterOption !== "all")) ||
-      (myTab === "deleted" && (deletedSearchTerm || deletedTimeFilterOption !== "all"))
+      (myTab !== "deleted" && (mySearchTerm || myTimeFilterOption !== "all" || (myTimeFilterOption === "dateRange" && (!myStartDateFilter || !myEndDateFilter)))) ||
+      (myTab === "deleted" && (deletedSearchTerm || deletedTimeFilterOption !== "all" || (deletedTimeFilterOption === "dateRange" && (!deletedStartDateFilter || !deletedEndDateFilter))))
         ? "Không tìm thấy sự kiện nào khớp với bộ lọc."
         : currentTabType === "approved"
         ? "Không có sự kiện nào đã được duyệt."
@@ -426,12 +445,13 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
             const isDeletingThis = deletingEventId === event.id;
             const isProcessing = isRestoringThis || isDeletingThis;
             const eventName = event.name || event.title || "Sự kiện không tên";
+            const eventRealStatus = getEventStatus(event.time || event.date);
             return (
               <div key={event.id}
                 className={`bg-white shadow rounded-lg flex flex-col border border-gray-200 transition-shadow duration-150 overflow-hidden ${
                   isProcessing ? "opacity-50 cursor-wait" : "hover:shadow-md cursor-pointer"
                 } ${currentTabType === "deleted" ? "border-l-4 border-gray-300" : ""}`}
-                onClick={() => !isProcessing && setViewingEventDetails(event)}
+                onClick={() => !isProcessing && setViewingEventDetails(event, myTab)}
               >
                 {event.avatarUrl ? (
                   <div className="w-full h-36 bg-gray-200 relative">
@@ -476,7 +496,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                     </div>
                   )}
                   <div className="mt-3 pt-2 border-t border-gray-100 flex gap-2 justify-end items-center">
-                    {currentTabType !== "deleted" && (
+                    {currentTabType !== "deleted" && eventRealStatus === "upcoming" && (
                       <button onClick={(e) => { e.stopPropagation(); handleEditClick(event); }} disabled={isProcessing} title="Chỉnh sửa"
                         className={`p-1.5 rounded text-xs cursor-pointer font-medium flex items-center justify-center gap-1 transition ${isProcessing ? "bg-gray-200 text-gray-400 cursor-wait" : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"}`}>
                         <Pencil1Icon className="w-3 h-3" />
@@ -508,12 +528,13 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
               const isDeletingThis = deletingEventId === event.id;
               const isProcessing = isRestoringThis || isDeletingThis;
               const eventName = event.name || event.title || "Sự kiện không tên";
+              const eventRealStatus = getEventStatus(event.time || event.date);
             return (
               <li key={event.id}
                 className={`bg-white shadow-lg rounded-xl overflow-hidden transition transform hover:scale-[1.01] hover:shadow-xl flex flex-col md:flex-row border border-gray-200 ${
                   isProcessing ? "opacity-50 cursor-wait" : "hover:border-blue-400 cursor-pointer"
                 } ${currentTabType === "deleted" ? "border-l-[5px] border-gray-400" : ""}`}
-                onClick={() => !isProcessing && setViewingEventDetails(event)}
+                onClick={() => !isProcessing && setViewingEventDetails(event, myTab)}
               >
                 <div className="relative w-full md:w-48 xl:w-56 flex-shrink-0 h-48 md:h-auto">
                   {event.avatarUrl ? (
@@ -525,7 +546,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                   )}
                 </div>
                 <div className="p-3 flex flex-col justify-between flex-grow md:pl-4">
-                    <div className="cursor-pointer" onClick={(e) => { e.stopPropagation(); !isProcessing && setViewingEventDetails(event)}}>
+                    <div className="cursor-pointer" onClick={(e) => { e.stopPropagation(); !isProcessing && setViewingEventDetails(event, myTab)}}>
                         <h3 className="font-semibold text-base text-gray-800 mb-1 line-clamp-1 hover:text-blue-600">{eventName}</h3>
                         <div className="text-xs text-gray-500 space-y-0.5">
                             {(event.time || event.createdAt || event.date) && !event.deletedAt && (
@@ -551,7 +572,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
                         </div>
                     </div>
                     <div className="mt-2 pt-2 border-t border-gray-100 flex justify-end gap-2">
-                        {currentTabType !== "deleted" && (
+                        {currentTabType !== "deleted" && eventRealStatus === "upcoming" && (
                             <button onClick={(e) => { e.stopPropagation(); handleEditClick(event); }} disabled={isProcessing} title="Chỉnh sửa"
                                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1 cursor-pointer ${isProcessing ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"}`}>
                                 <Pencil1Icon className="w-3 h-3" /> <span className="hidden sm:inline">Sửa</span>
@@ -588,7 +609,7 @@ const MyCreatedEventsTab: React.FC<MyCreatedEventsTabProps> = ({
       <div className="flex items-center gap-3 mb-4 flex-shrink-0">
         <h2 className="text-xl md:text-2xl font-bold text-blue-600">Quản lý sự kiện đã tạo</h2>
         <button onClick={handleRefresh}
-          disabled={isRefreshing || myLoading || deletedLoading || !!restoringEventId || !!deletingEventId || isExporting || isEnrichingEvents}
+          disabled={isRefreshing || myLoading || deletedLoading || !!restoringEventId || !!deletingEventId || isEnrichingEvents}
           className="p-1.5 sm:p-2 cursor-pointer border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-wait flex items-center justify-center"
           title="Làm mới danh sách"
         >

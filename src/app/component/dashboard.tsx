@@ -19,7 +19,13 @@ import ContactModal from "../component/modals/ContactModal";
 import AboutModal from "../component/modals/AboutModal";
 import ConfirmationDialog from "../../utils/ConfirmationDialog";
 import NewsDetailModal from "../component/modals/NewsDetailModal";
-import { toast } from "react-hot-toast"; // Import toast
+import { toast } from "react-hot-toast";
+import { Playfair_Display } from "next/font/google";
+
+const playfair = Playfair_Display({
+  subsets: ["vietnamese", "latin"],
+  weight: ["700"],
+});
 
 type EventStatus = "upcoming" | "ongoing" | "ended";
 
@@ -47,7 +53,7 @@ const fetchUserFullNameById = async (userId: string): Promise<string> => {
   }
   try {
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`
+      `http://localhost:8080/identity/users/notoken/${userId}`
     );
     if (!response.ok) {
       return `ID: ${userId.substring(0, 8)}... (Lỗi ${response.status})`;
@@ -236,7 +242,7 @@ export default function Dashboard() {
     setErrorEvents(null);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status/notoken?status=APPROVED`
+        `http://localhost:8080/identity/api/events/status/notoken?status=APPROVED`
       );
       if (!response.ok) {
         let errorMessage = `Lỗi HTTP: ${response.status} - ${response.statusText}`;
@@ -267,7 +273,7 @@ export default function Dashboard() {
             status: event.status,
             createdAt: event.createdAt,
             createdBy: event.createdBy,
-            participants: event.participants || [], // Đảm bảo participants được lấy
+            participants: event.participants || [],
           }));
         setEvents(formattedEvents);
       } else {
@@ -288,7 +294,7 @@ export default function Dashboard() {
     setErrorNews(null);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status/notoken?status=APPROVED`
+        `http://localhost:8080/identity/api/news/status/notoken?status=APPROVED`
       );
       if (!response.ok) {
         let errorMessage = `Lỗi HTTP: ${response.status} - ${response.statusText}`;
@@ -515,26 +521,17 @@ export default function Dashboard() {
     }
   };
 
-  const handleAttemptRegister = (eventData: any) => {
-    eventData.stopPropagation();
-    const eventId = eventData.target.dataset.eventId;
-    if (!eventId) return;
-    const eventToRegister = events.find((e) => e.id === eventId);
-    if (!eventToRegister) return;
-    if (user) {
-      if (!registeredEvents.includes(eventId)) {
-        setRegisteredEvents([...registeredEvents, eventId]);
-        toast.success(
-          `Đã đăng ký "${eventToRegister.title}"! (Logic API cần thêm)`
-        );
-      } else {
-        toast.error("Bạn đã đăng ký sự kiện này rồi.");
-      }
-    } else {
+const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEvent) => {
+    clickEvent.stopPropagation();
+
+    
+
+    if (!user || !user.id) {
+      // Nếu người dùng CHƯA đăng nhập -> Hiển thị dialog yêu cầu đăng nhập
       setConfirmationState({
         isOpen: true,
         title: "Yêu cầu đăng nhập",
-        message: "Vui lòng đăng nhập để đăng ký sự kiện.",
+        message: "Bạn cần đăng nhập để có thể đăng ký sự kiện.",
         onConfirm: () => {
           router.push("/login");
         },
@@ -542,6 +539,9 @@ export default function Dashboard() {
         confirmText: "Đăng nhập",
         cancelText: "Hủy bỏ",
       });
+    } else {
+      
+      toast("Bạn đã đăng nhập! Chức năng đăng ký đang được phát triển.");
     }
   };
 
@@ -581,8 +581,7 @@ export default function Dashboard() {
             onClick={() => setSelectedEvent(null)}
             className="mb-4 text-sm text-blue-600 hover:text-blue-800 flex items-center cursor-pointer p-1 rounded hover:bg-blue-50"
           >
-            {" "}
-            <ChevronLeftIcon className="h-4 w-4 mr-1" /> Quay lại{" "}
+            <ChevronLeftIcon className="h-4 w-4 mr-1" /> Quay lại
           </button>
           <div className="flex flex-col md:flex-row gap-6 lg:gap-8">
             <div className="flex-shrink-0 w-full md:w-1/3 lg:w-1/4">
@@ -617,7 +616,7 @@ export default function Dashboard() {
                 <p>
                   <strong className="font-medium text-gray-900 w-24 inline-block">
                     📅 Ngày:
-                  </strong>{" "}
+                  </strong>
                   {selectedEvent.date
                     ? new Date(selectedEvent.date).toLocaleDateString("vi-VN")
                     : "N/A"}
@@ -626,7 +625,7 @@ export default function Dashboard() {
                   <p>
                     <strong className="font-medium text-gray-900 w-24 inline-block">
                       🕒 Thời gian:
-                    </strong>{" "}
+                    </strong>
                     {new Date(selectedEvent.time).toLocaleTimeString("vi-VN", {
                       hour: "2-digit",
                       minute: "2-digit",
@@ -636,13 +635,13 @@ export default function Dashboard() {
                 <p>
                   <strong className="font-medium text-gray-900 w-24 inline-block">
                     📍 Địa điểm:
-                  </strong>{" "}
+                  </strong>
                   {selectedEvent.location}
                 </p>
                 <p>
                   <strong className="font-medium text-gray-900 w-24 inline-block">
                     👤 Người tạo:
-                  </strong>{" "}
+                  </strong>
                   {isLoadingEventDetails && selectedEvent.createdBy
                     ? "Đang tải..."
                     : detailedCreatedByName || "N/A"}
@@ -651,7 +650,7 @@ export default function Dashboard() {
                   <p>
                     <strong className="font-medium text-gray-900 w-24 inline-block align-top">
                       🎯 Mục đích:
-                    </strong>{" "}
+                    </strong>
                     <span className="inline-block max-w-[calc(100%-6rem)]">
                       {selectedEvent.purpose}
                     </span>
@@ -660,73 +659,65 @@ export default function Dashboard() {
               </div>
               <div className="space-y-3 text-sm">
                 <div>
-                  {" "}
-                  <p className="font-medium text-gray-900 mb-1">
-                    📜 Nội dung:
-                  </p>{" "}
+                  <p className="font-medium text-gray-900 mb-1">📜 Nội dung:</p>
                   <p className="text-gray-700 whitespace-pre-wrap">
                     {selectedEvent.description || "Không có nội dung chi tiết."}
-                  </p>{" "}
+                  </p>
                 </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
                     👥 Ban tổ chức:
-                  </strong>{" "}
+                  </strong>
                   {isLoadingEventDetails &&
                   selectedEvent.organizers?.length > 0 ? (
                     <p className="italic text-gray-500">Đang tải...</p>
                   ) : detailedOrganizers && detailedOrganizers.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
-                      {" "}
                       {detailedOrganizers.map((org, index) => (
                         <li
-                          key={`<span class="math-inline">\{org\.userId\}\-</span>{index}`}
+                          key={`${org.userId}-${index}`}
                         >
                           {[org.fetchedFullName, org.positionName, org.roleName]
                             .filter(Boolean)
                             .join(" - ") || `Thành viên ${index + 1}`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
-                  )}{" "}
+                  )}
                 </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
                     👤 Người tham gia (chỉ định):
-                  </strong>{" "}
+                  </strong>
                   {isLoadingEventDetails &&
                   selectedEvent.participants?.length > 0 ? (
                     <p className="italic text-gray-500">Đang tải...</p>
                   ) : detailedParticipants &&
                     detailedParticipants.length > 0 ? (
                     <ul className="list-disc list-inside pl-5 text-gray-600 space-y-1">
-                      {" "}
                       {detailedParticipants.map((p, index) => (
                         <li
-                          key={`<span class="math-inline">\{p\.userId\}\-</span>{index}`}
+                          key={`${p.userId}-${index}`}  
                         >
                           {[p.fetchedFullName, p.positionName, p.roleName]
                             .filter(Boolean)
                             .join(" - ") || `Tham gia ${index + 1}`}
                         </li>
-                      ))}{" "}
+                      ))}
                     </ul>
                   ) : (
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
-                  )}{" "}
+                  )}
                 </div>
                 <div>
-                  {" "}
                   <strong className="font-medium text-gray-900 mb-1 block">
                     ✅ Đã đăng ký:
-                  </strong>{" "}
+                  </strong>
                   <p className="text-sm text-gray-700">
                     {selectedEvent.attendees?.length || 0} người
-                  </p>{" "}
+                  </p>
                 </div>
               </div>
             </div>
@@ -799,28 +790,25 @@ export default function Dashboard() {
                       </h2>
                       <div className="space-y-0.5 mb-2">
                         <p className="text-sm text-gray-600 flex items-center gap-1">
-                          <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />{" "}
+                          <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
                           {event.date
                             ? new Date(event.date).toLocaleDateString("vi-VN")
                             : "N/A"}
                         </p>
                         <p className="text-sm text-gray-600 flex items-center gap-1">
-                          <span className="opacity-70">📍</span>{" "}
+                          <span className="opacity-70">📍</span>
                           {event.location}
                         </p>
                       </div>
                       <div className="text-xs text-gray-500 flex items-center gap-x-3 mt-1">
-                        {" "}
                         {event.attendees && event.attendees.length > 0 && (
                           <span>✅ Đã đăng ký: {event.attendees.length}</span>
                         )}
                       </div>
                     </div>
                     <div className="mt-auto pt-3 border-t border-gray-100">
-                      {" "}
                       <button
-                        data-event-id={event.id}
-                        onClick={handleAttemptRegister}
+                        onClick={(e) => handleAttemptRegister(event, e)}
                         disabled={isRegistered || isPastEvent}
                         className={`mt-3 w-full px-3 py-1.5 text-xs rounded-md transition font-medium ${
                           isRegistered
@@ -830,13 +818,12 @@ export default function Dashboard() {
                             : "bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
                         }`}
                       >
-                        {" "}
                         {isRegistered
                           ? "✔ Đã đăng ký"
                           : isPastEvent
                           ? "Đã diễn ra"
-                          : "Đăng ký"}{" "}
-                      </button>{" "}
+                          : "Đăng ký"}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -882,13 +869,13 @@ export default function Dashboard() {
                       </div>
                       <div className="text-xs text-gray-500 space-y-1 mb-2">
                         <p className="flex items-center gap-1">
-                          <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />{" "}
+                          <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
                           {event.date
                             ? new Date(event.date).toLocaleDateString("vi-VN")
                             : "N/A"}
                         </p>
                         <p className="flex items-center gap-1">
-                          <span className="opacity-70">📍</span>{" "}
+                          <span className="opacity-70">📍</span>
                           {event.location}
                         </p>
                       </div>
@@ -896,7 +883,6 @@ export default function Dashboard() {
                         {event.description || event.purpose || "..."}
                       </p>
                       <div className="text-xs text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1">
-                        {" "}
                         {event.organizers?.length > 0 && (
                           <span className="inline-flex items-center gap-1">
                             👥 {event.organizers.length} BTC
@@ -910,10 +896,8 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="mt-auto">
-                      {" "}
                       <button
-                        data-event-id={event.id}
-                        onClick={handleAttemptRegister}
+                        onClick={(e) => handleAttemptRegister(event, e)}
                         disabled={isRegistered || isPastEvent}
                         className={`w-full px-3 py-1.5 text-xs rounded-md transition font-medium ${
                           isRegistered
@@ -923,12 +907,11 @@ export default function Dashboard() {
                             : "bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
                         }`}
                       >
-                        {" "}
                         {isRegistered
                           ? "✔ Đã đăng ký"
                           : isPastEvent
                           ? "Đã diễn ra"
-                          : "Đăng ký"}{" "}
+                          : "Đăng ký"}
                       </button>
                     </div>
                   </div>
@@ -946,24 +929,21 @@ export default function Dashboard() {
             <button
               onClick={() => handleEventPageChange(eventCurrentPage - 1)}
               disabled={eventCurrentPage === 1}
-              className="p-2 rounded-md bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 cursor-pointer rounded-md bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Trang trước"
             >
-              {" "}
-              <ChevronLeftIcon className="h-5 w-5 text-gray-600" />{" "}
+              <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
             </button>
             <span className="text-sm font-medium text-gray-700">
-              {" "}
-              Trang {eventCurrentPage} / {totalEventPages}{" "}
+              Trang {eventCurrentPage} / {totalEventPages}
             </span>
             <button
               onClick={() => handleEventPageChange(eventCurrentPage + 1)}
               disabled={eventCurrentPage >= totalEventPages}
-              className="p-2 rounded-md bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-2 cursor-pointer rounded-md bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Trang sau"
             >
-              {" "}
-              <ChevronRightIcon className="h-5 w-5 text-gray-600" />{" "}
+              <ChevronRightIcon className="h-5 w-5 text-gray-600" />
             </button>
           </div>
         )}
@@ -994,7 +974,6 @@ export default function Dashboard() {
               onClick={() => handleNewsClick(newsItem)}
             >
               <div>
-                {" "}
                 {newsItem.coverImageUrl && (
                   <Image
                     src={newsItem.coverImageUrl}
@@ -1009,13 +988,13 @@ export default function Dashboard() {
                 </h2>
                 {newsItem.publishedAt && (
                   <p className="text-xs text-gray-500 mb-2">
-                    📅{" "}
+                    📅
                     {new Date(newsItem.publishedAt).toLocaleDateString("vi-VN")}
                   </p>
                 )}
                 {newsItem.createdBy && (
                   <p className="text-xs text-gray-500">
-                    ✍️ {newsItem.createdBy.lastName}{" "}
+                    ✍️ {newsItem.createdBy.lastName}
                     {newsItem.createdBy.firstName}
                   </p>
                 )}
@@ -1027,15 +1006,13 @@ export default function Dashboard() {
                 }}
                 className="mt-3 w-full text-center px-3 py-1.5 text-xs rounded-md transition bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-medium"
               >
-                {" "}
-                Xem chi tiết{" "}
+                Xem chi tiết
               </button>
             </div>
           ))
         ) : (
           <p className="text-gray-500 text-center col-span-full">
-            {" "}
-            Không có tin tức nào phù hợp.{" "}
+            Không có tin tức nào phù hợp.
           </p>
         )}
       </div>
@@ -1044,50 +1021,47 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-100 p-6">
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
+      <nav className="bg-white text-gray-800 px-4 py-4 shadow-md mb-6 sticky top-0 z-40 ">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="text-xl font-bold">Quản lý sự kiện</div>
+          <div className="flex items-center">
+            <Image
+              src="https://icc.iuh.edu.vn/web/wp-content/uploads/2024/09/iuh_logo-rut-gon-1024x577.png"
+              alt="Logo IUH"
+              width={70}
+              height={40}
+              className="h-10 w-auto"
+              priority
+            />
+            <span className={`font-bold text-xl ml-3 ${playfair.className}`}>
+              IUH TSE
+            </span>
+          </div>
           <div className="flex items-center gap-6">
             <span
-              className="cursor-pointer hover:text-gray-300"
+              className="cursor-pointer hover:text-indigo-600 transition-colors"
               onClick={() => setShowAboutModal(true)}
             >
-              {" "}
-              Giới thiệu{" "}
+              Giới thiệu
             </span>
             <span
-              className="cursor-pointer hover:text-gray-300"
+              className="cursor-pointer hover:text-indigo-600"
               onClick={() => setShowContactModal(true)}
             >
-              {" "}
-              Liên hệ{" "}
+              Liên hệ
             </span>
-            {user ? (
-              <div className="flex items-center gap-2">
-                {" "}
-                <span className="text-sm">
-                  Chào, {user.firstName || user.username}!
-                </span>{" "}
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                {" "}
-                <Link href="/login">
-                  {" "}
-                  <button className="cursor-pointer px-3 py-1 bg-blue-500 hover:bg-blue-700 text-white rounded-md text-sm">
-                    {" "}
-                    Đăng nhập{" "}
-                  </button>{" "}
-                </Link>{" "}
-                <Link href="/register">
-                  {" "}
-                  <button className="px-3 cursor-pointer py-1 bg-green-500 hover:bg-green-700 text-white rounded-md text-sm">
-                    {" "}
-                    Đăng ký{" "}
-                  </button>{" "}
-                </Link>{" "}
-              </div>
-            )}
+
+            <div className="flex gap-2">
+              <Link href="/login">
+                <button className="cursor-pointer px-3 py-1 bg-blue-500 hover:bg-blue-700 text-white rounded-md text-sm">
+                  Đăng nhập
+                </button>
+              </Link>
+              <Link href="/register">
+                <button className="px-3 cursor-pointer py-1 bg-green-500 hover:bg-green-700 text-white rounded-md text-sm">
+                  Đăng ký
+                </button>
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
@@ -1096,7 +1070,6 @@ export default function Dashboard() {
         <div className="mb-4 border-b border-gray-200">
           <ul className="flex flex-wrap -mb-px text-sm font-medium text-center">
             <li className="mr-2">
-              {" "}
               <button
                 onClick={() => setActiveTab("events")}
                 className={`inline-flex p-4 rounded-t-lg cursor-pointer ${
@@ -1105,12 +1078,10 @@ export default function Dashboard() {
                     : "text-gray-500 hover:text-gray-600 border-b-2 border-transparent"
                 }`}
               >
-                {" "}
-                Sự kiện{" "}
-              </button>{" "}
+                Sự kiện
+              </button>
             </li>
             <li className="mr-2">
-              {" "}
               <button
                 onClick={() => setActiveTab("news")}
                 className={`inline-flex p-4 rounded-t-lg cursor-pointer ${
@@ -1119,36 +1090,28 @@ export default function Dashboard() {
                     : "text-gray-500 hover:text-gray-600 border-b-2 border-transparent"
                 }`}
               >
-                {" "}
-                Bảng tin{" "}
-              </button>{" "}
+                Bảng tin
+              </button>
             </li>
           </ul>
         </div>
         {activeTab === "events" && (
           <div>
-            {" "}
             <h1 className="text-2xl sm:text-3xl font-bold text-blue-700 mb-4">
-              {" "}
-              🎉 Sự kiện{" "}
-            </h1>{" "}
+              🎉 Sự kiện
+            </h1>
             <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              {" "}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                {" "}
                 <div className="relative">
-                  {" "}
                   <label
                     htmlFor="searchMyEvents"
                     className="block text-xs font-medium text-gray-600 mb-1"
                   >
-                    {" "}
-                    Tìm kiếm sự kiện{" "}
-                  </label>{" "}
+                    Tìm kiếm sự kiện
+                  </label>
                   <span className="absolute left-3 top-9 transform -translate-y-1/2 text-gray-400">
-                    {" "}
-                    <MagnifyingGlassIcon className="w-4 h-4" />{" "}
-                  </span>{" "}
+                    <MagnifyingGlassIcon className="w-4 h-4" />
+                  </span>
                   <input
                     type="text"
                     id="searchMyEvents"
@@ -1156,17 +1119,15 @@ export default function Dashboard() {
                     value={searchEvents}
                     onChange={(e) => setSearchEvents(e.target.value)}
                     className="w-full p-2 pl-9 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
-                  />{" "}
-                </div>{" "}
+                  />
+                </div>
                 <div>
-                  {" "}
                   <label
                     htmlFor="sortMyEvents"
                     className="block text-xs font-medium text-gray-600 mb-1"
                   >
-                    {" "}
-                    Sắp xếp theo{" "}
-                  </label>{" "}
+                    Sắp xếp theo
+                  </label>
                   <select
                     id="sortMyEvents"
                     value={eventSortOption}
@@ -1179,20 +1140,17 @@ export default function Dashboard() {
                       backgroundSize: "1.5em 1.5em",
                     }}
                   >
-                    {" "}
-                    <option value="az">A - Z</option>{" "}
-                    <option value="za">Z - A</option>{" "}
-                  </select>{" "}
-                </div>{" "}
+                    <option value="az">A - Z</option>
+                    <option value="za">Z - A</option>
+                  </select>
+                </div>
                 <div>
-                  {" "}
                   <label
                     htmlFor="statusFilterMyEvents"
                     className="block text-xs font-medium text-gray-600 mb-1"
                   >
-                    {" "}
-                    Trạng thái{" "}
-                  </label>{" "}
+                    Trạng thái
+                  </label>
                   <select
                     id="statusFilterMyEvents"
                     value={eventStatusFilterOption}
@@ -1207,18 +1165,15 @@ export default function Dashboard() {
                       backgroundSize: "1.5em 1.5em",
                     }}
                   >
-                    {" "}
-                    <option value="all">♾️ Tất cả</option>{" "}
-                    <option value="upcoming">☀️ Sắp diễn ra</option>{" "}
-                    <option value="ongoing">🟢 Đang diễn ra</option>{" "}
-                    <option value="ended">🏁 Đã kết thúc</option>{" "}
-                    <option value="dateRange">🔢 Khoảng ngày</option>{" "}
-                  </select>{" "}
-                </div>{" "}
+                    <option value="all">♾️ Tất cả</option>
+                    <option value="upcoming">☀️ Sắp diễn ra</option>
+                    <option value="ongoing">🟢 Đang diễn ra</option>
+                    <option value="ended">🏁 Đã kết thúc</option>
+                    <option value="dateRange">🔢 Khoảng ngày</option>
+                  </select>
+                </div>
                 <div className="flex items-end justify-start md:justify-end gap-2">
-                  {" "}
                   <div className="flex w-full sm:w-auto">
-                    {" "}
                     <button
                       onClick={() => setEventViewMode("list")}
                       title="Danh sách"
@@ -1228,9 +1183,8 @@ export default function Dashboard() {
                           : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                       }`}
                     >
-                      {" "}
-                      <ListBulletIcon className="h-5 w-5" />{" "}
-                    </button>{" "}
+                      <ListBulletIcon className="h-5 w-5" />
+                    </button>
                     <button
                       onClick={() => setEventViewMode("card")}
                       title="Thẻ"
@@ -1240,24 +1194,20 @@ export default function Dashboard() {
                           : "bg-white border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                       }`}
                     >
-                      {" "}
-                      <Component1Icon className="h-5 w-5" />{" "}
-                    </button>{" "}
-                  </div>{" "}
-                </div>{" "}
-              </div>{" "}
+                      <Component1Icon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
               {eventStatusFilterOption === "dateRange" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
-                  {" "}
                   <div>
-                    {" "}
                     <label
                       htmlFor="startDateFilterEvents"
                       className="block text-xs font-medium text-gray-700 mb-1"
                     >
-                      {" "}
-                      <span className="inline-block mr-1">🗓️</span> Từ ngày{" "}
-                    </label>{" "}
+                      <span className="inline-block mr-1">🗓️</span> Từ ngày
+                    </label>
                     <input
                       type="date"
                       id="startDateFilterEvents"
@@ -1265,17 +1215,15 @@ export default function Dashboard() {
                       onChange={(e) => setEventStartDateFilter(e.target.value)}
                       max={eventEndDateFilter || undefined}
                       className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm bg-white"
-                    />{" "}
-                  </div>{" "}
+                    />
+                  </div>
                   <div>
-                    {" "}
                     <label
                       htmlFor="endDateFilterEvents"
                       className="block text-xs font-medium text-gray-700 mb-1"
                     >
-                      {" "}
-                      <span className="inline-block mr-1">🗓️</span> Đến ngày{" "}
-                    </label>{" "}
+                      <span className="inline-block mr-1">🗓️</span> Đến ngày
+                    </label>
                     <input
                       type="date"
                       id="endDateFilterEvents"
@@ -1283,36 +1231,32 @@ export default function Dashboard() {
                       onChange={(e) => setEventEndDateFilter(e.target.value)}
                       min={eventStartDateFilter || undefined}
                       className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-sm bg-white"
-                    />{" "}
-                  </div>{" "}
+                    />
+                  </div>
                 </div>
-              )}{" "}
-            </div>{" "}
-            {renderEventContent()}{" "}
+              )}
+            </div>
+            {renderEventContent()}
           </div>
         )}
         {activeTab === "news" && (
           <div>
-            {" "}
             <h1 className="text-2xl sm:text-3xl font-bold text-blue-700 mb-4">
-              {" "}
-              📰 Bảng tin{" "}
-            </h1>{" "}
+              📰 Bảng tin
+            </h1>
             <div className="relative w-full max-w-7xl mb-6">
-              {" "}
               <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                {" "}
-                <MagnifyingGlassIcon className="w-4 h-4" />{" "}
-              </span>{" "}
+                <MagnifyingGlassIcon className="w-4 h-4" />
+              </span>
               <input
                 type="text"
                 placeholder="Tìm kiếm tin tức theo tiêu đề..."
                 className="w-full p-3 pl-10 pr-4 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
                 value={searchNews}
                 onChange={(e) => setSearchNews(e.target.value)}
-              />{" "}
-            </div>{" "}
-            {renderNewsContent()}{" "}
+              />
+            </div>
+            {renderNewsContent()}
           </div>
         )}
       </div>

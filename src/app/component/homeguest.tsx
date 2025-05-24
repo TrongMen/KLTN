@@ -21,8 +21,13 @@ import NewsTabContent from "./tabs/NewsTabContent";
 import { useRefreshToken } from "../../hooks/useRefreshToken";
 import { toast, Toaster } from "react-hot-toast";
 import NotificationDropdown, { NotificationItem } from "./NotificationDropdown";
-import { BellIcon , ChevronRightIcon , ChevronLeftIcon } from "@radix-ui/react-icons";
+import {
+  BellIcon,
+  ChevronRightIcon,
+  ChevronLeftIcon,
+} from "@radix-ui/react-icons";
 import { User, EventDisplayInfo, NewsItem } from "./types/appTypes";
+import Image from "next/image";
 import {
   ChatMessageNotificationPayload,
   MainConversationType,
@@ -33,7 +38,12 @@ import {
   Participant as ChatParticipant,
 } from "./tabs/chat/ChatTabContentTypes";
 import ConfirmationDialog from "../../utils/ConfirmationDialog";
+import { Playfair_Display } from "next/font/google";
 
+const playfair = Playfair_Display({
+  subsets: ["vietnamese", "latin"],
+  weight: ["700"],
+});
 type ActiveTab = "home" | "news" | "registeredEvents" | "members" | "chatList";
 const OTHER_TABS_PER_PAGE_MOBILE = 3;
 const OTHER_TABS_PER_PAGE_DESKTOP = 6;
@@ -158,7 +168,7 @@ export default function HomeGuest() {
         return null;
       }
       try {
-        const userUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`;
+        const userUrl = `http://localhost:8080/identity/users/notoken/${userId}`;
         let userRes = await fetch(userUrl, {
           headers: { Authorization: `Bearer ${effectiveToken}` },
         });
@@ -251,7 +261,7 @@ export default function HomeGuest() {
         }
       }
 
-      const listUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/user/${currentUserId}`;
+      const listUrl = `http://localhost:8080/identity/api/events/group-chats/user/${currentUserId}`;
       let listResponse = await fetch(listUrl, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
@@ -320,7 +330,7 @@ export default function HomeGuest() {
         let lastMessageSenderNameDisplay: string | undefined = undefined;
 
         try {
-          const messagesUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
+          const messagesUrl = `http://localhost:8080/identity/api/events/${groupInfo.id}/messages?page=0&size=1&sort=sentAt,desc`;
           const messagesResponse = await fetch(messagesUrl, {
             headers: { Authorization: `Bearer ${token!}` },
             cache: "no-store",
@@ -446,7 +456,7 @@ export default function HomeGuest() {
             localStorage.setItem("authToken", token);
           } else throw new Error("Yêu cầu xác thực.");
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         let response = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
@@ -577,7 +587,7 @@ export default function HomeGuest() {
         }
       }
       try {
-        const groupUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}`;
+        const groupUrl = `http://localhost:8080/identity/api/events/group-chats/${groupId}`;
         let groupResponse = await fetch(groupUrl, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -705,7 +715,7 @@ export default function HomeGuest() {
           if (nt) token = nt;
           else throw new Error("Auth required.");
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/media`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages/media`;
         let res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -755,7 +765,7 @@ export default function HomeGuest() {
           if (nt) token = nt;
           else throw new Error("Auth required.");
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/files`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages/files`;
         let res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -805,7 +815,7 @@ export default function HomeGuest() {
           if (nt) token = nt;
           else throw new Error("Auth required.");
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages/audios`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages/audios`;
         let res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -858,7 +868,7 @@ export default function HomeGuest() {
           if (nt) token = nt;
           else throw new Error("Auth required.");
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/members/${memberId}?leaderId=${leaderId}`;
         let res = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -908,7 +918,7 @@ export default function HomeGuest() {
           if (nt) token = nt;
           else throw new Error("Auth required.");
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
+        const url = `http://localhost:8080/identity/api/events/group-chats/${groupId}/leave?memberId=${memberId}`;
         let res = await fetch(url, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -966,7 +976,7 @@ export default function HomeGuest() {
           else throw new Error("Auth required.");
         }
         if (!groupId) throw new Error("Group ID không tồn tại.");
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         const form = new FormData();
         form.append("senderId", senderId);
         form.append("content", messageText);
@@ -1075,7 +1085,7 @@ export default function HomeGuest() {
             throw new Error("Auth required.");
           }
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${groupId}/messages`;
+        const url = `http://localhost:8080/identity/api/events/${groupId}/messages`;
         const form = new FormData();
         form.append("senderId", senderId);
         form.append("file", file);
@@ -1176,7 +1186,7 @@ export default function HomeGuest() {
           if (nt) token = nt;
           else throw new Error("Auth required.");
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/messages/${messageId}?userId=${userIdParam}`;
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}?userId=${userIdParam}`;
         let response = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -1285,7 +1295,7 @@ export default function HomeGuest() {
           if (nt) token = nt;
           else throw new Error("Auth required.");
         }
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/messages/${messageId}/download`;
+        const url = `http://localhost:8080/identity/api/events/messages/${messageId}/download`;
         let res = await fetch(url, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
@@ -1357,7 +1367,7 @@ export default function HomeGuest() {
     try {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status?status=APPROVED`;
+      const url = `http://localhost:8080/identity/api/news/status?status=APPROVED`;
       let res = await fetch(url, { headers, cache: "no-store" });
       if (
         (res.status === 401 || res.status === 403) &&
@@ -1430,7 +1440,7 @@ export default function HomeGuest() {
     try {
       let headers: HeadersInit = {};
       if (currentToken) headers["Authorization"] = `Bearer ${currentToken}`;
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=APPROVED`;
+      const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
       let res = await fetch(url, { headers: headers, cache: "no-store" });
       if (
         (res.status === 401 || res.status === 403) &&
@@ -1510,7 +1520,7 @@ export default function HomeGuest() {
       setIsLoadingRegisteredIds(true);
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/attendee/${userIdParam}`;
+        const url = `http://localhost:8080/identity/api/events/attendee/${userIdParam}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers: headers, cache: "no-store" });
         if ((res.status === 401 || res.status === 403) && refreshToken) {
@@ -1559,7 +1569,7 @@ export default function HomeGuest() {
       setIsLoadingCreatedEventIds(true);
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/creator/${userIdParam}`;
+        const url = `http://localhost:8080/identity/api/events/creator/${userIdParam}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers: headers, cache: "no-store" });
         if ((res.status === 401 || res.status === 403) && refreshToken) {
@@ -1610,7 +1620,7 @@ export default function HomeGuest() {
       const limit = 10;
       let currentToken = token;
       try {
-        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/notifications?userId=${userIdParam}&limit=${limit}`;
+        const url = `http://localhost:8080/identity/api/notifications?userId=${userIdParam}&limit=${limit}`;
         let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
         let res = await fetch(url, { headers, cache: "no-store" });
         if ((res.status === 401 || res.status === 403) && refreshToken) {
@@ -1690,7 +1700,7 @@ export default function HomeGuest() {
           const headers: HeadersInit = {
             Authorization: `Bearer ${currentAuthToken}`,
           };
-          const userInfoUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/myInfo`;
+          const userInfoUrl = `http://localhost:8080/identity/users/myInfo`;
           let userRes = await fetch(userInfoUrl, {
             headers,
             cache: "no-store",
@@ -1789,7 +1799,7 @@ export default function HomeGuest() {
     }
 
     if (!socketRef.current) {
-      const socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`, {
+      const socket = io(`ws://localhost:9099`, {
         path: "/socket.io",
         query: { userId: user.id },
         transports: ["websocket"],
@@ -2016,7 +2026,7 @@ export default function HomeGuest() {
     try {
       const token = localStorage.getItem("authToken");
       if (token) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/logout`, {
+        await fetch(`http://localhost:8080/identity/auth/logout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: token }),
@@ -2053,7 +2063,7 @@ export default function HomeGuest() {
     }
     let currentToken = token;
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}/attendees?userId=${user.id}`;
+      const url = `http://localhost:8080/identity/api/events/${event.id}/attendees?userId=${user.id}`;
       let res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${currentToken}` },
@@ -2206,7 +2216,7 @@ export default function HomeGuest() {
     }
     let currentToken = token;
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/notifications/${notificationId}/read`;
+      const url = `http://localhost:8080/identity/api/notifications/${notificationId}/read`;
       let headers: HeadersInit = { Authorization: `Bearer ${currentToken}` };
       let res = await fetch(url, { method: "PUT", headers: headers });
       if ((res.status === 401 || res.status === 403) && refreshToken) {
@@ -2444,18 +2454,30 @@ export default function HomeGuest() {
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 relative">
       <Toaster toastOptions={{ duration: 4000 }} position="top-center" />
-      <nav className="bg-gray-900 text-white px-4 py-4 shadow-md mb-6 sticky top-0 z-40">
+      <nav className="bg-white text-gray-800 px-4 py-4 shadow-md mb-6 sticky top-0 z-40 ">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="text-lg sm:text-xl font-bold">Quản lý sự kiện</div>
+          <div className="flex items-center">
+            <Image
+              src="https://icc.iuh.edu.vn/web/wp-content/uploads/2024/09/iuh_logo-rut-gon-1024x577.png"
+              alt="Logo IUH"
+              width={70}
+              height={40}
+              className="h-10 w-auto"
+              priority
+            />
+            <span className={`font-bold text-xl ml-3 ${playfair.className}`}>
+              IUH TSE
+            </span>
+          </div>
           <div className="flex items-center gap-4 sm:gap-6 text-sm sm:text-base">
             <span
-              className="cursor-pointer hover:text-gray-300 transition-colors"
+              className="cursor-pointer hover:text-indigo-600 transition-colors"
               onClick={() => setShowAboutModal(true)}
             >
               Giới thiệu
             </span>
             <span
-              className="cursor-pointer hover:text-gray-300"
+              className="cursor-pointer hover:text-indigo-600"
               onClick={() => setShowContactModal(true)}
             >
               Liên hệ

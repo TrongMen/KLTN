@@ -4,11 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "react-hot-toast";
 import Image from "next/image";
 import { User, NewsItem, EventDisplayInfo } from "../types/appTypes";
-import {
-  EventDataForForm,
-  
-} from "../types/typCreateEvent";
-
+import { EventDataForForm } from "../types/typCreateEvent";
 import { useRouter } from "next/navigation";
 import {
   ReloadIcon,
@@ -225,7 +221,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       setIsLoadingCreator(true);
       setCreatorName(null);
       fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${selectedEvent.createdBy}`
+        `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -261,9 +257,9 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         setIsLoadingOrganizers(true);
         setDetailedOrganizers(null);
         try {
-          const organizerPromises = organizersToFetch.map(async (org) => {
+          const organizerPromises = organizersToFetch.map(async (org: any) => {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${org.userId}`
+              `http://localhost:8080/identity/users/notoken/${org.userId}`
             );
             if (!response.ok) {
               return {
@@ -300,7 +296,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         } catch (error) {
           console.error("Lỗi tải thông tin ban tổ chức:", error);
           setDetailedOrganizers(
-            organizersToFetch.map((org) => ({
+            organizersToFetch.map((org: any) => ({
               userId: org.userId,
               roleName: org.roleName,
               positionName: org.positionName,
@@ -317,69 +313,70 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
       setIsLoadingOrganizers(false);
     }
   }, [selectedEvent]);
-  useEffect(() => {
-      if (
-        selectedEvent &&
-        selectedEvent.participants &&
-        selectedEvent.participants.length > 0
-      ) {
-        const participantsToFetch = selectedEvent.participants;
-        const fetchParticipantDetails = async () => {
-          setIsLoadingParticipants(true);
-          setDetailedParticipants(null);
-          try {
-            const participantPromises = participantsToFetch.map(async (par) => {
-              const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${par.userId}`
-              );
-              let fullName = par.name || `ID: ${par.userId.substring(0, 8)}...`;
-              let positionName = par.positionName;
-  
-              if (response.ok) {
-                const data = await response.json();
-                if (data.code === 1000 && data.result) {
-                  const userDetail = data.result;
-                  fullName =
-                    [userDetail.lastName, userDetail.firstName]
-                      .filter(Boolean)
-                      .join(" ")
-                      .trim() || userDetail.username || fullName;
-                  positionName = userDetail.position?.name || par.positionName;
-                }
-              }
-              return {
-                userId: par.userId,
-                roleId: par.roleId,
-                roleName: par.roleName,
-                positionId: par.positionId,
-                positionName: positionName,
-                fullName: fullName,
-              };
-            });
-            const settledParticipants = await Promise.all(participantPromises);
-            setDetailedParticipants(settledParticipants as DetailedMember[]);
-          } catch (error) {
-            console.error("Lỗi tải thông tin người tham dự:", error);
-            setDetailedParticipants(
-              participantsToFetch.map((par) => ({
-                userId: par.userId,
-                roleId: par.roleId,
-                roleName: par.roleName || "N/A",
-                positionId: par.positionId,
-                positionName: par.positionName || "N/A",
-                fullName: "Lỗi tải tên",
-              })) as DetailedMember[]
-            );
-          } finally {
-            setIsLoadingParticipants(false);
-          }
-        };
-        fetchParticipantDetails();
-      } else {
+
+useEffect(() => {
+    if (
+      selectedEvent &&
+      selectedEvent.participants &&
+      selectedEvent.participants.length > 0
+    ) {
+      const participantsToFetch = selectedEvent.participants;
+      const fetchParticipantDetails = async () => {
+        setIsLoadingParticipants(true);
         setDetailedParticipants(null);
-        setIsLoadingParticipants(false);
-      }
-    }, [selectedEvent]);
+        try {
+          const participantPromises = participantsToFetch.map(async (par: any) => {
+            const response = await fetch(
+              `http://localhost:8080/identity/users/notoken/${par.userId}`
+            );
+            let fullName = par.name || `ID: ${par.userId.substring(0, 8)}...`;
+            let positionName = par.positionName;
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.code === 1000 && data.result) {
+                const userDetail = data.result;
+                fullName =
+                  [userDetail.lastName, userDetail.firstName]
+                    .filter(Boolean)
+                    .join(" ")
+                    .trim() || userDetail.username || fullName;
+                positionName = userDetail.position?.name || par.positionName;
+              }
+            }
+            return {
+              userId: par.userId,
+              roleId: par.roleId,
+              roleName: par.roleName,
+              positionId: par.positionId,
+              positionName: positionName,
+              fullName: fullName,
+            };
+          });
+          const settledParticipants = await Promise.all(participantPromises);
+          setDetailedParticipants(settledParticipants as DetailedMember[]);
+        } catch (error) {
+          console.error("Lỗi tải thông tin người tham dự:", error);
+          setDetailedParticipants(
+            participantsToFetch.map((par:any) => ({
+              userId: par.userId,
+              roleId: par.roleId,
+              roleName: par.roleName || "N/A",
+              positionId: par.positionId,
+              positionName: par.positionName || "N/A",
+              fullName: "Lỗi tải tên",
+            })) as DetailedMember[]
+          );
+        } finally {
+          setIsLoadingParticipants(false);
+        }
+      };
+      fetchParticipantDetails();
+    } else {
+      setDetailedParticipants(null);
+      setIsLoadingParticipants(false);
+    }
+  }, [selectedEvent]);
 
   const processedEvents = useMemo(() => {
     if (!allEvents || !Array.isArray(allEvents)) return [];
@@ -505,8 +502,10 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
   const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
 
   useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
+    if (currentPage > totalPages && totalPages > 0) {
+        setCurrentPage(totalPages);
+    } else if (currentPage <= 0 && totalPages > 0) {
+        setCurrentPage(1);
     }
   }, [totalPages, currentPage]);
 
@@ -551,7 +550,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     }
   };
   const handleEditEvent = (event: EventDisplayInfo) => {
-    onOpenUpdateModal(event);
+    onOpenUpdateModal(event as EventDataForForm);
   };
 
   const handleDeleteEvent = (event: EventDisplayInfo) => {
@@ -574,7 +573,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         router.push("/login?sessionExpired=true&redirect=/admin/home");
         return;
       }
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}?deletedById=${user.id}`;
+      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
 
       try {
         let response = await fetch(apiUrl, {
@@ -605,9 +604,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             try {
               const data = await response.json();
               successMsg = data.message || successMsg;
-            } catch (e) {
-              // Ignore if parsing fails for non-JSON response, use default message
-            }
+            } catch (e) {}
           }
           toast.success(successMsg);
           await onRefreshEvents();
@@ -619,9 +616,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           try {
             const errData = await response.json();
             errorMsg = errData.message || errorMsg;
-          } catch (e) {
-            // Ignore if parsing fails, use status code based message
-          }
+          } catch (e) {}
           if (response.status === 401 || response.status === 403) {
             router.push("/login?sessionExpired=true&redirect=/admin/home");
           }
@@ -677,7 +672,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
     <div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl sm:text-3xl font-bold text-indigo-600 shrink-0">
-          🎉 Trang chủ
+          🎉 Trang chủ Admin
         </h1>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto items-stretch sm:items-center flex-wrap">
           <div className="flex-grow sm:flex-grow-0">
@@ -695,11 +690,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             </button>
           </div>
           <div className="flex-grow sm:flex-grow-0">
-            <label htmlFor="sortOptionGuest" className="sr-only">
+            <label htmlFor="sortOptionAdmin" className="sr-only">
               Sắp xếp
             </label>
             <select
-              id="sortOptionGuest"
+              id="sortOptionAdmin"
               value={sortOption}
               onChange={(e) => {
                 setSortOption(e.target.value);
@@ -713,11 +708,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             </select>
           </div>
           <div className="flex-grow sm:flex-grow-0">
-            <label htmlFor="timeFilterOptionGuest" className="sr-only">
+            <label htmlFor="timeFilterOptionAdmin" className="sr-only">
               Lọc thời gian
             </label>
             <select
-              id="timeFilterOptionGuest"
+              id="timeFilterOptionAdmin"
               value={timeFilterOption}
               onChange={(e) => {
                 setTimeFilterOption(e.target.value);
@@ -736,11 +731,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             </select>
           </div>
           <div className="flex-grow sm:flex-grow-0">
-            <label htmlFor="itemsPerPageSelect" className="sr-only">
+            <label htmlFor="itemsPerPageSelectAdmin" className="sr-only">
               Sự kiện/trang
             </label>
             <select
-              id="itemsPerPageSelect"
+              id="itemsPerPageSelectAdmin"
               value={itemsPerPage}
               onChange={handleItemsPerPageChange}
               className="w-full h-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white appearance-none"
@@ -782,14 +777,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
           <div>
             <label
-              htmlFor="startDateFilterHome"
+              htmlFor="startDateFilterAdmin"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
               Từ ngày
             </label>
             <input
               type="date"
-              id="startDateFilterHome"
+              id="startDateFilterAdmin"
               value={startDateFilter}
               onChange={handleStartDateChange}
               max={endDateFilter || undefined}
@@ -798,14 +793,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           </div>
           <div>
             <label
-              htmlFor="endDateFilterHome"
+              htmlFor="endDateFilterAdmin"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
               Đến ngày
             </label>
             <input
               type="date"
-              id="endDateFilterHome"
+              id="endDateFilterAdmin"
               value={endDateFilter}
               onChange={handleEndDateChange}
               min={startDateFilter || undefined}
@@ -819,7 +814,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
           🔍
         </span>
         <input
-          id="searchGuest"
+          id="searchAdmin"
           type="text"
           placeholder="Tìm sự kiện theo tên hoặc địa điểm..."
           className="w-full p-3 pl-10 pr-4 border rounded-lg shadow-sm"
@@ -910,7 +905,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                     ? "Đang tải..."
                     : creatorName || selectedEvent.createdBy || "N/A"}
                 </p>
-                {selectedEvent.purpose && (
+                 {selectedEvent.purpose && (
                   <p>
                     <strong className="font-medium w-28 inline-block align-top">
                       🎯 Mục đích:
@@ -977,9 +972,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                   </strong>
                   <p className="text-sm text-gray-700">
                     {selectedEvent.attendees?.length || 0}
-                    {typeof selectedEvent.maxAttendees === "number"
+                    {typeof selectedEvent.maxAttendees === "number" && selectedEvent.maxAttendees > 0
                       ? ` / ${selectedEvent.maxAttendees} người`
-                      : " người (Không giới hạn)"}
+                      : selectedEvent.maxAttendees === 0 || selectedEvent.maxAttendees === null || selectedEvent.maxAttendees === undefined
+                      ? " người (Không giới hạn)"
+                      :  ` / ${selectedEvent.maxAttendees} người`}
                   </p>
                 </div>
               </div>
@@ -987,13 +984,13 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 {user?.id === selectedEvent.createdBy && (
                   <button
                     onClick={() => handleEditEvent(selectedEvent)}
-                    disabled={isDeleting === selectedEvent.id}
-                    className="px-4 py-2 cursor-pointer rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50"
+                    disabled={isDeleting === selectedEvent.id || getEventStatus(selectedEvent.date) !== "upcoming"}
+                    className="px-4 py-2 cursor-pointer rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition text-sm font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Pencil1Icon className="w-4 h-4" /> Sửa
                   </button>
                 )}
-                {user && (
+                {user && ( 
                   <button
                     onClick={() => handleDeleteEvent(selectedEvent)}
                     disabled={isDeleting === selectedEvent.id}
@@ -1009,7 +1006,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                     {isDeleting === selectedEvent.id ? "Đang xoá..." : "Xoá"}
                   </button>
                 )}
-                {(() => {
+                 {(() => {
                   const isCreated = user?.id === selectedEvent.createdBy;
                   const isRegistered = registeredEventIds.has(selectedEvent.id);
                   const processing = isRegistering === selectedEvent.id;
@@ -1090,16 +1087,13 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
             viewMode === "card" ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {paginatedEvents.map((event) => {
-                  const isRegistered = registeredEventIds.has(event.id);
-                  const isCreatedByUser = user?.id === event.createdBy;
-                  const processing = isRegistering === event.id;
                   const status = getEventStatus(event.date);
-                  const showRegisterButton =
-                    user && !isCreatedByUser && status !== "ended";
-                  const canClickRegister =
-                    showRegisterButton && !isRegistered && !processing;
-                  const canEdit =
-                    user?.id === event.createdBy && status !== "ended";
+                  const isCreatedByUser = user?.id === event.createdBy; 
+                  const canEdit = isCreatedByUser && status === "upcoming";
+                  const isRegistered = registeredEventIds.has(event.id);
+                  const processing = isRegistering === event.id;
+                  const showRegisterButton = user && !isCreatedByUser && status !== "ended";
+                  const canClickRegister = showRegisterButton && !isRegistered && !processing;
 
                   return (
                     <div
@@ -1159,13 +1153,15 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                           </p>
                         </div>
                         <div className="text-xs text-gray-600 mt-1">
-                          <span>
-                            ✅ Đã đăng ký: {event.attendees?.length || 0}
-                            {typeof event.maxAttendees === "number"
-                              ? ` / ${event.maxAttendees}`
-                              : " (Không giới hạn)"}
-                          </span>
-                        </div>
+                            <span>
+                              ✅ Đã đăng ký: {event.attendees?.length || 0}
+                              {typeof event.maxAttendees === "number" && event.maxAttendees > 0
+                                ? ` / ${event.maxAttendees}`
+                                : event.maxAttendees === 0 || event.maxAttendees === null || event.maxAttendees === undefined
+                                ? " (Không giới hạn)"
+                                : ` / ${event.maxAttendees}`}
+                            </span>
+                          </div>
                         <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
                           {isCreatedByUser ? (
                             <div className="w-full px-3 py-1.5 rounded-md bg-purple-100 text-purple-700 text-xs font-medium text-center">
@@ -1192,8 +1188,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                             >
                               {isRegistered ? (
                                 <>
-                                  <CheckCircledIcon className="mr-1" /> Đã đăng
-                                  ký
+                                  <CheckCircledIcon className="mr-1" /> Đã đăng ký
                                 </>
                               ) : processing ? (
                                 <>
@@ -1234,7 +1229,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               <Pencil1Icon className="w-4 h-4" />
                             </button>
                           )}
-                          {user && (
+                          {user && ( 
                             <button
                               onClick={() => handleDeleteEvent(event)}
                               disabled={isDeleting === event.id}
@@ -1262,16 +1257,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
               <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
                 <ul className="divide-y divide-gray-200">
                   {paginatedEvents.map((event) => {
-                    const isRegistered = registeredEventIds.has(event.id);
-                    const isCreatedByUser = user?.id === event.createdBy;
-                    const processing = isRegistering === event.id;
                     const status = getEventStatus(event.date);
-                    const showRegisterButton =
-                      user && !isCreatedByUser && status !== "ended";
-                    const canClickRegister =
-                      showRegisterButton && !isRegistered && !processing;
-                    const canEdit =
-                      user?.id === event.createdBy && status !== "ended";
+                    const isCreatedByUser = user?.id === event.createdBy;
+                    const canEdit = isCreatedByUser && status === "upcoming";
+                    const isRegistered = registeredEventIds.has(event.id);
+                    const processing = isRegistering === event.id;
+                    const showRegisterButton = user && !isCreatedByUser && status !== "ended";
+                    const canClickRegister = showRegisterButton && !isRegistered && !processing;
+
                     return (
                       <li
                         key={event.id}
@@ -1327,10 +1320,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               </span>
                               <span className="text-xs text-gray-500">
                                 (ĐK: {event.attendees?.length || 0}
-                                {typeof event.maxAttendees === "number"
+                                {typeof event.maxAttendees === "number" && event.maxAttendees > 0
                                   ? `/${event.maxAttendees}`
-                                  : ""}
-                                )
+                                  : event.maxAttendees === 0 || event.maxAttendees === null || event.maxAttendees === undefined
+                                  ? "" 
+                                  : `/${event.maxAttendees}`})
                               </span>
                             </div>
                           </div>
@@ -1345,7 +1339,7 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               onClick={() => {
                                 if (canClickRegister) onRegister(event);
                               }}
-                              className={`px-3 py-1.5 cursor-pointer rounded-md text-white text-xs font-medium flex items-center justify-center cursor-pointer ${
+                              className={`px-3 py-1.5 cursor-pointer rounded-md text-white text-xs font-medium flex items-center justify-center ${
                                 isRegistered
                                   ? "bg-green-500 cursor-default"
                                   : processing
@@ -1360,18 +1354,11 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                               }
                             >
                               {isRegistered ? (
-                                <>
-                                  <CheckCircledIcon className="mr-1" /> Đã ĐK
-                                </>
+                                <><CheckCircledIcon className="mr-1" /> Đã ĐK</>
                               ) : processing ? (
-                                <>
-                                  <ReloadIcon className="animate-spin mr-1.5" />{" "}
-                                  ...
-                                </>
+                                <><ReloadIcon className="animate-spin mr-1.5" /> ...</>
                               ) : (
-                                <>
-                                  <Pencil1Icon className="mr-1" /> Đăng ký
-                                </>
+                                <><Pencil1Icon className="mr-1" /> Đăng ký</>
                               )}
                             </button>
                           ) : status === "ended" ? (
@@ -1443,14 +1430,14 @@ const AdminHomeTabContent: React.FC<AdminHomeTabContentProps> = ({
                 <button
                   onClick={() => handlePageChange(currentPage - 1)}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+                  className="px-3 py-1.5 cursor-pointer rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
                 >
                   <ChevronLeftIcon className="w-4 h-4" /> Trước
                 </button>
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
+                  className="px-3 py-1.5 cursor-pointer rounded-md border bg-white text-sm hover:bg-gray-50 disabled:opacity-50 flex items-center gap-1"
                 >
                   Sau <ChevronRightIcon className="w-4 h-4" />
                 </button>

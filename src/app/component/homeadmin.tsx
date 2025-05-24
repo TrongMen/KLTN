@@ -2273,18 +2273,7 @@ export default function HomeAdmin() {
               )}
 
               <div
-                className={`flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible ${
-                  !showPrevButton &&
-                  !showNextButton &&
-                  otherTabsList.length > TABS_PER_PAGE
-                    ? "mx-auto"
-                    : ""
-                } ${
-                  (showPrevButton && !showNextButton) ||
-                  (!showPrevButton && showNextButton)
-                    ? "flex-grow justify-center"
-                    : ""
-                }`}
+                className="flex flex-nowrap gap-x-1 sm:gap-x-2 justify-center overflow-visible px-1"
               >
                 {currentVisibleOtherTabs.map((tab) => (
                   <div

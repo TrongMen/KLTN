@@ -56,7 +56,7 @@ export default function Register() {
     try {
       setLoading(true);
 
-      const response = await fetch(`http://localhost:8080/identity/users`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

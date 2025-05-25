@@ -239,7 +239,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
       setIsLoadingCreator(true);
       setCreatorName(null);
       fetch(
-        `http://localhost:8080/identity/users/notoken/${selectedEvent.createdBy}`
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${selectedEvent.createdBy}`
       )
         .then((res) => res.json())
         .then((data) => {
@@ -277,7 +277,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         try {
           const organizerPromises = organizersToFetch.map(async (org: any) => {
             const response = await fetch(
-              `http://localhost:8080/identity/users/notoken/${org.userId}`
+              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${org.userId}`
             );
             let fullName = org.name || `ID: ${org.userId.substring(0, 8)}...`;
             let positionName = org.positionName;
@@ -340,7 +340,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         try {
           const participantPromises = participantsToFetch.map(async (par: any) => {
             const response = await fetch(
-              `http://localhost:8080/identity/users/notoken/${par.userId}`
+              `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${par.userId}`
             );
             let fullName = par.name || `ID: ${par.userId.substring(0, 8)}...`;
             let positionName = par.positionName;
@@ -578,7 +578,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
     let tempEventRoles: ApiRole[] = [];
 
     try {
-      const usersRes = await fetch(`http://localhost:8080/identity/users`, {
+      const usersRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!usersRes.ok) {
@@ -592,7 +592,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         throw new Error(usersData.message || "Lỗi xử lý dữ liệu người dùng.");
       }
 
-      const rolesRes = await fetch(`http://localhost:8080/identity/api/organizerrole`, {
+      const rolesRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/organizerrole`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!rolesRes.ok) {
@@ -689,7 +689,7 @@ const HomeTabContent: React.FC<HomeTabContentProps> = ({
         });
         return;
       }
-      const apiUrl = `http://localhost:8080/identity/api/events/${event.id}?deletedById=${user.id}`;
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${event.id}?deletedById=${user.id}`;
       try {
         let response = await fetch(apiUrl, {
           method: "DELETE",

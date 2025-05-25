@@ -178,7 +178,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
           ? { Authorization: `Bearer ${token}` }
           : {};
         const statusParam = status.toUpperCase();
-        const url = `http://localhost:8080/identity/api/news/status?status=${statusParam}`;
+        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status?status=${statusParam}`;
         const newsRes = await fetch(url, { headers, cache: "no-store" });
 
         if (!newsRes.ok) {
@@ -232,7 +232,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
         const headers: HeadersInit = token
           ? { Authorization: `Bearer ${token}` }
           : {};
-        const url = `http://localhost:8080/identity/api/news/deleted?page=${page}&size=${size}`;
+        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/deleted?page=${page}&size=${size}`;
         const res = await fetch(url, { headers, cache: "no-store" });
 
         if (!res.ok) {
@@ -462,7 +462,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Vui lòng đăng nhập lại.");
 
-        const url = `http://localhost:8080/identity/api/news/${newsId}?deletedById=${currentUserId}`;
+        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${newsId}?deletedById=${currentUserId}`;
         const res = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -521,7 +521,7 @@ const MyNewsTabContent: React.FC<MyNewsProps> = ({ user, onNewsChange, refreshTo
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Vui lòng đăng nhập lại.");
-        const url = `http://localhost:8080/identity/api/news/${newsId}/restore`;
+        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/${newsId}/restore`;
         const res = await fetch(url, {
           method: "PUT",
           headers: { Authorization: `Bearer ${token}` },

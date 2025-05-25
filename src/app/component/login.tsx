@@ -50,7 +50,7 @@ export default function LoginPage() {
 
     try {
       const authResponse = await fetch(
-        `http://localhost:8080/identity/auth/token`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/auth/token`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -67,7 +67,7 @@ export default function LoginPage() {
       if (!token) throw new Error("Không nhận được token xác thực.");
       
       const userInfoResponse = await fetch(
-        `http://localhost:8080/identity/users/myInfo`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/myInfo`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }

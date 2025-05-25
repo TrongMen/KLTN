@@ -463,7 +463,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
     const token = localStorage.getItem("authToken");
     if (user && token) {
       fetchData<UserStats>(
-        `http://localhost:8080/identity/users`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`,
         token,
         (usersData: ApiUserDetail[]) => {
           const totalUsers = usersData.length;
@@ -484,7 +484,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
       );
 
       fetchData<EventStats>(
-        `http://localhost:8080/identity/api/events`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events`,
         token,
         (eventsData: EventDisplayInfo[]) => {
           return {
@@ -512,7 +512,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
       );
 
       fetchData<NewsStats>(
-        `http://localhost:8080/identity/api/news/status`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status`,
         token,
         (newsData: NewsItem[]) => {
           return {

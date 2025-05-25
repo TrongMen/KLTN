@@ -183,7 +183,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         return fetchedPersonsCacheRef.current[userId];
     }
     try {
-        const response = await fetch(`http://localhost:8080/identity/users/notoken/${userId}`);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/notoken/${userId}`);
         if (!response.ok) {
             const fallback: PersonDetail = { id: userId, userId: userId, name: `ID: ${userId}` };
             fetchedPersonsCacheRef.current[userId] = fallback;
@@ -301,7 +301,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
       const headers: HeadersInit = token
         ? { Authorization: `Bearer ${token}` }
         : {};
-      const url = `http://localhost:8080/identity/api/events/status?status=APPROVED`;
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/status?status=APPROVED`;
       const res = await fetch(url, { headers, cache: "no-store" });
       if (!res.ok) {
         let m = `Lỗi tải sự kiện`;
@@ -366,7 +366,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         return;
       }
       try {
-        const url = `http://localhost:8080/identity/api/events/${eventToRegister.id}/attendees?userId=${currentUserId}`;
+        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToRegister.id}/attendees?userId=${currentUserId}`;
         const res = await fetch(url, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -467,7 +467,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         return;
       }
       try {
-        const url = `http://localhost:8080/identity/api/events/${eventToUnregister.id}/attendees/${currentUserId}`;
+        const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${eventToUnregister.id}/attendees/${currentUserId}`;
         const res = await fetch(url, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
@@ -565,7 +565,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
       const promises: Promise<BatchUnregMappedResult>[] = ids.map(
         (id): Promise<BatchUnregMappedResult> =>
           fetch(
-            `http://localhost:8080/identity/api/events/${id}/attendees/${currentUserId}`,
+            `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${id}/attendees/${currentUserId}`,
             { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
           )
             .then(async (res): Promise<BatchUnregMappedResult> => {
@@ -675,7 +675,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
       return;
     }
     try {
-      const url = `http://localhost:8080/identity/users/${currentUserId}/qr-code-image`;
+      const url = `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users/${currentUserId}/qr-code-image`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
@@ -789,7 +789,7 @@ const RegisteredEventsTabContent: React.FC<RegisteredEventsTabContentProps> = ({
         const formData = new FormData();
         formData.append('qrCodeData', qrCodeData);
 
-        const response = await fetch(`http://localhost:8080/identity/api/events/${currentUserId}/check-in-2`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/${currentUserId}/check-in-2`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,

@@ -5,7 +5,6 @@ import React, {
   useEffect,
   useRef,
   useCallback,
-  useMemo,
 } from "react";
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { useRouter } from "next/navigation";
@@ -32,6 +31,7 @@ interface User {
   position?: {
     name?: string;
   };
+  joinedDate?: string; // Đã có trong interface User của bạn
 }
 
 interface UserUpdateFormData {
@@ -68,6 +68,19 @@ const roleDisplayMap: Record<string, string> = {
   GUEST: "Thành viên vãng lai",
 };
 
+const formatDateForDisplay = (dateString: string | undefined | null): string => {
+  if (!dateString) return "N/A";
+  try {
+    return new Date(dateString).toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  } catch (e) {
+    return "Ngày không hợp lệ";
+  }
+};
+
 interface UserMenuProps {
   user: User | null;
   onLogout: () => void;
@@ -76,7 +89,7 @@ interface UserMenuProps {
 export default function UserMenu({ user, onLogout }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false); // Đổi tên để rõ ràng hơn
   const [updatedUser, setUpdatedUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -87,7 +100,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
     newPassword: "",
     confirmPassword: "",
   });
-  const [showPassword, setShowPassword] = useState({
+  const [passwordVisibility, setPasswordVisibility] = useState({ // Đổi tên cho state quản lý hiển thị mật khẩu
     currentPassword: false,
     newPassword: false,
     confirmPassword: false,
@@ -210,15 +223,16 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
       const data = await response.json();
       if (response.ok && data.code === 1000) {
         toast.success("Cập nhật thông tin thành công!");
-        localStorage.setItem("user", JSON.stringify(data.result));
+        localStorage.setItem("user", JSON.stringify(data.result)); 
         setUpdatedUser(data.result);
         setIsEditing(false);
-        window.location.reload();
+        if (typeof window !== "undefined") {
+          window.location.reload();
+        }
       } else {
         throw new Error(data.message || "Cập nhật thất bại");
       }
     } catch (error: any) {
-      console.error("Lỗi cập nhật profile:", error);
       toast.error(`Lỗi: ${error.message}`);
     } finally {
       setIsSavingProfile(false);
@@ -289,7 +303,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
           newPassword: "",
           confirmPassword: "",
         });
-        setShowChangePassword(false);
+        setShowChangePasswordModal(false);
         onLogout();
       } else {
         throw new Error(
@@ -297,7 +311,6 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
         );
       }
     } catch (error: any) {
-      console.error("Lỗi đổi mật khẩu:", error);
       setChangePasswordError(error.message || "Đã xảy ra lỗi.");
       toast.error(`Lỗi: ${error.message}`);
     } finally {
@@ -361,13 +374,14 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
             "user",
             JSON.stringify(updatedUserDataFromUpload)
           );
-          window.location.reload();
+          if (typeof window !== "undefined") {
+             window.location.reload();
+          }
         }
       } else {
         throw new Error(data.message || "Upload ảnh đại diện thất bại");
       }
     } catch (error: any) {
-      console.error("Lỗi upload avatar:", error);
       toast.error(`Lỗi upload: ${error.message}`, { id: uploadToastId });
     } finally {
       setIsUploadingAvatar(false);
@@ -398,6 +412,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
     { label: "Ngày sinh", name: "dob", type: "date" },
     { label: "Vị trí", name: "position.name", type: "text", readOnly: true },
     { label: "Vai trò", name: "roles.name", type: "text", readOnly: true },
+    { label: "Ngày tham gia", name: "joinedDate", type: "text", readOnly: true },
   ];
 
   return (
@@ -440,7 +455,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
           <MenuItem
             as="button"
             onClick={() => {
-              setShowChangePassword(true);
+              setShowChangePasswordModal(true);
               setIsOpen(false);
               setChangePasswordError("");
               setPasswordFormData({
@@ -555,7 +570,10 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
                       updatedUser.roles?.[0]?.name ||
                       "Chưa xác định"
                     : "Chưa có vai trò";
-                } else {
+                } else if (field.name === "joinedDate") {
+                  displayValue = formatDateForDisplay(updatedUser.joinedDate);
+                }
+                else {
                   displayValue = (updatedUser as any)[field.name];
                 }
                 return (
@@ -597,10 +615,14 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
                       <input
                         type={field.type || "text"}
                         name={field.name}
-                        value={displayValue || ""}
+                        value={
+                            field.name === "dob" && updatedUser.dob ? 
+                            updatedUser.dob.split("T")[0] : 
+                            (displayValue || "")
+                        }
                         onChange={handleProfileChange}
                         readOnly={!isEditing || field.readOnly}
-                        disabled={isUploadingAvatar}
+                        disabled={isUploadingAvatar || field.readOnly}
                         className={`px-4 py-2 rounded-lg text-sm outline-none transition border ${
                           isEditing && !field.readOnly
                             ? "bg-white border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-300 text-gray-900"
@@ -703,10 +725,10 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
         </div>
       )}
 
-      {showChangePassword && (
+      {showChangePasswordModal && (
         <div
           className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center z-[70]"
-          onClick={() => setShowChangePassword(false)}
+          onClick={() => setShowChangePasswordModal(false)}
         >
           <div
             className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
@@ -731,7 +753,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
                 </label>
                 <input
                   type={
-                    showPassword[field.name as keyof typeof showPassword]
+                    passwordVisibility[field.name as keyof typeof passwordVisibility]
                       ? "text"
                       : "password"
                   }
@@ -748,16 +770,16 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
                 <button
                   type="button"
                   onClick={() =>
-                    setShowPassword((prev) => ({
+                    setPasswordVisibility((prev) => ({
                       ...prev,
                       [field.name]:
-                        !prev[field.name as keyof typeof showPassword],
+                        !prev[field.name as keyof typeof passwordVisibility],
                     }))
                   }
                   className="absolute right-3 top-8 text-gray-500 hover:text-gray-800"
                 >
                   {" "}
-                  {showPassword[field.name as keyof typeof showPassword]
+                  {passwordVisibility[field.name as keyof typeof passwordVisibility]
                     ? "🙈"
                     : "👁️"}{" "}
                 </button>
@@ -806,7 +828,7 @@ export default function UserMenu({ user, onLogout }: UserMenuProps) {
               </button>
               <button
                 onClick={() => {
-                  setShowChangePassword(false);
+                  setShowChangePasswordModal(false);
                   setChangePasswordError("");
                   setPasswordFormData({
                     currentPassword: "",

@@ -39,12 +39,13 @@ import {
 } from "./tabs/chat/ChatTabContentTypes";
 import ConfirmationDialog from "../../utils/ConfirmationDialog";
 import { Playfair_Display } from "next/font/google";
+import StatisticGuest from "./tabs/StatisticGuest";
 
 const playfair = Playfair_Display({
   subsets: ["vietnamese", "latin"],
   weight: ["700"],
 });
-type ActiveTab = "home" | "news" | "registeredEvents" | "members" | "chatList";
+type ActiveTab = "home" | "news" | "registeredEvents" | "members" | "chatList"| "statistic";
 const OTHER_TABS_PER_PAGE_MOBILE = 3;
 const OTHER_TABS_PER_PAGE_DESKTOP = 6;
 export default function HomeGuest() {
@@ -852,7 +853,10 @@ export default function HomeGuest() {
     },
     [user?.id, refreshToken, router]
   );
-
+const handleSessionExpired = useCallback(
+    () => router.push("/login?sessionExpired=true"),
+    [router]
+  );
   const handleRemoveMemberChatAPI = useCallback(
     async (groupId: string | number, memberId: string, leaderId: string) => {
       if (!groupId || !memberId || !leaderId || !user?.id) {
@@ -2376,6 +2380,12 @@ export default function HomeGuest() {
         hoverBg =
           activeTab === tabName ? "hover:bg-purple-700" : "hover:bg-purple-200";
         break;
+      case "statistic":
+        bg = activeTab === tabName ? "bg-yellow-600" : "bg-yellow-100";
+        txt = activeTab === tabName ? "" : "text-yellow-800";
+        hoverBg =
+          activeTab === tabName ? "hover:bg-yellow-700" : "hover:bg-yellow-200";
+        break;
       default:
         bg = "bg-gray-100";
         txt = "text-gray-800";
@@ -2397,6 +2407,8 @@ export default function HomeGuest() {
         return "border-t-pink-600";
       case "chatList":
         return "border-t-purple-600";
+      case "statistic":
+        return "border-t-yellow-600";
       default:
         return "border-t-gray-400";
     }
@@ -2412,6 +2424,7 @@ export default function HomeGuest() {
     },
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
     { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true },
+    { id: "statistic", label: "📊 Thống kê", requiresAuth: true },
   ];
   const totalOtherTabPages = Math.ceil(tabs.length / TABS_PER_PAGE);
 
@@ -2717,6 +2730,13 @@ export default function HomeGuest() {
                 )}
               </>
             )}
+            {activeTab === "statistic" && user && (
+                                      <StatisticGuest
+                                       user={user}
+                                        refreshToken={refreshToken}
+                                        onSessionExpired={handleSessionExpired}                                       
+                                       />
+                                    )}
 
             {tabs.find((t) => t.id === activeTab)?.requiresAuth && !user && (
               <p className="text-center text-red-500 py-6">

@@ -48,6 +48,7 @@ import CreateEventForm from "./tabs/CreateEventForm";
 import ModalUpdateEvent from "./modals/ModalUpdateEvent";
 import { EventDataForForm } from "./types/typCreateEvent";
 import { Playfair_Display } from "next/font/google";
+import StatisticUser from "./tabs/StatisticUser";
 
 const playfair = Playfair_Display({
   subsets: ["vietnamese", "latin"],
@@ -63,7 +64,8 @@ type ActiveTab =
   | "attendees"
   | "registeredEvents"
   | "members"
-  | "chatList";
+  | "chatList"
+  | "statistic";
 
 const OTHER_TABS_PER_PAGE_MOBILE = 3;
 const OTHER_TABS_PER_PAGE_DESKTOP = 5;
@@ -2002,6 +2004,11 @@ export default function UserHome() {
         text = "text-purple-800";
         hover = "hover:bg-purple-700";
         break;
+      case "statistic":
+        bg = "bg-gray-600";
+        text = "text-gray-800";
+        hover = "hover:bg-gray-700";
+        break;
       default:
         bg = "bg-gray-100";
         text = "text-gray-800";
@@ -2036,6 +2043,8 @@ export default function UserHome() {
         return "border-t-pink-600";
       case "chatList":
         return "border-t-purple-600";
+      case "statistic":
+        return "border-t-gray-600";
       default:
         return "border-t-gray-400";
     }
@@ -2055,6 +2064,7 @@ export default function UserHome() {
     { id: "attendees", label: "✅ Điểm danh ", requiresAuth: true },
     { id: "members", label: "👥 Thành viên CLB", requiresAuth: true },
     { id: "chatList", label: "💬 Trò chuyện", requiresAuth: true },
+    { id: "statistic", label: "📊 Thống kê", requiresAuth: true },
   ];
 
   const totalOtherTabPages = Math.ceil(tabs.length / TABS_PER_PAGE);
@@ -2357,6 +2367,13 @@ export default function UserHome() {
                 setDownloadingFileId={setDownloadingChatFileId}
               />
             )}
+            {activeTab === "statistic" && user && (
+                          <StatisticUser
+                           user={user}
+                           refreshToken={refreshToken}
+          onSessionExpired={handleSessionExpired}
+                           />
+                        )}
             {tabs.find((t) => t.id === activeTab)?.requiresAuth &&
               !user &&
               initializedRef.current &&

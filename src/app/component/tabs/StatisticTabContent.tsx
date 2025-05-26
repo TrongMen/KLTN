@@ -1,6 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
+import { toast } from "react-hot-toast";
+import Image from "next/image"; // Mặc dù không dùng trực tiếp, giữ lại nếu có kế hoạch mở rộng
+import { User } from "../types/appTypes"; // Đảm bảo đường dẫn đúng
 import {
   PersonIcon,
   CalendarIcon,
@@ -11,6 +20,8 @@ import {
   UpdateIcon,
   LightningBoltIcon,
   ExclamationTriangleIcon,
+  ListBulletIcon, // Icon mới cho số sự kiện đăng ký
+  StarIcon,       // Icon mới cho tham dự nhiều nhất
 } from "@radix-ui/react-icons";
 import {
   ResponsiveContainer,
@@ -26,7 +37,6 @@ import {
   PieChart,
   Pie,
 } from "recharts";
-import { User } from "../types/appTypes";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -45,11 +55,13 @@ export interface EventDisplayInfo {
   name: string;
   title?: string;
   time: string;
-  date?: string;
+  date?: string; // Thường là phần ngày của `time`
   location: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
-  event_status?: "UPCOMING" | "ONGOING" | "COMPLETED";
+  event_status?: "UPCOMING" | "ONGOING" | "COMPLETED"; // Trạng thái tiến trình của sự kiện đã duyệt
   createdBy?: string;
+  attendees?: any[]; // Mảng người tham dự hoặc chỉ là ID
+  currentAttendeesCount?: number; // Số lượng người tham dự hiện tại nếu API trả về
 }
 
 export interface NewsItem {
@@ -71,6 +83,10 @@ interface UserStats {
   bannedUsers: number;
 }
 
+interface UserEngagementStats { // Interface mới
+    registeredEventsCount: number;
+}
+
 interface EventStats {
   totalEvents: number;
   approvedEvents: number;
@@ -79,6 +95,7 @@ interface EventStats {
   upcomingEvents: number;
   ongoingEvents: number;
   completedEvents: number;
+  maxAttendeesInOneEvent: number; // Thống kê mới
 }
 
 interface NewsStats {
@@ -208,7 +225,7 @@ const SummaryComboChart: React.FC<{
             tickFormatter={(value) => `${value}%`}
           />
           <Tooltip
-            formatter={(value, name) => {
+            formatter={(value: number, name: string) => {
               if (name === "approvalRate") {
                 return [`${value}%`, "Tỷ lệ phê duyệt"];
               }
@@ -273,17 +290,15 @@ const CustomPieChart: React.FC<{
   const renderLabel = ({ name, percent, value }: any) => {
     if (totalValue === 0) return null;
     if (value === totalValue && totalValue > 0) {
-      // One item takes 100%
       return `${name}: 100%`;
     }
     if (percent * 100 < 1 && value > 0) {
-      // For very small percentages, show a minimal representation
       return `${name}: <1%`;
     }
     if (percent * 100 >= 1) {
       return `${name}: ${(percent * 100).toFixed(0)}%`;
     }
-    return null; // Don't render label for 0 value items if others exist
+    return null; 
   };
 
   return (
@@ -315,7 +330,7 @@ const CustomPieChart: React.FC<{
               ))}
             </Pie>
             <Tooltip
-              formatter={(value, name, props) => {
+              formatter={(value: number, name: string, props: any) => {
                 const percentage =
                   totalValue > 0 ? ((value / totalValue) * 100).toFixed(0) : 0;
                 return [
@@ -340,6 +355,8 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   const [userStats, setUserStats] = useState<UserStats | null>(null);
   const [eventStats, setEventStats] = useState<EventStats | null>(null);
   const [newsStats, setNewsStats] = useState<NewsStats | null>(null);
+  const [userEngagementStats, setUserEngagementStats] = useState<UserEngagementStats | null>(null); // State mới
+  
   const [summaryData, setSummaryData] = useState<SummaryChartData[]>([]);
   const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([
     new Date(new Date().setMonth(new Date().getMonth() - 6)),
@@ -350,11 +367,13 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   const [isLoadingUserStats, setIsLoadingUserStats] = useState(true);
   const [isLoadingEventStats, setIsLoadingEventStats] = useState(true);
   const [isLoadingNewsStats, setIsLoadingNewsStats] = useState(true);
+  const [isLoadingUserEngagementStats, setIsLoadingUserEngagementStats] = useState(true); // State mới
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
 
   const [errorUserStats, setErrorUserStats] = useState<string | null>(null);
   const [errorEventStats, setErrorEventStats] = useState<string | null>(null);
   const [errorNewsStats, setErrorNewsStats] = useState<string | null>(null);
+  const [errorUserEngagementStats, setErrorUserEngagementStats] = useState<string | null>(null); // State mới
   const [errorSummary, setErrorSummary] = useState<string | null>(null);
 
   const fetchData = useCallback(
@@ -407,18 +426,8 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
       return [];
 
     const monthNames = [
-      "Tháng 1",
-      "Tháng 2",
-      "Tháng 3",
-      "Tháng 4",
-      "Tháng 5",
-      "Tháng 6",
-      "Tháng 7",
-      "Tháng 8",
-      "Tháng 9",
-      "Tháng 10",
-      "Tháng 11",
-      "Tháng 12",
+      "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
+      "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12",
     ];
 
     const start = new Date(startDate);
@@ -437,17 +446,19 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
         monthNames[currentMonth.getMonth()] + " " + currentMonth.getFullYear();
 
       const approvedEvents = eventStats.approvedEvents || 0;
-      const totalEvents = eventStats.totalEvents || 1;
+      const totalEvents = eventStats.totalEvents || 1; 
       const approvedNews = newsStats.approvedNews || 0;
       const totalNews = newsStats.totalNews || 1;
 
-      const progress = monthDiff > 0 ? i / monthDiff : 0;
-      const monthFactor = 0.5 + progress * 0.5;
-      const approvalRate = Math.round(
-        ((approvedEvents / totalEvents) * 50 +
-          (approvedNews / totalNews) * 50) *
-          (0.7 + progress * 0.3)
-      );
+      const progress = monthDiff > 0 ? i / monthDiff : 1; 
+      const monthFactor = 0.5 + progress * 0.5; 
+      
+      const approvalRate = Math.max(0, Math.min(100, Math.round(
+        ((approvedEvents / (totalEvents === 0 ? 1 : totalEvents)) * 50 + 
+         (approvedNews / (totalNews === 0 ? 1 : totalNews)) * 50) *
+        (0.7 + progress * 0.3) 
+      )));
+
 
       return {
         name: monthLabel,
@@ -461,21 +472,18 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
-    if (user && token) {
+    if (user && user.id && token) {
       fetchData<UserStats>(
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/users`,
         token,
         (usersData: ApiUserDetail[]) => {
           const totalUsers = usersData.length;
-
           const activeUsers = usersData.filter(
-            (u) => u.isBanned !== true
+            (u) => u.isBanned !== true 
           ).length;
-
           const bannedUsers = usersData.filter(
             (u) => u.isBanned === true
           ).length;
-
           return { totalUsers, activeUsers, bannedUsers };
         },
         setUserStats,
@@ -487,14 +495,22 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
         `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events`,
         token,
         (eventsData: EventDisplayInfo[]) => {
+          let maxAttendeesInUserEvent = 0;
+          if(user && user.id){
+            eventsData.forEach(event => {
+              if (event.createdBy === user.id) {
+                const count = event.currentAttendeesCount ?? (Array.isArray(event.attendees) ? event.attendees.length : 0);
+                if (count > maxAttendeesInUserEvent) {
+                  maxAttendeesInUserEvent = count;
+                }
+              }
+            });
+          }
           return {
             totalEvents: eventsData.length,
-            approvedEvents: eventsData.filter((e) => e.status === "APPROVED")
-              .length,
-            pendingEvents: eventsData.filter((e) => e.status === "PENDING")
-              .length,
-            rejectedEvents: eventsData.filter((e) => e.status === "REJECTED")
-              .length,
+            approvedEvents: eventsData.filter((e) => e.status === "APPROVED").length,
+            pendingEvents: eventsData.filter((e) => e.status === "PENDING").length,
+            rejectedEvents: eventsData.filter((e) => e.status === "REJECTED").length,
             upcomingEvents: eventsData.filter(
               (e) => e.event_status === "UPCOMING" && e.status === "APPROVED"
             ).length,
@@ -504,6 +520,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
             completedEvents: eventsData.filter(
               (e) => e.event_status === "COMPLETED" && e.status === "APPROVED"
             ).length,
+            maxAttendeesInOneEvent: maxAttendeesInUserEvent,
           };
         },
         setEventStats,
@@ -512,29 +529,39 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
       );
 
       fetchData<NewsStats>(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status`,
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/news/status`, 
         token,
         (newsData: NewsItem[]) => {
           return {
             totalNews: newsData.length,
-            approvedNews: newsData.filter((n) => n.status === "APPROVED")
-              .length,
+            approvedNews: newsData.filter((n) => n.status === "APPROVED").length,
             pendingNews: newsData.filter((n) => n.status === "PENDING").length,
-            rejectedNews: newsData.filter((n) => n.status === "REJECTED")
-              .length,
+            rejectedNews: newsData.filter((n) => n.status === "REJECTED").length,
           };
         },
         setNewsStats,
         setErrorNewsStats,
         setIsLoadingNewsStats
       );
+
+      fetchData<UserEngagementStats>(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}/identity/api/events/attendee/${user.id}`,
+        token,
+        (registeredEventsData: any[]) => ({ registeredEventsCount: registeredEventsData.length }),
+        setUserEngagementStats,
+        setErrorUserEngagementStats,
+        setIsLoadingUserEngagementStats
+      );
+
     } else if (!user) {
       setErrorUserStats("Vui lòng đăng nhập để xem thống kê.");
       setErrorEventStats("Vui lòng đăng nhập để xem thống kê.");
       setErrorNewsStats("Vui lòng đăng nhập để xem thống kê.");
+      setErrorUserEngagementStats("Vui lòng đăng nhập để xem thống kê.");
       setIsLoadingUserStats(false);
       setIsLoadingEventStats(false);
       setIsLoadingNewsStats(false);
+      setIsLoadingUserEngagementStats(false);
     }
   }, [user, fetchData]);
 
@@ -575,21 +602,9 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
     () =>
       eventStats
         ? [
-            {
-              name: "Đã duyệt",
-              value: eventStats.approvedEvents,
-              color: "#34D399",
-            },
-            {
-              name: "Chờ duyệt",
-              value: eventStats.pendingEvents,
-              color: "#FBBF24",
-            },
-            {
-              name: "Từ chối",
-              value: eventStats.rejectedEvents,
-              color: "#F87171",
-            },
+            { name: "Đã duyệt", value: eventStats.approvedEvents, color: "#34D399" },
+            { name: "Chờ duyệt", value: eventStats.pendingEvents, color: "#FBBF24" },
+            { name: "Từ chối", value: eventStats.rejectedEvents, color: "#F87171" },
           ]
         : [],
     [eventStats]
@@ -599,21 +614,9 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
     () =>
       newsStats
         ? [
-            {
-              name: "Đã duyệt",
-              value: newsStats.approvedNews,
-              color: "#34D399",
-            },
-            {
-              name: "Chờ duyệt",
-              value: newsStats.pendingNews,
-              color: "#FBBF24",
-            },
-            {
-              name: "Từ chối",
-              value: newsStats.rejectedNews,
-              color: "#F87171",
-            },
+            { name: "Đã duyệt", value: newsStats.approvedNews, color: "#34D399" },
+            { name: "Chờ duyệt", value: newsStats.pendingNews, color: "#FBBF24" },
+            { name: "Từ chối", value: newsStats.rejectedNews, color: "#F87171" },
           ]
         : [],
     [newsStats]
@@ -623,16 +626,8 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
     () =>
       userStats
         ? [
-            {
-              name: "Hoạt động",
-              value: userStats.activeUsers,
-              color: "#34D399",
-            },
-            {
-              name: "Bị khóa",
-              value: userStats.bannedUsers,
-              color: "#F87171",
-            },
+            { name: "Hoạt động", value: userStats.activeUsers, color: "#34D399" },
+            { name: "Bị khóa", value: userStats.bannedUsers, color: "#F87171" },
           ]
         : [],
     [userStats]
@@ -650,14 +645,15 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
   }
 
   const hasError =
-    errorUserStats || errorEventStats || errorNewsStats || errorSummary;
-  const isLoading =
+    errorUserStats || errorEventStats || errorNewsStats || errorSummary || errorUserEngagementStats;
+  const isLoadingOverall =
     isLoadingUserStats ||
     isLoadingEventStats ||
     isLoadingNewsStats ||
-    isLoadingSummary;
+    isLoadingSummary ||
+    isLoadingUserEngagementStats;
 
-  if (hasError && !isLoading) {
+  if (hasError && !isLoadingOverall) {
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[300px] bg-white p-6 rounded-lg shadow">
         <CrossCircledIcon className="w-16 h-16 text-red-500 mb-4" />
@@ -665,7 +661,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
           Không thể tải dữ liệu thống kê
         </p>
         <p className="text-center text-gray-500 mt-2">
-          {errorUserStats || errorEventStats || errorNewsStats || errorSummary}
+          {errorUserStats || errorEventStats || errorNewsStats || errorSummary || errorUserEngagementStats}
         </p>
       </div>
     );
@@ -691,9 +687,9 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
       <section>
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6 flex items-center">
           <PersonIcon className="w-7 h-7 mr-3 text-blue-600" />
-          Thống kê Người dùng
+          Thống kê Người dùng & Tương tác
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <StatCard
             title="Tổng số người dùng"
             value={userStats?.totalUsers ?? 0}
@@ -715,6 +711,14 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
             isLoading={isLoadingUserStats}
             color="bg-red-500"
           />
+          <StatCard
+            title="Sự kiện đã đăng ký"
+            value={userEngagementStats?.registeredEventsCount ?? 0}
+            icon={<ListBulletIcon className="w-6 h-6" />}
+            isLoading={isLoadingUserEngagementStats}
+            color="bg-cyan-500"
+            description="Số sự kiện bạn đã đăng ký tham gia."
+          />
         </div>
       </section>
 
@@ -723,7 +727,7 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
           <CalendarIcon className="w-7 h-7 mr-3 text-purple-600" />
           Thống kê Sự kiện
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <StatCard
             title="Tổng số sự kiện"
             value={eventStats?.totalEvents ?? 0}
@@ -739,18 +743,19 @@ const StatisticTabContent: React.FC<StatisticTabContentProps> = ({ user }) => {
             color="bg-green-500"
           />
           <StatCard
+            title="Tham dự nhiều nhất sự kiện của bạn"
+            value={eventStats?.maxAttendeesInOneEvent ?? 0}
+            icon={<StarIcon className="w-6 h-6" />}
+            isLoading={isLoadingEventStats}
+            color="bg-teal-500"
+            description="Trong các sự kiện bạn tạo"
+          />
+           <StatCard
             title="Sự kiện chờ duyệt"
             value={eventStats?.pendingEvents ?? 0}
             icon={<StopwatchIcon className="w-6 h-6" />}
             isLoading={isLoadingEventStats}
             color="bg-yellow-500"
-          />
-          <StatCard
-            title="Sự kiện từ chối"
-            value={eventStats?.rejectedEvents ?? 0}
-            icon={<CrossCircledIcon className="w-6 h-6" />}
-            isLoading={isLoadingEventStats}
-            color="bg-red-500"
           />
         </div>
         <CustomPieChart

@@ -14,6 +14,8 @@ import {
   ClockIcon,
   CheckCircledIcon,
   ArchiveIcon,
+  CrossCircledIcon,
+  ExclamationTriangleIcon,
 } from "@radix-ui/react-icons";
 import ContactModal from "../component/modals/ContactModal";
 import AboutModal from "../component/modals/AboutModal";
@@ -27,7 +29,8 @@ const playfair = Playfair_Display({
   weight: ["700"],
 });
 
-type EventStatus = "upcoming" | "ongoing" | "ended";
+type EventProgressDisplayStatus = "Sắp diễn ra" | "Đang diễn ra" | "Đã kết thúc" | "Đã hủy" | "Bị hoãn" | "Chưa duyệt";
+
 
 interface UserInfoFromApi {
   id: string;
@@ -77,96 +80,71 @@ const fetchUserFullNameById = async (userId: string): Promise<string> => {
   }
 };
 
-const getEventStatus = (eventDateStr?: string | null): EventStatus => {
-  if (!eventDateStr) return "upcoming";
-  try {
-    const now = new Date();
-    const todayStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-    const eventDate = new Date(eventDateStr);
-    if (isNaN(eventDate.getTime())) return "upcoming";
-    const eventDateStart = new Date(
-      eventDate.getFullYear(),
-      eventDate.getMonth(),
-      eventDate.getDate()
-    );
-    if (eventDateStart < todayStart) return "ended";
-    else if (eventDateStart > todayStart) return "upcoming";
-    else return "ongoing";
-  } catch (e) {
-    console.error("Error parsing event date for status:", e);
-    return "upcoming";
+const mapProgressStatusToDisplayStatus = (progressStatus?: string | null, eventDateStr?: string | null): EventProgressDisplayStatus => {
+  if (!progressStatus) return "Sắp diễn ra";
+
+  const now = new Date();
+  const eventDate = eventDateStr ? new Date(eventDateStr) : null;
+
+  switch (progressStatus.toUpperCase()) {
+    case "PENDING":
+    case "APPROVED":
+      if (eventDate && eventDate < now && !(now.toDateString() === eventDate.toDateString())) return "Đã kết thúc";
+      return "Sắp diễn ra";
+    case "IN_PROGRESS":
+      return "Đang diễn ra";
+    case "COMPLETED":
+      return "Đã kết thúc";
+    case "CANCELLED":
+      return "Đã hủy";
+    case "POSTPONED":
+      return "Bị hoãn";
+    case "DRAFT":
+         return "Chưa duyệt";
+    default:
+      return "Sắp diễn ra";
   }
 };
 
-const getStatusBadgeClasses = (status: EventStatus): string => {
-  const base =
-    "px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1";
-  switch (status) {
-    case "ongoing":
+const getProgressStatusBadgeClasses = (displayStatus: EventProgressDisplayStatus): string => {
+  const base = "px-2 py-0.5 rounded-full text-xs font-medium inline-flex items-center gap-1";
+  switch (displayStatus) {
+    case "Đang diễn ra":
       return `${base} bg-green-100 text-green-800`;
-    case "upcoming":
+    case "Sắp diễn ra":
       return `${base} bg-blue-100 text-blue-800`;
-    case "ended":
-      return `${base} bg-gray-100 text-gray-700`;
+    case "Đã kết thúc":
+      return `${base} bg-gray-200 text-gray-700`;
+    case "Đã hủy":
+      return `${base} bg-red-100 text-red-800`;
+    case "Bị hoãn":
+      return `${base} bg-yellow-100 text-yellow-800`;
+    case "Chưa duyệt":
+            return `${base} bg-orange-100 text-orange-800`;
     default:
       return `${base} bg-gray-100 text-gray-600`;
   }
 };
 
-const getStatusText = (status: EventStatus): string => {
-  switch (status) {
-    case "ongoing":
-      return "Đang diễn ra";
-    case "upcoming":
-      return "Sắp diễn ra";
-    case "ended":
-      return "Đã kết thúc";
-    default:
-      return "";
-  }
-};
-
-const getStatusIcon = (status: EventStatus) => {
-  switch (status) {
-    case "ongoing":
+const getProgressStatusIcon = (displayStatus: EventProgressDisplayStatus) => {
+  switch (displayStatus) {
+    case "Đang diễn ra":
       return <CheckCircledIcon className="w-3 h-3" />;
-    case "upcoming":
+    case "Sắp diễn ra":
       return <ClockIcon className="w-3 h-3" />;
-    case "ended":
+    case "Đã kết thúc":
       return <ArchiveIcon className="w-3 h-3" />;
+    case "Đã hủy":
+      return <CrossCircledIcon className="w-3 h-3" />;
+    case "Bị hoãn":
+      return <ExclamationTriangleIcon className="w-3 h-3" />;
+     case "Chưa duyệt":
+            return <ExclamationTriangleIcon className="w-3 h-3" />;
     default:
       return null;
   }
 };
 
-const getWeekRange = (
-  refDate: Date
-): { startOfWeek: Date; endOfWeek: Date } => {
-  const d = new Date(refDate);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const start = new Date(d.setDate(diff));
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  return { startOfWeek: start, endOfWeek: end };
-};
-
-const getMonthRange = (
-  refDate: Date
-): { startOfMonth: Date; endOfMonth: Date } => {
-  const d = new Date(refDate);
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  end.setHours(23, 59, 59, 999);
-  return { startOfMonth: start, endOfMonth: end };
-};
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("events");
@@ -181,11 +159,7 @@ export default function Dashboard() {
   const [searchNews, setSearchNews] = useState("");
   const [user, setUser] = useState<any | null>(null);
   const router = useRouter();
-  const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }, []);
+  
   const [showContactModal, setShowContactModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [confirmationState, setConfirmationState] = useState<{
@@ -202,7 +176,7 @@ export default function Dashboard() {
     "date"
   );
   const [eventStatusFilterOption, setEventStatusFilterOption] = useState<
-    "all" | "upcoming" | "ongoing" | "ended" | "dateRange"
+    "all" | EventProgressDisplayStatus | "dateRange"
   >("all");
   const [eventStartDateFilter, setEventStartDateFilter] = useState<string>("");
   const [eventEndDateFilter, setEventEndDateFilter] = useState<string>("");
@@ -271,9 +245,11 @@ export default function Dashboard() {
             attendees: event.attendees || [],
             organizers: event.organizers || [],
             status: event.status,
+            progressStatus: event.progressStatus, 
             createdAt: event.createdAt,
             createdBy: event.createdBy,
             participants: event.participants || [],
+            maxAttendees: event.maxAttendees
           }));
         setEvents(formattedEvents);
       } else {
@@ -320,7 +296,7 @@ export default function Dashboard() {
           status: item.status,
           createdBy: item.createdBy,
           publishedAt: item.publishedAt,
-          event: item.event,
+          event: item.event, 
           createdAt: item.createdAt,
           coverImageUrl: item.coverImageUrl,
           rejectionReason: item.rejectionReason,
@@ -438,36 +414,24 @@ export default function Dashboard() {
   const processedEvents = useMemo(() => {
     if (!Array.isArray(events)) return [];
     let filtered = [...events];
-    if (
-      eventStatusFilterOption !== "all" &&
-      eventStatusFilterOption !== "dateRange"
-    ) {
-      filtered = filtered.filter(
-        (event) => getEventStatus(event.date) === eventStatusFilterOption
-      );
-    } else if (
-      eventStatusFilterOption === "dateRange" &&
-      eventStartDateFilter &&
-      eventEndDateFilter
-    ) {
-      try {
-        const start = new Date(eventStartDateFilter);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(eventEndDateFilter);
-        end.setHours(23, 59, 59, 999);
-        if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end) {
-          filtered = filtered.filter((event) => {
-            const eventDate = event.date ? new Date(event.date) : null;
-            return (
-              eventDate &&
-              !isNaN(eventDate.getTime()) &&
-              eventDate >= start &&
-              eventDate <= end
-            );
-          });
-        }
-      } catch {}
+    
+    if (eventStatusFilterOption !== "all" && eventStatusFilterOption !== "dateRange") {
+        filtered = filtered.filter(event => mapProgressStatusToDisplayStatus(event.progressStatus, event.date) === eventStatusFilterOption);
+    } else if (eventStatusFilterOption === "dateRange" && eventStartDateFilter && eventEndDateFilter) {
+        try {
+            const start = new Date(eventStartDateFilter);
+            start.setHours(0,0,0,0);
+            const end = new Date(eventEndDateFilter);
+            end.setHours(23,59,59,999);
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end) {
+                filtered = filtered.filter(event => {
+                    const eventDate = event.date ? new Date(event.date) : null;
+                    return eventDate && !isNaN(eventDate.getTime()) && eventDate >= start && eventDate <= end;
+                });
+            }
+        } catch {}
     }
+
     if (searchEvents.trim()) {
       const lowerSearchTerm = searchEvents.trim().toLowerCase();
       filtered = filtered.filter(
@@ -521,27 +485,54 @@ export default function Dashboard() {
     }
   };
 
-const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEvent) => {
-    clickEvent.stopPropagation();
-
-    
+const handleAttemptRegister = (eventToRegister: any, clickEvent?: React.MouseEvent) => {
+    if (clickEvent) clickEvent.stopPropagation();
 
     if (!user || !user.id) {
-      // Nếu người dùng CHƯA đăng nhập -> Hiển thị dialog yêu cầu đăng nhập
       setConfirmationState({
         isOpen: true,
         title: "Yêu cầu đăng nhập",
         message: "Bạn cần đăng nhập để có thể đăng ký sự kiện.",
         onConfirm: () => {
-          router.push("/login");
+          router.push("/login"); 
+          setConfirmationState(prev => ({ ...prev, isOpen: false }));
         },
         confirmVariant: "primary",
         confirmText: "Đăng nhập",
         cancelText: "Hủy bỏ",
+        onCancel: () => setConfirmationState(prev => ({...prev, isOpen: false}))
       });
     } else {
+      if (registeredEvents.includes(eventToRegister.id)) {
+        toast.error("Bạn đã đăng ký sự kiện này rồi.");
+        return;
+      }
+      const displayStatus = mapProgressStatusToDisplayStatus(eventToRegister.progressStatus, eventToRegister.date);
+      if (displayStatus === "Đã kết thúc" || displayStatus === "Đã hủy" || displayStatus === "Chưa duyệt") {
+        toast.error(`Sự kiện "${eventToRegister.title}" ${displayStatus.toLowerCase()}. Không thể đăng ký.`);
+        return;
+      }
       
-      toast("Bạn đã đăng nhập! Chức năng đăng ký đang được phát triển.");
+      if (typeof eventToRegister.maxAttendees === 'number' && 
+          eventToRegister.maxAttendees > 0 && // Chỉ kiểm tra khi có giới hạn và giới hạn > 0
+          (eventToRegister.attendees?.length || 0) >= eventToRegister.maxAttendees) {
+        toast.error(`Sự kiện "${eventToRegister.title}" đã đủ số lượng người đăng ký tối đa.`);
+        return;
+      }
+
+      setConfirmationState({
+        isOpen: true,
+        title: "Xác nhận đăng ký",
+        message: <>Bạn có chắc chắn muốn đăng ký sự kiện <br/> <strong className="text-indigo-600">"{eventToRegister.title}"</strong>?</>,
+        onConfirm: () => {
+          toast.success(`Đã gửi yêu cầu đăng ký sự kiện "${eventToRegister.title}". Chức năng đang hoàn thiện.`);
+          setConfirmationState(prev => ({ ...prev, isOpen: false }));
+        },
+        confirmVariant: "primary",
+        confirmText: "Đăng ký",
+        cancelText: "Hủy bỏ",
+        onCancel: () => setConfirmationState(prev => ({...prev, isOpen: false}))
+      });
     }
   };
 
@@ -574,7 +565,13 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
     }
 
     if (selectedEvent) {
-      const status = getEventStatus(selectedEvent.date);
+      const displayStatus = mapProgressStatusToDisplayStatus(selectedEvent.progressStatus, selectedEvent.date);
+      const isRegistered = registeredEvents.includes(selectedEvent.id);
+      const isActionable = displayStatus !== "Đã kết thúc" && displayStatus !== "Đã hủy" && displayStatus !== "Chưa duyệt";
+      const isFull = typeof selectedEvent.maxAttendees === 'number' && 
+                     selectedEvent.maxAttendees > 0 && 
+                     (selectedEvent.attendees?.length || 0) >= selectedEvent.maxAttendees;
+
       return (
         <div className="p-6 border rounded-lg shadow-lg bg-gray-50 col-span-full">
           <button
@@ -605,11 +602,11 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                   {selectedEvent.title}
                 </h2>
                 <span
-                  className={`${getStatusBadgeClasses(
-                    status
+                  className={`${getProgressStatusBadgeClasses(
+                    displayStatus
                   )} mt-1 sm:mt-0 flex-shrink-0`}
                 >
-                  {getStatusIcon(status)} {getStatusText(status)}
+                  {getProgressStatusIcon(displayStatus)} {displayStatus}
                 </span>
               </div>
               <div className="space-y-2 text-sm text-gray-700 border-b pb-4 mb-4">
@@ -711,14 +708,33 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                     <p className="text-gray-500 italic">Chưa có thông tin.</p>
                   )}
                 </div>
-                <div>
-                  <strong className="font-medium text-gray-900 mb-1 block">
-                    ✅ Đã đăng ký:
-                  </strong>
-                  <p className="text-sm text-gray-700">
-                    {selectedEvent.attendees?.length || 0} người
-                  </p>
+                 <div className="text-sm text-gray-700">
+                    <strong className="font-medium text-gray-900 w-24 inline-block">👥 Số lượng:</strong>
+                    {`${selectedEvent.attendees?.length || 0}${typeof selectedEvent.maxAttendees === 'number' && selectedEvent.maxAttendees > 0 ? ` / ${selectedEvent.maxAttendees}` : ' (Không giới hạn)'}`}
                 </div>
+              </div>
+              <div className="mt-6 pt-4 border-t border-gray-200 flex justify-end">
+                <button
+                  onClick={(e) => handleAttemptRegister(selectedEvent, e)}
+                  disabled={isRegistered || !isActionable || isFull}
+                  className={`w-full sm:w-auto px-6 py-2.5 text-sm font-medium rounded-md shadow-sm transition-colors flex items-center justify-center gap-2 ${
+                    isRegistered
+                      ? "bg-green-100 text-green-700 cursor-default"
+                      : isFull && isActionable
+                      ? "bg-yellow-100 text-yellow-700 cursor-not-allowed"
+                      : !isActionable
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-blue-600 hover:bg-blue-700 text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  }`}
+                >
+                  {isRegistered
+                    ? "✔ Đã đăng ký"
+                    : isFull && isActionable
+                    ? "Đã đủ số lượng"
+                    : !isActionable
+                    ? displayStatus
+                    : "Đăng ký tham gia"}
+                </button>
               </div>
             </div>
           </div>
@@ -738,9 +754,12 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
           {paginatedEvents.length > 0 ? (
             paginatedEvents.map((event) => {
               const isRegistered = registeredEvents.includes(event.id);
-              const eventDate = event.date ? new Date(event.date) : null;
-              const isPastEvent = eventDate ? eventDate < today : false;
-              const status = getEventStatus(event.date);
+              const displayStatus = mapProgressStatusToDisplayStatus(event.progressStatus, event.date);
+              const isActionable = displayStatus !== "Đã kết thúc" && displayStatus !== "Đã hủy" && displayStatus !== "Chưa duyệt";
+              const isFull = typeof event.maxAttendees === 'number' && 
+                             event.maxAttendees > 0 && 
+                             (event.attendees?.length || 0) >= event.maxAttendees;
+
               return eventViewMode === "card" ? (
                 <div
                   key={event.id}
@@ -773,11 +792,11 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                       </div>
                     )}
                     <span
-                      className={`absolute top-2 right-2 ${getStatusBadgeClasses(
-                        status
+                      className={`absolute top-2 right-2 ${getProgressStatusBadgeClasses(
+                        displayStatus
                       )} shadow-sm`}
                     >
-                      {getStatusIcon(status)} {getStatusText(status)}
+                      {getProgressStatusIcon(displayStatus)} {displayStatus}
                     </span>
                   </div>
                   <div className="p-4 flex flex-col flex-grow">
@@ -800,28 +819,33 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                           {event.location}
                         </p>
                       </div>
-                      <div className="text-xs text-gray-500 flex items-center gap-x-3 mt-1">
-                        {event.attendees && event.attendees.length > 0 && (
-                          <span>✅ Đã đăng ký: {event.attendees.length}</span>
-                        )}
+                      <div className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                        <CheckCircledIcon className="w-3.5 h-3.5 text-green-500"/>
+                        <span>
+                            {`Đăng ký: ${event.attendees?.length || 0}${typeof event.maxAttendees === 'number' && event.maxAttendees > 0 ? ` / ${event.maxAttendees}` : ' (Không giới hạn)'}`}
+                        </span>
                       </div>
                     </div>
                     <div className="mt-auto pt-3 border-t border-gray-100">
                       <button
                         onClick={(e) => handleAttemptRegister(event, e)}
-                        disabled={isRegistered || isPastEvent}
+                        disabled={isRegistered || !isActionable || isFull}
                         className={`mt-3 w-full px-3 py-1.5 text-xs rounded-md transition font-medium ${
                           isRegistered
                             ? "bg-green-100 text-green-700 cursor-default"
-                            : isPastEvent
+                            : isFull && isActionable
+                            ? "bg-yellow-100 text-yellow-700 cursor-not-allowed"
+                            : !isActionable
                             ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                             : "bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
                         }`}
                       >
                         {isRegistered
                           ? "✔ Đã đăng ký"
-                          : isPastEvent
-                          ? "Đã diễn ra"
+                          : isFull && isActionable
+                          ? "Đã đủ SL"
+                          : !isActionable
+                          ? displayStatus 
                           : "Đăng ký"}
                       </button>
                     </div>
@@ -860,11 +884,11 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                           {event.title}
                         </h2>
                         <span
-                          className={`mt-1 sm:mt-0 ml-0 sm:ml-2 shrink-0 ${getStatusBadgeClasses(
-                            status
+                          className={`mt-1 sm:mt-0 ml-0 sm:ml-2 shrink-0 ${getProgressStatusBadgeClasses(
+                           displayStatus
                           )}`}
                         >
-                          {getStatusIcon(status)} {getStatusText(status)}
+                          {getProgressStatusIcon(displayStatus)} {displayStatus}
                         </span>
                       </div>
                       <div className="text-xs text-gray-500 space-y-1 mb-2">
@@ -888,29 +912,32 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                             👥 {event.organizers.length} BTC
                           </span>
                         )}
-                        {event.attendees?.length > 0 && (
-                          <span className="inline-flex items-center gap-1">
-                            ✅ {event.attendees.length} Đăng ký
-                          </span>
-                        )}
+                         <span className="inline-flex items-center gap-1">
+                            <CheckCircledIcon className="w-3.5 h-3.5 text-green-500"/>
+                            {`Đăng ký: ${event.attendees?.length || 0}${typeof event.maxAttendees === 'number' && event.maxAttendees > 0 ? ` / ${event.maxAttendees}` : ' (Không giới hạn)'}`}
+                        </span>
                       </div>
                     </div>
                     <div className="mt-auto">
                       <button
                         onClick={(e) => handleAttemptRegister(event, e)}
-                        disabled={isRegistered || isPastEvent}
+                        disabled={isRegistered || !isActionable || isFull}
                         className={`w-full px-3 py-1.5 text-xs rounded-md transition font-medium ${
                           isRegistered
                             ? "bg-green-100 text-green-700 cursor-default"
-                            : isPastEvent
+                            : isFull && isActionable
+                            ? "bg-yellow-100 text-yellow-700 cursor-not-allowed"
+                            : !isActionable
                             ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                             : "bg-blue-500 hover:bg-blue-600 text-white cursor-pointer"
                         }`}
                       >
                         {isRegistered
                           ? "✔ Đã đăng ký"
-                          : isPastEvent
-                          ? "Đã diễn ra"
+                          : isFull && isActionable
+                          ? "Đã đủ SL"
+                          : !isActionable
+                          ? displayStatus
                           : "Đăng ký"}
                       </button>
                     </div>
@@ -967,11 +994,20 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredNews.length > 0 ? (
-          filteredNews.map((newsItem) => (
+          filteredNews.map((newsItem) => {
+            const relatedEvent = newsItem.event?.id ? events.find(e => e.id === newsItem.event.id) : null;
+            const isEventRegistered = relatedEvent ? registeredEvents.includes(relatedEvent.id) : false;
+            const eventDisplayStatus = relatedEvent ? mapProgressStatusToDisplayStatus(relatedEvent.progressStatus, relatedEvent.date) : null;
+            const isEventActionableForRegistration = relatedEvent && eventDisplayStatus !== "Đã kết thúc" && eventDisplayStatus !== "Đã hủy" && eventDisplayStatus !== "Chưa duyệt";
+            const isEventFull = relatedEvent && typeof relatedEvent.maxAttendees === 'number' && 
+                                relatedEvent.maxAttendees > 0 && 
+                                (relatedEvent.attendees?.length || 0) >= relatedEvent.maxAttendees;
+
+
+            return (
             <div
               key={newsItem.id}
-              className="p-4 bg-white shadow rounded-lg flex flex-col justify-between border border-gray-200 hover:shadow-md transition-shadow duration-150 cursor-pointer"
-              onClick={() => handleNewsClick(newsItem)}
+              className="p-4 bg-white shadow rounded-lg flex flex-col justify-between border border-gray-200 hover:shadow-md transition-shadow duration-150"
             >
               <div>
                 {newsItem.coverImageUrl && (
@@ -980,10 +1016,11 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                     alt={newsItem.title}
                     width={500}
                     height={300}
-                    className="w-full h-40 object-cover rounded-lg mb-3 bg-gray-100"
+                    className="w-full h-40 object-cover rounded-lg mb-3 bg-gray-100 cursor-pointer"
+                    onClick={() => handleNewsClick(newsItem)}
                   />
                 )}
-                <h2 className="text-md font-semibold text-gray-800 line-clamp-2 mb-1">
+                <h2 className="text-md font-semibold text-gray-800 line-clamp-2 mb-1 cursor-pointer hover:text-blue-600"  onClick={() => handleNewsClick(newsItem)}>
                   {newsItem.title}
                 </h2>
                 {newsItem.publishedAt && (
@@ -998,18 +1035,53 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                     {newsItem.createdBy.firstName}
                   </p>
                 )}
+                 {relatedEvent && (
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                        <p className="text-xs text-gray-500 mb-1">Sự kiện liên quan: <Link href="#" onClick={(e) => {e.preventDefault(); handleEventClick(relatedEvent); setActiveTab("events");}} className="text-blue-600 hover:underline">{relatedEvent.title}</Link></p>
+                        {eventDisplayStatus && (
+                             <span className={`text-xs ${getProgressStatusBadgeClasses(eventDisplayStatus)}`}>
+                                {getProgressStatusIcon(eventDisplayStatus)} {eventDisplayStatus}
+                            </span>
+                        )}
+                    </div>
+                )}
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleNewsClick(newsItem);
-                }}
-                className="mt-3 w-full text-center px-3 py-1.5 text-xs rounded-md transition bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-medium"
-              >
-                Xem chi tiết
-              </button>
+              <div className="mt-3 flex flex-col gap-2">
+                <button
+                    onClick={(e) => {
+                    e.stopPropagation();
+                    handleNewsClick(newsItem);
+                    }}
+                    className="w-full text-center px-3 py-1.5 text-xs rounded-md transition bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 font-medium"
+                >
+                    Xem chi tiết
+                </button>
+                {relatedEvent && (
+                    <button
+                        onClick={(e) => handleAttemptRegister(relatedEvent, e)}
+                        disabled={isEventRegistered || !isEventActionableForRegistration || isEventFull}
+                        className={`w-full px-3 py-1.5 text-xs rounded-md transition font-medium ${
+                        isEventRegistered
+                            ? "bg-green-100 text-green-700 cursor-default"
+                            : isEventFull && isEventActionableForRegistration
+                            ? "bg-yellow-100 text-yellow-700 cursor-not-allowed"
+                            : !isEventActionableForRegistration
+                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            : "bg-indigo-500 hover:bg-indigo-600 text-white cursor-pointer"
+                        }`}
+                    >
+                        {isEventRegistered
+                        ? "✔ Đã đăng ký sự kiện"
+                        : isEventFull && isEventActionableForRegistration
+                        ? "Đã đủ SL"
+                        : !isEventActionableForRegistration
+                        ? (eventDisplayStatus || "Không thể đăng ký")
+                        : "Đăng ký sự kiện"}
+                    </button>
+                )}
+              </div>
             </div>
-          ))
+          )})
         ) : (
           <p className="text-gray-500 text-center col-span-full">
             Không có tin tức nào phù hợp.
@@ -1140,8 +1212,9 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                       backgroundSize: "1.5em 1.5em",
                     }}
                   >
-                    <option value="az">A - Z</option>
-                    <option value="za">Z - A</option>
+                    <option value="date">📅 Mới nhất</option>
+                    <option value="az">🇦 Alphabet (A-Z)</option>
+                    <option value="za">🇿 Alphabet (Z-A)</option>
                   </select>
                 </div>
                 <div>
@@ -1149,7 +1222,7 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                     htmlFor="statusFilterMyEvents"
                     className="block text-xs font-medium text-gray-600 mb-1"
                   >
-                    Trạng thái
+                    Trạng thái (Progress)
                   </label>
                   <select
                     id="statusFilterMyEvents"
@@ -1158,7 +1231,7 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                       setEventStatusFilterOption(e.target.value as any)
                     }
                     className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 h-[42px] shadow-sm bg-white appearance-none pr-8"
-                    style={{
+                     style={{
                       backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                       backgroundRepeat: "no-repeat",
                       backgroundPosition: "right 0.5rem center",
@@ -1166,9 +1239,12 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent: React.MouseEven
                     }}
                   >
                     <option value="all">♾️ Tất cả</option>
-                    <option value="upcoming">☀️ Sắp diễn ra</option>
-                    <option value="ongoing">🟢 Đang diễn ra</option>
-                    <option value="ended">🏁 Đã kết thúc</option>
+                    <option value="Sắp diễn ra">☀️ Sắp diễn ra</option>
+                    <option value="Đang diễn ra">🟢 Đang diễn ra</option>
+                    <option value="Đã kết thúc">🏁 Đã kết thúc</option>
+                    <option value="Đã hủy">❌ Đã hủy</option>
+                    <option value="Bị hoãn">⚠️ Bị hoãn</option>
+                    <option value="Chưa duyệt">📝 Chưa duyệt</option>
                     <option value="dateRange">🔢 Khoảng ngày</option>
                   </select>
                 </div>

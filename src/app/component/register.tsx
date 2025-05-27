@@ -3,13 +3,24 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast, Toaster } from 'react-hot-toast';
+import { UpdateIcon } from "@radix-ui/react-icons";
 
-const InputWithIcon: React.FC<{icon: React.ReactNode, value: string, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void, placeholder: string, type?: string}> = ({
+interface InputWithIconProps {
+  icon: React.ReactNode;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  type?: string;
+  disabled?: boolean;
+}
+
+const InputWithIcon: React.FC<InputWithIconProps> = ({
   icon,
   value,
   onChange,
   placeholder,
   type = "text",
+  disabled = false,
 }) => (
   <div className="relative">
     <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-lg">
@@ -20,7 +31,8 @@ const InputWithIcon: React.FC<{icon: React.ReactNode, value: string, onChange: (
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 transition-all"
+      className={`w-full pl-10 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 transition-all ${disabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+      disabled={disabled}
     />
   </div>
 );
@@ -111,6 +123,7 @@ export default function Register() {
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
               icon="👤"
+              disabled={loading}
             />
             <InputWithIcon
               type="text"
@@ -118,6 +131,7 @@ export default function Register() {
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               icon="👤"
+              disabled={loading}
             />
           </div>
           <InputWithIcon
@@ -126,6 +140,7 @@ export default function Register() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             icon="👨‍💻"
+            disabled={loading}
           />
 
           <InputWithIcon
@@ -134,6 +149,7 @@ export default function Register() {
             value={studentId}
             onChange={(e) => setStudentId(e.target.value)}
             icon="🆔"
+            disabled={loading}
           />
 
           <div className="flex items-center gap-4">
@@ -141,23 +157,27 @@ export default function Register() {
               Giới tính:
             </label>
             <div className="flex items-center gap-2">
-              <label className="flex items-center space-x-1">
+              <label className="flex items-center space-x-1 cursor-pointer">
                 <input
                   type="radio"
                   name="gender"
                   value="male"
                   checked={gender === "male"}
                   onChange={() => setGender("male")}
+                  disabled={loading}
+                  className="form-radio text-green-500 focus:ring-green-400"
                 />
                 <span>Nam</span>
               </label>
-              <label className="flex items-center space-x-1">
+              <label className="flex items-center space-x-1 cursor-pointer">
                 <input
                   type="radio"
                   name="gender"
                   value="female"
                   checked={gender === "female"}
                   onChange={() => setGender("female")}
+                  disabled={loading}
+                  className="form-radio text-green-500 focus:ring-green-400"
                 />
                 <span>Nữ</span>
               </label>
@@ -168,7 +188,8 @@ export default function Register() {
             type="date"
             value={dob}
             onChange={(e) => setDob(e.target.value)}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 transition-all"
+            className={`w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 transition-all ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+            disabled={loading}
           />
 
           <div className="relative">
@@ -180,12 +201,14 @@ export default function Register() {
               placeholder="Nhập mật khẩu"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full pl-10 pr-10 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 transition-all"
+              className={`w-full pl-10 pr-10 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 transition-all ${loading ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+              disabled={loading}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-green-500"
+              className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 ${loading ? 'cursor-not-allowed' : 'hover:text-green-500'}`}
+              disabled={loading}
             >
               {showPassword ? "🙈" : "👁️"}
             </button>
@@ -194,21 +217,31 @@ export default function Register() {
 
         <button
           onClick={handleRegister}
-          className={`w-full mt-4 py-3 text-white font-semibold rounded-lg transition-all shadow-md cursor-pointer ${
+          className={`w-full mt-4 py-3 text-white font-semibold rounded-lg transition-all shadow-md flex items-center justify-center ${
             loading
               ? "bg-gray-400 cursor-not-allowed"
-              : "bg-green-500 hover:bg-green-600"
+              : "bg-green-500 hover:bg-green-600 cursor-pointer"
           }`}
           disabled={loading}
         >
-          {loading ? "⏳ Đang xử lý..." : "Xác nhận"}
+          {loading ? (
+            <>
+              <UpdateIcon className="w-5 h-5 mr-2 animate-spin" />
+              Đang xử lý...
+            </>
+          ) : (
+            "Xác nhận"
+          )}
         </button>
 
         <div className="flex justify-center mt-4 items-center space-x-2">
-          <label className="transition-all">Đã có tài khoản?</label>
+          <label className="transition-all text-sm text-gray-600">
+            Đã có tài khoản?
+          </label>
           <button
             onClick={() => router.push("/login")}
-            className="text-green-500 hover:underline hover:text-green-700 transition-all cursor-pointer font-semibold"
+            className={`text-green-500 font-semibold text-sm transition-all ${loading ? 'cursor-not-allowed text-gray-400' : 'hover:underline hover:text-green-700 cursor-pointer'}`}
+            disabled={loading}
           >
             Đăng nhập
           </button>

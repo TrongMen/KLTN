@@ -14,7 +14,7 @@ import {
   ClockIcon,
   CheckCircledIcon,
   ArchiveIcon,
-  CrossCircledIcon,
+  CrossCircledIcon, 
   ExclamationTriangleIcon,
 } from "@radix-ui/react-icons";
 import ContactModal from "../component/modals/ContactModal";
@@ -29,7 +29,7 @@ const playfair = Playfair_Display({
   weight: ["700"],
 });
 
-type EventProgressDisplayStatus = "Sắp diễn ra" | "Đang diễn ra" | "Đã kết thúc" | "Đã hủy" | "Bị hoãn" | "Chưa duyệt";
+type EventProgressDisplayStatus = "Sắp diễn ra" | "Đang diễn ra" | "Đã kết thúc";
 
 
 interface UserInfoFromApi {
@@ -80,29 +80,19 @@ const fetchUserFullNameById = async (userId: string): Promise<string> => {
   }
 };
 
-const mapProgressStatusToDisplayStatus = (progressStatus?: string | null, eventDateStr?: string | null): EventProgressDisplayStatus => {
-  if (!progressStatus) return "Sắp diễn ra";
-
-  const now = new Date();
-  const eventDate = eventDateStr ? new Date(eventDateStr) : null;
+const mapProgressStatusToDisplayStatus = (progressStatus?: string | null): EventProgressDisplayStatus => {
+  if (!progressStatus) return "Sắp diễn ra"; 
 
   switch (progressStatus.toUpperCase()) {
-    case "PENDING":
-    case "APPROVED":
-      if (eventDate && eventDate < now && !(now.toDateString() === eventDate.toDateString())) return "Đã kết thúc";
+    case "UPCOMING":
       return "Sắp diễn ra";
-    case "IN_PROGRESS":
+    case "ONGOING":
       return "Đang diễn ra";
     case "COMPLETED":
       return "Đã kết thúc";
-    case "CANCELLED":
-      return "Đã hủy";
-    case "POSTPONED":
-      return "Bị hoãn";
-    case "DRAFT":
-         return "Chưa duyệt";
     default:
-      return "Sắp diễn ra";
+      console.warn(`Unknown progressStatus received: ${progressStatus}`);
+      return "Sắp diễn ra"; 
   }
 };
 
@@ -115,12 +105,6 @@ const getProgressStatusBadgeClasses = (displayStatus: EventProgressDisplayStatus
       return `${base} bg-blue-100 text-blue-800`;
     case "Đã kết thúc":
       return `${base} bg-gray-200 text-gray-700`;
-    case "Đã hủy":
-      return `${base} bg-red-100 text-red-800`;
-    case "Bị hoãn":
-      return `${base} bg-yellow-100 text-yellow-800`;
-    case "Chưa duyệt":
-            return `${base} bg-orange-100 text-orange-800`;
     default:
       return `${base} bg-gray-100 text-gray-600`;
   }
@@ -134,12 +118,6 @@ const getProgressStatusIcon = (displayStatus: EventProgressDisplayStatus) => {
       return <ClockIcon className="w-3 h-3" />;
     case "Đã kết thúc":
       return <ArchiveIcon className="w-3 h-3" />;
-    case "Đã hủy":
-      return <CrossCircledIcon className="w-3 h-3" />;
-    case "Bị hoãn":
-      return <ExclamationTriangleIcon className="w-3 h-3" />;
-     case "Chưa duyệt":
-            return <ExclamationTriangleIcon className="w-3 h-3" />;
     default:
       return null;
   }
@@ -416,7 +394,7 @@ export default function Dashboard() {
     let filtered = [...events];
     
     if (eventStatusFilterOption !== "all" && eventStatusFilterOption !== "dateRange") {
-        filtered = filtered.filter(event => mapProgressStatusToDisplayStatus(event.progressStatus, event.date) === eventStatusFilterOption);
+        filtered = filtered.filter(event => mapProgressStatusToDisplayStatus(event.progressStatus) === eventStatusFilterOption);
     } else if (eventStatusFilterOption === "dateRange" && eventStartDateFilter && eventEndDateFilter) {
         try {
             const start = new Date(eventStartDateFilter);
@@ -507,14 +485,14 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent?: React.MouseEve
         toast.error("Bạn đã đăng ký sự kiện này rồi.");
         return;
       }
-      const displayStatus = mapProgressStatusToDisplayStatus(eventToRegister.progressStatus, eventToRegister.date);
-      if (displayStatus === "Đã kết thúc" || displayStatus === "Đã hủy" || displayStatus === "Chưa duyệt") {
-        toast.error(`Sự kiện "${eventToRegister.title}" ${displayStatus.toLowerCase()}. Không thể đăng ký.`);
+      const displayStatus = mapProgressStatusToDisplayStatus(eventToRegister.progressStatus);
+      if (displayStatus === "Đã kết thúc") {
+        toast.error(`Sự kiện "${eventToRegister.title}" đã kết thúc. Không thể đăng ký.`);
         return;
       }
       
       if (typeof eventToRegister.maxAttendees === 'number' && 
-          eventToRegister.maxAttendees > 0 && // Chỉ kiểm tra khi có giới hạn và giới hạn > 0
+          eventToRegister.maxAttendees > 0 && 
           (eventToRegister.attendees?.length || 0) >= eventToRegister.maxAttendees) {
         toast.error(`Sự kiện "${eventToRegister.title}" đã đủ số lượng người đăng ký tối đa.`);
         return;
@@ -565,9 +543,9 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent?: React.MouseEve
     }
 
     if (selectedEvent) {
-      const displayStatus = mapProgressStatusToDisplayStatus(selectedEvent.progressStatus, selectedEvent.date);
+      const displayStatus = mapProgressStatusToDisplayStatus(selectedEvent.progressStatus);
       const isRegistered = registeredEvents.includes(selectedEvent.id);
-      const isActionable = displayStatus !== "Đã kết thúc" && displayStatus !== "Đã hủy" && displayStatus !== "Chưa duyệt";
+      const isActionable = displayStatus === "Sắp diễn ra" || displayStatus === "Đang diễn ra";
       const isFull = typeof selectedEvent.maxAttendees === 'number' && 
                      selectedEvent.maxAttendees > 0 && 
                      (selectedEvent.attendees?.length || 0) >= selectedEvent.maxAttendees;
@@ -754,8 +732,8 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent?: React.MouseEve
           {paginatedEvents.length > 0 ? (
             paginatedEvents.map((event) => {
               const isRegistered = registeredEvents.includes(event.id);
-              const displayStatus = mapProgressStatusToDisplayStatus(event.progressStatus, event.date);
-              const isActionable = displayStatus !== "Đã kết thúc" && displayStatus !== "Đã hủy" && displayStatus !== "Chưa duyệt";
+              const displayStatus = mapProgressStatusToDisplayStatus(event.progressStatus);
+              const isActionable = displayStatus === "Sắp diễn ra" || displayStatus === "Đang diễn ra";
               const isFull = typeof event.maxAttendees === 'number' && 
                              event.maxAttendees > 0 && 
                              (event.attendees?.length || 0) >= event.maxAttendees;
@@ -997,8 +975,8 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent?: React.MouseEve
           filteredNews.map((newsItem) => {
             const relatedEvent = newsItem.event?.id ? events.find(e => e.id === newsItem.event.id) : null;
             const isEventRegistered = relatedEvent ? registeredEvents.includes(relatedEvent.id) : false;
-            const eventDisplayStatus = relatedEvent ? mapProgressStatusToDisplayStatus(relatedEvent.progressStatus, relatedEvent.date) : null;
-            const isEventActionableForRegistration = relatedEvent && eventDisplayStatus !== "Đã kết thúc" && eventDisplayStatus !== "Đã hủy" && eventDisplayStatus !== "Chưa duyệt";
+            const eventDisplayStatus = relatedEvent ? mapProgressStatusToDisplayStatus(relatedEvent.progressStatus) : null;
+            const isEventActionableForRegistration = relatedEvent && eventDisplayStatus !== "Đã kết thúc";
             const isEventFull = relatedEvent && typeof relatedEvent.maxAttendees === 'number' && 
                                 relatedEvent.maxAttendees > 0 && 
                                 (relatedEvent.attendees?.length || 0) >= relatedEvent.maxAttendees;
@@ -1242,9 +1220,6 @@ const handleAttemptRegister = (eventToRegister: any, clickEvent?: React.MouseEve
                     <option value="Sắp diễn ra">☀️ Sắp diễn ra</option>
                     <option value="Đang diễn ra">🟢 Đang diễn ra</option>
                     <option value="Đã kết thúc">🏁 Đã kết thúc</option>
-                    <option value="Đã hủy">❌ Đã hủy</option>
-                    <option value="Bị hoãn">⚠️ Bị hoãn</option>
-                    <option value="Chưa duyệt">📝 Chưa duyệt</option>
                     <option value="dateRange">🔢 Khoảng ngày</option>
                   </select>
                 </div>

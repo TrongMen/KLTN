@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast, Toaster } from 'react-hot-toast';
 import ConfirmationDialog from "../../utils/ConfirmationDialog";
+import { UpdateIcon } from "@radix-ui/react-icons"; // Thêm import icon
+
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -218,14 +220,21 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className={`w-full mt-2 py-3 text-white font-semibold rounded-lg transition-all shadow-md cursor-pointer ${
+            className={`w-full mt-2 py-3 text-white font-semibold rounded-lg transition-all shadow-md flex items-center justify-center ${
               loading
                 ? "bg-gray-400 cursor-not-allowed"
-                : "bg-blue-500 hover:bg-blue-600"
+                : "bg-blue-500 hover:bg-blue-600 cursor-pointer"
             }`}
             disabled={loading}
           >
-            {loading ? "⏳ Đang xử lý..." : "Đăng nhập"}
+            {loading ? (
+              <>
+                <UpdateIcon className="w-5 h-5 mr-2 animate-spin" />
+                Đang xử lý...
+              </>
+            ) : (
+              "Đăng nhập"
+            )}
           </button>
         </form>
 
